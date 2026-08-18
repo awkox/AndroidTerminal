@@ -1,0 +1,24 @@
+name: 编译
+
+on: [ push, workflow_dispatch ]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-26.04
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+
+      - name: 编译
+        run: |
+          echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=1024m" >> gradle.properties
+          ./gradlew assembleRelease
+
+      - name: 上传 Release APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: package
+          path: app/build/outputs/apk/release/app-release.apk
