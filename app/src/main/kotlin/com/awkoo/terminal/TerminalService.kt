@@ -141,7 +141,7 @@ class TerminalService : Service() {
         EXIT(
             R.string.notification_action_exit,
             android.R.drawable.ic_delete
-        ),
+        );
         fun getAction(service: Context): NotificationCompat.Action {
             val intent = Intent(service, TerminalService::class.java)
                 .apply { action = this@NotificationActions.name }
