@@ -3,7 +3,7 @@
 本文档详细列举 AndroidTerminal 终端仿真器所支持的全部转义序列，按序列类型分类说明。
 
 > 相关源码：
-> - 序列解析：`app/src/main/kotlin/com/awkoo/terminal/core/AnsiEscapeParser.kt`
+> - 序列解析：`AnsiEscapeParser.kt`
 > - ESC/CSI 处理：`TerminalEmulator.kt`
 > - OSC 处理：`OscHandler.kt`
 > - DCS 处理：`DeviceControlHandler.kt`
