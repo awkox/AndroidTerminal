@@ -24,8 +24,6 @@
 1. **CI 构建产物**：[Actions](https://github.com/awkox/AndroidTerminal/actions) 页面选择成功的「编译」工作流，下载 Artifacts 中的 `package`（需登录 GitHub）。
 2. **自行构建**：见[开发构建](#开发构建)。
 
-> `targetSdk` 固定为 28 是有意为之；Release 包使用调试签名密钥以保证可复现构建。
-
 ## 技术栈
 
 | 类别 | 技术 |
