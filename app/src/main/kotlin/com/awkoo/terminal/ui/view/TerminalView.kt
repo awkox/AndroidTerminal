@@ -1,11 +1,7 @@
 package com.awkoo.terminal.ui.view
 
 import android.annotation.SuppressLint
-import android.app.Activity
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
-import android.content.ContextWrapper
 import android.graphics.Canvas
 import android.graphics.Typeface
 import android.os.SystemClock
@@ -17,9 +13,6 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
-import androidx.core.view.ViewCompat
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
 import com.awkoo.terminal.Constants
 import com.awkoo.terminal.core.TerminalEmulator
 import com.awkoo.terminal.core.TerminalSession
@@ -71,6 +64,12 @@ class TerminalView(
     private var emulatorClipboardCollectJob: Job? = null
 
     val touchHandler = TerminalTouchHandler(this)
+
+    // 剪贴板网关：系统剪贴板读写，粘贴时送入模拟器
+    private val clipboard = TerminalClipboard(context, { mEmulator }, { cursorBlinker.poke() })
+
+    // IME 控制器：软键盘显隐切换
+    private val imeController = ImeController(this)
 
     // 键盘输入处理器：按键到会话字节流的转换逻辑委托对象
     private val keyProcessor = KeyInputProcessor(
@@ -278,26 +277,9 @@ class TerminalView(
         copyTextToClipboard(textSelectionCursorController.selectedText)
     }
 
-    fun copyTextToClipboard(text: String) {
-        if (text.isEmpty()) return
-        val clipboardManager = context.getSystemService(ClipboardManager::class.java)
-        Timber.v("Copied text: \"$text\"")
-        val clipData = ClipData.newPlainText("", text)
-        clipboardManager.setPrimaryClip(clipData)
-    }
+    fun copyTextToClipboard(text: String) = clipboard.copyText(text)
 
-    fun pasteTextFromClipboard() {
-        val emulator = mEmulator ?: return
-        val clipboardManager = context.getSystemService(ClipboardManager::class.java)
-        val clipData = clipboardManager.primaryClip ?: return
-        val clipItem = clipData.getItemAt(0) ?: return
-        val text = clipItem.coerceToText(context)?.toString() ?: return
-        Timber.v("Pasted text: \"$text\"")
-        if (text.isNotEmpty()) {
-            cursorBlinker.poke()
-            emulator.paste(text)
-        }
-    }
+    fun pasteTextFromClipboard() = clipboard.pasteFromClipboard()
 
     internal fun awakenScrollbars(): Boolean = awakenScrollBars()
 
@@ -314,25 +296,7 @@ class TerminalView(
 
     override fun onCheckIsTextEditor() = true
 
-    fun toggleIme(show: Boolean? = null) {
-        requestFocus()
-
-        val window = generateSequence(context) {
-            (it as? ContextWrapper)?.baseContext
-        }
-            .filterIsInstance<Activity>()
-            .firstOrNull()?.window ?: return
-
-        val controller = WindowCompat.getInsetsController(window, this)
-        val imeType = WindowInsetsCompat.Type.ime()
-
-        val shouldShow = show ?: (ViewCompat.getRootWindowInsets(this)?.isVisible(imeType) != true)
-        if (shouldShow) {
-            controller.show(imeType)
-        } else {
-            controller.hide(imeType)
-        }
-    }
+    fun toggleIme(show: Boolean? = null) = imeController.toggleIme(show)
 
     /**
      * 外部修饰键状态读取器（如来自屏幕扩展按键栏）。
