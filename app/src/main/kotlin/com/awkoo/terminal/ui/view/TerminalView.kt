@@ -19,14 +19,10 @@ import com.awkoo.terminal.core.TerminalSession
 import com.awkoo.terminal.ui.view.textselection.TextSelectionCursorController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelChildren
-import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.onEach
 import timber.log.Timber
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -60,8 +56,13 @@ class TerminalView(
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
-    private var screenRefreshJob: Job? = null
-    private var emulatorClipboardCollectJob: Job? = null
+
+    // 会话事件订阅绑定器：管理屏幕刷新与剪贴板事件流的订阅生命周期
+    private val sessionBinder = SessionBinder(
+        scope = scope,
+        onScreenUpdated = { onScreenUpdated() },
+        onCopiedText = { copyTextToClipboard(it) }
+    )
 
     val touchHandler = TerminalTouchHandler(this)
 
@@ -111,10 +112,7 @@ class TerminalView(
             stopTextSelectionMode()
             cursorBlinker.stop()
             textBlinker.stop()
-            screenRefreshJob?.cancel()
-            screenRefreshJob = null
-            emulatorClipboardCollectJob?.cancel()
-            emulatorClipboardCollectJob = null
+            sessionBinder.bind(value)
             topRow = 0
             keyProcessor.reset()
             field = value
@@ -122,15 +120,8 @@ class TerminalView(
             if (value != null) {
                 updateSize()
                 onScreenUpdated()
-                screenRefreshJob = value.uiEvent
-                    .conflate()
-                    .onEach { onScreenUpdated() }
-                    .launchIn(scope)
                 cursorBlinker.start(value.emulator)
                 textBlinker.start(value.emulator)
-                emulatorClipboardCollectJob = value.copiedText
-                    .onEach { copyTextToClipboard(it) }
-                    .launchIn(scope)
                 toggleIme(true)
             } else {
                 invalidate()
