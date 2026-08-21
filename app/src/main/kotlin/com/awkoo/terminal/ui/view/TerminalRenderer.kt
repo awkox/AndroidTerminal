@@ -71,9 +71,34 @@ class TerminalRenderer(textSize: Int, typeface: Typeface) {
         // 波浪特效以单列宽为周期平铺印章，相邻列波形无缝衔接
         val wavePath = Path().apply {
             val waveLen = fontWidth
-            val waveAmp = mUnderlineThickness * 1.5f
+            val halfL = waveLen / 2f
+            // 振幅，设为字宽的 12%，保证波形明显且优雅
+            val amp = waveLen * 0.12f 
+            // 丝带的粗细，比普通下划线略粗一点更清晰
+            val thickness = mUnderlineThickness * 1.5f 
+            
+            // 1. 上边缘 (从左到右正向绘制完美正弦波)
             moveTo(0f, 0f)
-            cubicTo(waveLen * 0.25f, -waveAmp, waveLen * 0.75f, waveAmp, waveLen, 0f)
+            cubicTo(halfL * 0.364f, -amp, halfL * 0.636f, -amp, halfL, 0f)
+            cubicTo(halfL + halfL * 0.364f, amp, halfL + halfL * 0.636f, amp, waveLen, 0f)
+            
+            // 2. 右侧边缘闭合，并下移厚度
+            lineTo(waveLen, thickness)
+            
+            // 3. 下边缘 (从右到左反向绘制，控制点需加上 thickness)
+            cubicTo(
+                halfL + halfL * 0.636f, amp + thickness,
+                halfL + halfL * 0.364f, amp + thickness,
+                halfL, thickness
+            )
+            cubicTo(
+                halfL * 0.636f, -amp + thickness,
+                halfL * 0.364f, -amp + thickness,
+                0f, thickness
+            )
+            
+            // 4. 闭合左侧边缘
+            close()
         }
         mCurlyEffect = PathDashPathEffect(wavePath, fontWidth, 0f, PathDashPathEffect.Style.TRANSLATE)
     }
@@ -368,9 +393,9 @@ class TerminalRenderer(textSize: Int, typeface: Typeface) {
             canvas.save()
             canvas.clipRect(
                 absoluteLeft,
-                ulY - mUnderlineThickness * 2,
+                ulY - mUnderlineThickness * 10f, // 垂直方向彻底放开裁剪，防止波峰被削平
                 absoluteRight,
-                ulY + mUnderlineThickness * 2
+                ulY + mUnderlineThickness * 10f
             )
             when (underlineStyle) {
                 TextStyle.UNDERLINE_STYLE_SINGLE -> {

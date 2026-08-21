@@ -147,18 +147,7 @@ class TerminalEmulator(
                 setCursorRowCol(previousRow, mRightMargin - 1)
             }
         } else {
-            val prevCol = mCursorCol - 1
-            val row = screen.allocateFullLineIfNecessary(screen.externalToInternalRow(mCursorRow))
-            val charIndex = row.findStartOfColumn(prevCol)
-            val charWidth = if (charIndex < row.mSpaceUsed) {
-                val cp = if (row.mText[charIndex].isHighSurrogate() && charIndex + 1 < row.mSpaceUsed) {
-                    Character.toCodePoint(row.mText[charIndex], row.mText[charIndex + 1])
-                } else {
-                    row.mText[charIndex].code
-                }
-                WcWidth.width(cp)
-            } else 1
-            this.cursorCol = if (charWidth == 2) mCursorCol - 2 else prevCol
+            this.cursorCol = mCursorCol - 1
         }
     }
 
