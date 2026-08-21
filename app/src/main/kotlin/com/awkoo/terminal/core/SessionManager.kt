@@ -20,8 +20,6 @@ import kotlin.concurrent.atomics.ExperimentalAtomicApi
 class SessionManager @Inject internal constructor() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    // 彻底移除了原先的 private val sessionJobs = mutableMapOf<Int, Job>()
-
     private val _sessionList = MutableStateFlow(emptyList<TerminalSession>())
     val sessionList = _sessionList.asStateFlow()
 
@@ -62,7 +60,6 @@ class SessionManager @Inject internal constructor() {
         _sessionList.update { it + targetSession }
         currentSessionId.update { targetSession.id }
 
-        // 优雅的清理逻辑：
         // 使用 combine 联合监听 Session 自身的 isRemove 状态与全局的 _sessionList
         // 一旦会话要求移除，或者它已经被外部手段从列表中剔除，first { it } 都会立刻放行
         // 随后执行兜底的 removeSession 并自然结束协程，杜绝任何内存泄漏的可能。

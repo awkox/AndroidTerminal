@@ -65,7 +65,7 @@ class TerminalEmulator(
     var isCursorBlinkingEnabled = false
     var cursorBlinkState = false
     var isTextBlinkingEnabled = true
-    var textBlinkState: Boolean = false
+    var textBlinkState = false
 
     val isTextVisible: Boolean
         get() = if (isTextBlinkingEnabled) textBlinkState else true
