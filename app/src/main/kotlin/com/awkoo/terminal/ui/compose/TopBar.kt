@@ -67,7 +67,7 @@ fun MainActivity.TopBar(drawerState: DrawerState) {
                 onDismissRequest = { menuMoreExpanded = false },
             ) {
                 DropdownMenuItem(
-                    text = { Text("设置") },
+                    text = { Text("Settings") },
                     onClick = {
                         menuMoreExpanded = false
                     }
