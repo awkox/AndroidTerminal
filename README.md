@@ -101,6 +101,7 @@ AndroidTerminal/
 │       │   ├── assets/font/          # 内置等宽字体
 │       │   └── res/                  # 资源文件
 │   └── build.gradle.kts              # 模块构建配置
+├── docs/                             # 项目文档（xterm 序列支持说明等）
 ├── gradle/                           # Gradle Wrapper 与版本目录
 ├── .github/workflows/                # CI（编译 + CodeQL 安全扫描）
 ├── build.gradle.kts                  # 根构建配置
