@@ -37,7 +37,7 @@ TerminalService（前台服务）
 
 ## 开发构建
 
-环境：JDK 21、Android SDK（compileSdk 37）、Android NDK r29（修改 `app/cpp/` 时必需）。Gradle Wrapper 随仓库提供。
+环境：JDK 21、Android SDK（compileSdk 37）、Android NDK r29。
 
 `./gradlew assembleDebug` 或 `./gradlew assembleRelease`
 
