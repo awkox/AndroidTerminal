@@ -123,7 +123,15 @@ class TerminalGestureListener(
     }
 
     override fun onDoubleTap(e: MotionEvent): Boolean {
-        // 不作为确认的单击处理 — 后续可能跟随缩放
+        val emulator = view.mEmulator ?: return false
+
+        // 如果处于鼠标追踪模式（如 Vim），双击屏幕强制唤起软键盘
+        if (emulator.isMouseTrackingActive) {
+            view.requestFocus()
+            val imm = view.context.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+            imm.showSoftInput(view, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+            return true
+        }
         return false
     }
 
