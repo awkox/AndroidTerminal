@@ -31,7 +31,7 @@ import javax.inject.Inject
 /**
  * 终端前台服务。
  *
- * 管理会话生命周期、通知、WakeLock 和 WifiLock。
+ * 管理会话生命周期、通知
  * 会话列表变更时自动更新通知；无会话且无锁时自动停止服务。
  */
 @AndroidEntryPoint
@@ -77,8 +77,6 @@ class TerminalService : Service() {
     override fun onDestroy() {
         Timber.v("onDestroy")
 
-        actionReleaseWakeLock(false)
-
         serviceScope.cancel()
 
         sessionManager.clear()
@@ -120,7 +118,7 @@ class TerminalService : Service() {
     /** 更新前台服务通知。 */
     @Synchronized
     private fun updateNotification() {
-        if (mWakeLock == null && sessionManager.isSessionsListEmpty) {
+        if (sessionManager.isSessionsListEmpty) {
             // 用户禁用所有锁且无会话运行时，退出服务
             stopSelf()
         } else {
