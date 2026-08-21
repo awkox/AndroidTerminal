@@ -51,6 +51,21 @@ class TerminalImeConnection(
         return true
     }
 
+    override fun performContextMenuAction(id: Int): Boolean {
+        Timber.v("IME: performContextMenuAction($id)")
+        when (id) {
+            android.R.id.paste -> {
+                terminalView.pasteTextFromClipboard()
+                return true
+            }
+            android.R.id.copy -> {
+                terminalView.copyTextToClipboard()
+                return true
+            }
+        }
+        return super.performContextMenuAction(id)
+    }
+
     private fun flushAndClearEditable() {
         val buffer = editable ?: return
         if (buffer.isEmpty()) return
