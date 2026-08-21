@@ -48,9 +48,10 @@ android {
     compileOptions {
         // Flag to enable support for the new language APIs
         isCoreLibraryDesugaringEnabled = true
-
-        sourceCompatibility = JavaVersion.VERSION_21
-        targetCompatibility = JavaVersion.VERSION_21
+    }
+    
+    kotlin {
+        jvmToolchain(21)
     }
 
     externalNativeBuild {
