@@ -48,7 +48,7 @@ open class CommandInfo(
             field = value
         }
 
-    val arguments: Array<String> = arrayOf("-$executable", *(arguments ?: emptyArray()))
+    val arguments: Array<String> = arrayOf("$executable", *(arguments ?: emptyArray()))
 
     val commandLabel = MutableStateFlow(executable)
 
