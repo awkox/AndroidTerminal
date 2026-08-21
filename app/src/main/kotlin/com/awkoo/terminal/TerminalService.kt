@@ -8,9 +8,7 @@ import android.app.PendingIntent
 import android.app.Service
 import android.content.Context
 import android.content.Intent
-import android.net.wifi.WifiManager
 import android.os.IBinder
-import android.os.PowerManager
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.core.app.NotificationCompat
@@ -43,13 +41,8 @@ class TerminalService : Service() {
     @Inject
     lateinit var sessionManager: SessionManager
 
-    /** 电源锁和 Wifi 锁始终同时获取和释放。 */
-    private var mWakeLock: PowerManager.WakeLock? = null
-    private var mWifiLock: WifiManager.WifiLock? = null
-
     private var isStarted = false
 
-    @SuppressLint("Wakelock")
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Timber.d("onStartCommand")
 
@@ -63,16 +56,6 @@ class TerminalService : Service() {
             NotificationActions.EXIT.name -> {
                 Timber.d("ACTION_STOP_SERVICE intent received")
                 stopSelf()
-            }
-
-            NotificationActions.WAKE_LOCK.name -> {
-                Timber.d("ACTION_WAKE_LOCK intent received")
-                actionAcquireWakeLock()
-            }
-
-            NotificationActions.WAKE_UNLOCK.name -> {
-                Timber.d("ACTION_WAKE_UNLOCK intent received")
-                actionReleaseWakeLock(true)
             }
 
             else -> Timber.e("Invalid action: \"${intent.action}\"")
@@ -109,69 +92,11 @@ class TerminalService : Service() {
         return null
     }
 
-    /** 获取电源和 Wi-Fi WakeLock。 */
-    @Synchronized
-    @SuppressLint("WakelockTimeout", "BatteryLife")
-    private fun actionAcquireWakeLock() {
-        if (mWakeLock != null) {
-            Timber.d("Ignoring acquiring WakeLocks since they are already held")
-            return
-        }
-
-        Timber.d("Acquiring WakeLocks")
-
-        val pm = getSystemService(PowerManager::class.java)
-        pm.newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK,
-            getString(R.string.application_name) + ":service-wakelock"
-        ).let {
-            it.acquire()
-            mWakeLock = it
-        }
-
-        // http://tools.android.com/tech-docs/lint-in-studio-2-3#TOC-WifiManager-Leak
-        val wm = getSystemService(WifiManager::class.java)
-        wm.createWifiLock(
-            WifiManager.WIFI_MODE_FULL_HIGH_PERF,
-            getString(R.string.application_name)
-        ).let {
-            it.acquire()
-            mWifiLock = it
-        }
-
-        updateNotification()
-
-        Timber.d("WakeLocks acquired successfully")
-    }
-
-    /** 释放电源和 Wi-Fi WakeLock。 */
-    @Synchronized
-    private fun actionReleaseWakeLock(updateNotification: Boolean) {
-        if (mWakeLock == null && mWifiLock == null) {
-            Timber.d("Ignoring releasing WakeLocks since none are already held")
-            return
-        }
-
-        Timber.d("Releasing WakeLocks")
-
-        mWakeLock?.release()
-        mWakeLock = null
-        mWifiLock?.release()
-        mWifiLock = null
-
-        if (updateNotification) updateNotification()
-
-        Timber.d("WakeLocks released successfully")
-    }
-
     private fun buildNotification(): Notification {
         // Set notification text
         val sessionCount = sessionManager.sessionListSize
         var notificationText =
             sessionCount.toString() + " session" + (if (sessionCount == 1) "" else "s")
-
-        val wakeLockHeld = mWakeLock != null
-        if (wakeLockHeld) notificationText += " (wake lock held)"
 
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setShowWhen(false)
@@ -179,10 +104,6 @@ class TerminalService : Service() {
             .setSmallIcon(R.drawable.ic_service_notification)
             .setContentTitle(notificationText)
             .addAction(NotificationActions.EXIT.getAction(this))
-            .addAction(
-                if (!wakeLockHeld) NotificationActions.WAKE_LOCK.getAction(this)
-                else NotificationActions.WAKE_UNLOCK.getAction(this)
-            )
             .build()
     }
 
@@ -223,15 +144,6 @@ class TerminalService : Service() {
             R.string.notification_action_exit,
             android.R.drawable.ic_delete
         ),
-        WAKE_LOCK(
-            R.string.notification_action_wake_lock,
-            android.R.drawable.ic_lock_lock
-        ),
-        WAKE_UNLOCK(
-            R.string.notification_action_wake_unlock,
-            android.R.drawable.ic_lock_idle_lock
-        );
-
         fun getAction(service: Context): NotificationCompat.Action {
             val intent = Intent(service, TerminalService::class.java)
                 .apply { action = this@NotificationActions.name }
