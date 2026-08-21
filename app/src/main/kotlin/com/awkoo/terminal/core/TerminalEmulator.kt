@@ -963,6 +963,11 @@ class TerminalEmulator(
                         mUnderlineStyle = TextStyle.UNDERLINE_STYLE_SINGLE
                     }
                 }
+                // SGR 24：关闭下划线时同步重置下划线样式，避免残留样式在后续开启下划线时误生效
+                24 -> {
+                    mEffect = mEffect and TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE.inv()
+                    mUnderlineStyle = TextStyle.UNDERLINE_STYLE_NONE
+                }
                 in sgrEffectMap -> {
                     val attr = sgrEffectMap[code]!!
                     mEffect = if (code < 20) mEffect or attr else mEffect and attr.inv()
@@ -1151,7 +1156,6 @@ class TerminalEmulator(
             9 to TextStyle.CHARACTER_ATTRIBUTE_STRIKETHROUGH,
             22 to (TextStyle.CHARACTER_ATTRIBUTE_BOLD or TextStyle.CHARACTER_ATTRIBUTE_DIM),
             23 to TextStyle.CHARACTER_ATTRIBUTE_ITALIC,
-            24 to TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE,
             25 to TextStyle.CHARACTER_ATTRIBUTE_BLINK,
             27 to TextStyle.CHARACTER_ATTRIBUTE_INVERSE,
             28 to TextStyle.CHARACTER_ATTRIBUTE_INVISIBLE,

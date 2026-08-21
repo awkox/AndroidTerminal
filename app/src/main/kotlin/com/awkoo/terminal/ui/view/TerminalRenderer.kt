@@ -1,7 +1,11 @@
 package com.awkoo.terminal.ui.view
 
 import android.graphics.Canvas
+import android.graphics.DashPathEffect
 import android.graphics.Paint
+import android.graphics.Path
+import android.graphics.PathDashPathEffect
+import android.graphics.PathEffect
 import android.graphics.PorterDuff
 import android.graphics.Typeface
 import com.awkoo.terminal.constants.TerminalCursorStyle
@@ -12,6 +16,7 @@ import com.awkoo.terminal.core.charCountAtSafe
 import com.awkoo.terminal.core.withCodePointAt
 import kotlin.math.abs
 import kotlin.math.ceil
+import kotlin.math.max
 
 /**
  * 将 [TerminalEmulator] 渲染到 [Canvas]。
@@ -26,6 +31,17 @@ class TerminalRenderer(textSize: Int, typeface: Typeface) {
     private val mFontAscent: Int
     val mFontLineSpacingAndAscent: Int
     private val asciiMeasures = FloatArray(127)
+
+    // 下划线独立画笔：描边模式，粗细随字号在 init 中设定，避免依赖 mTextPaint 状态被文本绘制覆盖
+    private val mUnderlinePaint = Paint().apply {
+        style = Paint.Style.STROKE
+        isAntiAlias = true
+    }
+    private val mUnderlineThickness: Float
+    private val mUnderlineOffset: Float
+    private val mDashedEffect: PathEffect
+    private val mDottedEffect: PathEffect
+    private val mCurlyEffect: PathEffect
 
     init {
         mTextPaint.textSize = textSize.toFloat()
@@ -42,6 +58,24 @@ class TerminalRenderer(textSize: Int, typeface: Typeface) {
             sb.setCharAt(0, i.toChar())
             asciiMeasures[i] = mTextPaint.measureText(sb, 0, 1)
         }
+
+        // 下划线几何参数随字号缩放，保证不同字号下视觉比例一致
+        mUnderlineThickness = max(1f, textSize / 15f)
+        mUnderlineOffset = mUnderlineThickness * 1.5f
+        mUnderlinePaint.strokeWidth = mUnderlineThickness
+
+        // 虚线/点线相位以屏幕原点为基准，跨文本运行保持连续
+        mDashedEffect = DashPathEffect(floatArrayOf(fontWidth * 0.6f, fontWidth * 0.4f), 0f)
+        mDottedEffect = DashPathEffect(floatArrayOf(mUnderlineThickness, mUnderlineThickness * 2f), 0f)
+
+        // 波浪特效以单列宽为周期平铺印章，相邻列波形无缝衔接
+        val wavePath = Path().apply {
+            val waveLen = fontWidth
+            val waveAmp = mUnderlineThickness * 1.5f
+            moveTo(0f, 0f)
+            cubicTo(waveLen * 0.25f, -waveAmp, waveLen * 0.75f, waveAmp, waveLen, 0f)
+        }
+        mCurlyEffect = PathDashPathEffect(wavePath, fontWidth, 0f, PathDashPathEffect.Style.TRANSLATE)
     }
 
     fun render(
@@ -107,6 +141,7 @@ class TerminalRenderer(textSize: Int, typeface: Typeface) {
         val charsUsedInLine = lineObject.mSpaceUsed
 
         var lastRunRawStyle: Long = 0L
+        var lastRunExtEffect: Long = 0L
         var lastRunInsideCursor = false
         var lastRunInsideSelection = false
         var lastRunStartColumn = -1
@@ -122,6 +157,7 @@ class TerminalRenderer(textSize: Int, typeface: Typeface) {
                 val insideCursor = (cursorX == column || (codePointWcWidth == 2 && cursorX == column + 1))
                 val insideSelection = column in selx1..selx2
                 val rawStyle = lineObject.getRawStyle(column)
+                val extEffect = lineObject.getExtendedEffect(column)
 
                 val measuredCodePointWidth =
                     if (codePoint < asciiMeasures.size) asciiMeasures[codePoint] 
@@ -130,8 +166,9 @@ class TerminalRenderer(textSize: Int, typeface: Typeface) {
                 val fontWidthMismatch = abs(measuredCodePointWidth / this.fontWidth - codePointWcWidth) > 0.01
 
                 // 直接比较原始 Long，避免 TextStyle 装箱
-                // 当样式/光标/选区/字体宽度任一变化时，中断当前文本运行
+                // 当样式/扩展特效/光标/选区/字体宽度任一变化时，中断当前文本运行
                 if (rawStyle != lastRunRawStyle ||
+                    extEffect != lastRunExtEffect ||
                     insideCursor != lastRunInsideCursor ||
                     insideSelection != lastRunInsideSelection ||
                     fontWidthMismatch ||
@@ -152,12 +189,14 @@ class TerminalRenderer(textSize: Int, typeface: Typeface) {
                             if (lastRunInsideCursor) mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] else 0,
                             cursorShape,
                             TextStyle(lastRunRawStyle),
+                            lastRunExtEffect,
                             reverseVideo || (lastRunInsideCursor && cursorShape == TerminalCursorStyle.BLOCK) || lastRunInsideSelection,
                             mEmulator
                         )
                     }
                     measuredWidthForRun = 0f
                     lastRunRawStyle = rawStyle
+                    lastRunExtEffect = extEffect
                     lastRunInsideCursor = insideCursor
                     lastRunInsideSelection = insideSelection
                     lastRunStartColumn = column
@@ -188,6 +227,7 @@ class TerminalRenderer(textSize: Int, typeface: Typeface) {
             if (lastRunInsideCursor) mEmulator.mColors.mCurrentColors[TextStyle.COLOR_INDEX_CURSOR] else 0,
             cursorShape,
             TextStyle(lastRunRawStyle),
+            lastRunExtEffect,
             reverseVideo || (lastRunInsideCursor && cursorShape == TerminalCursorStyle.BLOCK) || lastRunInsideSelection,
             mEmulator
         )
@@ -212,6 +252,7 @@ class TerminalRenderer(textSize: Int, typeface: Typeface) {
         cursor: Int,
         cursorStyle: TerminalCursorStyle,
         textStyle: TextStyle,
+        extendedEffect: Long,
         reverseVideo: Boolean,
         emulator: TerminalEmulator
     ) {
@@ -226,6 +267,8 @@ class TerminalRenderer(textSize: Int, typeface: Typeface) {
         val strikeThrough = textStyle.isStrikeThrough
         val dim = textStyle.isDim
         val invisible = textStyle.isInvisible
+        // 扩展特效中的下划线样式，NONE 表示无自定义下划线
+        val underlineStyle = TextStyle.decodeUnderlineStyle(extendedEffect)
 
         if ((foreColor and -0x1000000) != -0x1000000) {
             // 粗体使用前 8 色中的亮色（如果适用）
@@ -285,7 +328,8 @@ class TerminalRenderer(textSize: Int, typeface: Typeface) {
             }
 
             mTextPaint.isFakeBoldText = bold
-            mTextPaint.isUnderlineText = underline
+            // 带扩展下划线样式时由独立路径绘制，画笔下划线仅回退用于无扩展样式的数据
+            mTextPaint.isUnderlineText = underline && underlineStyle == TextStyle.UNDERLINE_STYLE_NONE
             mTextPaint.textSkewX = if (italic) -0.35f else 0f
             mTextPaint.isStrikeThruText = strikeThrough
             mTextPaint.color = foreColor
@@ -304,5 +348,58 @@ class TerminalRenderer(textSize: Int, typeface: Typeface) {
         }
 
         if (savedMatrix) canvas.restore()
+
+        // 自定义下划线绘制：要求主样式下划线位有效，防止 SGR 24 后残留的扩展样式误绘；
+        // 可见性与文字保持一致（隐藏属性、闪烁熄灭阶段不绘制）
+        if (underline && underlineStyle != TextStyle.UNDERLINE_STYLE_NONE && !invisible && textIsVisible) {
+            // 解析下划线颜色：默认跟随文字前景色（含 dim/reverseVideo 后的最终渲染色）
+            val decodedColor = TextStyle.decodeUnderlineColor(extendedEffect)
+            mUnderlinePaint.color = if (decodedColor != TextStyle.COLOR_INDEX_FOREGROUND) {
+                if ((decodedColor and -0x1000000) == -0x1000000) decodedColor else palette[decodedColor]
+            } else {
+                foreColor
+            }
+
+            // 矩阵已还原，使用绝对坐标绘制，避免字体宽度缩放导致线条粗细变形
+            val ulY = y - mFontLineSpacingAndAscent + mUnderlineOffset
+            val absoluteLeft = startColumn * this.fontWidth
+            val absoluteRight = absoluteLeft + runWidthColumns * this.fontWidth
+
+            canvas.save()
+            canvas.clipRect(
+                absoluteLeft,
+                ulY - mUnderlineThickness * 2,
+                absoluteRight,
+                ulY + mUnderlineThickness * 2
+            )
+            when (underlineStyle) {
+                TextStyle.UNDERLINE_STYLE_SINGLE -> {
+                    mUnderlinePaint.pathEffect = null
+                    mUnderlinePaint.strokeCap = Paint.Cap.BUTT
+                    canvas.drawLine(absoluteLeft, ulY, absoluteRight, ulY, mUnderlinePaint)
+                }
+                TextStyle.UNDERLINE_STYLE_DOUBLE -> {
+                    mUnderlinePaint.pathEffect = null
+                    mUnderlinePaint.strokeCap = Paint.Cap.BUTT
+                    val gap = mUnderlineThickness * 1.5f
+                    canvas.drawLine(absoluteLeft, ulY - gap / 2, absoluteRight, ulY - gap / 2, mUnderlinePaint)
+                    canvas.drawLine(absoluteLeft, ulY + gap / 2, absoluteRight, ulY + gap / 2, mUnderlinePaint)
+                }
+                else -> {
+                    mUnderlinePaint.strokeCap = when (underlineStyle) {
+                        TextStyle.UNDERLINE_STYLE_DOTTED -> Paint.Cap.ROUND
+                        else -> Paint.Cap.SQUARE
+                    }
+                    mUnderlinePaint.pathEffect = when (underlineStyle) {
+                        TextStyle.UNDERLINE_STYLE_CURLY -> mCurlyEffect
+                        TextStyle.UNDERLINE_STYLE_DOTTED -> mDottedEffect
+                        else -> mDashedEffect
+                    }
+                    // 从屏幕原点起笔使特效相位全局对齐，clipRect 裁出当前运行区间
+                    canvas.drawLine(0f, ulY, emulator.mColumns * this.fontWidth, ulY, mUnderlinePaint)
+                }
+            }
+            canvas.restore()
+        }
     }
 }
