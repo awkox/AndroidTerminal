@@ -303,8 +303,6 @@ class TerminalView(
                 stopTextSelectionMode()
                 return true
             }
-        } else if (Constants.isUsingCtrlSpaceWorkaround && keyCode == KeyEvent.KEYCODE_SPACE && event.isCtrlPressed) {
-            return onKeyDown(keyCode, event)
         }
         return super.onKeyPreIme(keyCode, event)
     }
