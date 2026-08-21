@@ -2,11 +2,6 @@ package com.awkoo.terminal.core
 
 import com.awkoo.terminal.Constants
 import com.awkoo.terminal.constants.TerminalCursorStyle
-import kotlin.io.encoding.Base64
-import kotlinx.coroutines.channels.BufferOverflow
-import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import timber.log.Timber
 import kotlin.math.max
 import kotlin.math.min
@@ -15,16 +10,6 @@ class TerminalEmulator(
     private val writeString: (data: String) -> Unit,
     private val writeByteArray: (data: ByteArray) -> Unit
 ) : TerminalActionHandler {
-
-    private val titleStack = ArrayDeque<String?>()
-    private val _titleState = MutableStateFlow<String?>(null)
-    val titleState = _titleState.asStateFlow()
-
-    val copiedText = MutableSharedFlow<String>(
-        replay = 0,
-        extraBufferCapacity = 1,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST
-    )
 
     private var mCursorRow = 0
     private var mCursorCol = 0
@@ -84,6 +69,15 @@ class TerminalEmulator(
     private var mLastEmittedCodePoint = -1
 
     @JvmField val mColors: TerminalColors = TerminalColors()
+
+    // OSC 处理器：拥有标题状态与剪贴板事件流，依赖 mColors 与写回回调
+    private val osc = OscHandler(mColors, writeString)
+
+    /** 窗口标题状态（门面转发，实际状态由 [osc] 持有）。 */
+    val titleState get() = osc.titleState
+
+    /** OSC 52 剪贴板写入事件流（门面转发）。 */
+    val copiedText get() = osc.copiedText
 
     private val ansiParser = AnsiEscapeParser(this)
     private val utf8Decoder = Utf8Decoder { ansiParser.processCodePoint(it) }
@@ -406,11 +400,8 @@ class TerminalEmulator(
             18, 19 -> writeString("\u001b[9;${mRows};${mColumns}t") // 报告精确字符尺寸
             20 -> writeString("\u001b]LIconLabel\u001b\\")
             21 -> writeString("\u001b]l\u001b\\")
-            22 -> {
-                titleStack.addLast(_titleState.value)
-                if (titleStack.size > 20) titleStack.removeAt(0)
-            }
-            23 -> if (!titleStack.isEmpty()) this._titleState.value = titleStack.removeLast()
+            22 -> osc.pushTitle()
+            23 -> osc.popTitle()
         }
     }
 
@@ -594,100 +585,7 @@ class TerminalEmulator(
     }
 
     override fun onOscCommand(value: Int, textParameter: String, bellOrStringTerminator: String) {
-        when (value) {
-            0, 1, 2 -> this._titleState.value = textParameter
-            4 -> handleOscSetColor(textParameter)
-            10, 11, 12 -> handleOscQuerySetColor(value, textParameter, bellOrStringTerminator)
-            52 -> handleOscClipboard(textParameter)
-            104 -> handleOscResetColor(textParameter)
-            110, 111, 112 -> mColors.reset(TextStyle.COLOR_INDEX_FOREGROUND + (value - 110))
-            119 -> {} // 忽略
-        }
-    }
-
-    private fun handleOscSetColor(textParameter: String) {
-        var colorIndex = -1
-        var parsingPairStart = -1
-        var i = 0
-        while (i <= textParameter.length) {
-            val endOfInput = i == textParameter.length
-            val b = if (endOfInput) ';' else textParameter[i]
-            if (b == ';') {
-                if (parsingPairStart < 0) {
-                    parsingPairStart = i + 1
-                } else {
-                    if (colorIndex in 0..255) {
-                        mColors.tryParseColor(colorIndex, textParameter.substring(parsingPairStart, i))
-                    }
-                    colorIndex = -1
-                    parsingPairStart = -1
-                }
-            } else if (parsingPairStart < 0 && b in '0'..'9') {
-                colorIndex = (if (colorIndex < 0) 0 else colorIndex * 10) + (b.code - '0'.code)
-            }
-            if (endOfInput) break
-            i++
-        }
-    }
-
-    /**
-     * 处理 OSC 查询/设置颜色命令 (XTOSC)。
-     *
-     * 查询：参数为 "?" 时返回当前颜色的 rgb 格式响应。
-     * 设置：参数为颜色值时解析并应用。
-     * 支持连续设置多个颜色（以分号分隔，从前景色开始递增）。
-     */
-    private fun handleOscQuerySetColor(value: Int, textParameter: String, bellOrStringTerminator: String) {
-        var specialIndex = TextStyle.COLOR_INDEX_FOREGROUND + (value - 10)
-        var lastSemiIndex = 0
-        var charIndex = 0
-        while (charIndex <= textParameter.length) {
-            val endOfInput = charIndex == textParameter.length
-            if (endOfInput || textParameter[charIndex] == ';') {
-                try {
-                    val colorSpec = textParameter.substring(lastSemiIndex, charIndex)
-                    if ("?" == colorSpec) {
-                        val rgb = mColors.mCurrentColors[specialIndex]
-                        val r = ((65535 * ((rgb and 0x00FF0000) shr 16)) / 255).hex4
-                        val g = ((65535 * ((rgb and 0x0000FF00) shr 8)) / 255).hex4
-                        val b = ((65535 * ((rgb and 0x000000FF))) / 255).hex4
-                        writeString("\u001b]$value;rgb:$r/$g/$b$bellOrStringTerminator")
-                    } else {
-                        mColors.tryParseColor(specialIndex, colorSpec)
-                    }
-                    specialIndex++
-                    if (endOfInput || specialIndex > TextStyle.COLOR_INDEX_CURSOR) break
-                    lastSemiIndex = charIndex + 1
-                } catch (e: Exception) {}
-            }
-            charIndex++
-        }
-    }
-
-    private fun handleOscClipboard(textParameter: String) {
-        val startIndex = textParameter.indexOf(";") + 1
-        try {
-            val data = Base64.decode(textParameter.substring(startIndex))
-            copiedText.tryEmit(data.toString(Charsets.UTF_8))
-        } catch (e: Exception) {
-            Timber.w("OSC Manipulate selection, invalid string '$textParameter'")
-        }
-    }
-
-    private fun handleOscResetColor(textParameter: String) {
-        if (textParameter.isEmpty()) mColors.reset()
-        else {
-            var lastIndex = 0
-            for (i in 0..textParameter.length) {
-                if (i == textParameter.length || textParameter[i] == ';') {
-                    try {
-                        val colorToReset = textParameter.substring(lastIndex, i).toInt()
-                        mColors.reset(colorToReset)
-                    } catch (e: NumberFormatException) {}
-                    lastIndex = i + 1
-                }
-            }
-        }
+        osc.onOscCommand(value, textParameter, bellOrStringTerminator)
     }
 
     /**
@@ -1108,7 +1006,6 @@ class TerminalEmulator(
         var mUseLineDrawingG0: Boolean = false; var mUseLineDrawingG1: Boolean = false; var mUseLineDrawingUsesG0: Boolean = true
     }
 
-    private val Int.hex4: String get() = "%04x".format(this)
 
     companion object {
         private const val defaultRows = 24
