@@ -5,7 +5,7 @@
 [![License](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 ![MinSdk](https://img.shields.io/badge/Android-9.0%2B-informational)
 
-基于原生 Android 的终端模拟器，内置 VT100/xterm 仿真与本地 PTY 子进程管理。
+适用于 Android 的终端模拟器，内置 VT100/xterm 仿真与本地 PTY 子进程管理。
 
 ## 功能特性
 
