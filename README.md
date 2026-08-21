@@ -15,27 +15,6 @@
 
 **交互体验**：自定义 Canvas 渲染终端视图，双指缩放字体；长按文本选择带手柄，支持复制/粘贴；可配置光标样式与闪烁，字体大小持久化（DataStore）；内置 Maple Mono NF CN 等宽字体。
 
-**扩展按键**：Termux 风格双行扩展按键栏（ESC/DEL/INS/HOME/END/PGUP/PGDN/TAB/方向键）；CTRL/ALT 修饰键上滑弹出组合键；按键布局通过 Kotlin Serialization + ProtoBuf 序列化。
-
-## 下载安装
-
-要求 Android 9.0（API 28）及以上。暂未发布正式 Release：
-
-1. **CI 构建产物**：[Actions](https://github.com/awkox/AndroidTerminal/actions) 页面选择成功的「编译」工作流，下载 Artifacts 中的 `package`（需登录 GitHub）。
-2. **自行构建**：见[开发构建](#开发构建)。
-
-## 技术栈
-
-| 类别 | 技术 |
-|------|------|
-| 语言 | Kotlin 2.4 / Java 21 / C23 & C++23 |
-| UI | Jetpack Compose (Material 3) + 自定义 View |
-| 依赖注入 | Hilt |
-| 数据存储 | DataStore Preferences |
-| 序列化 | Kotlin Serialization (ProtoBuf) |
-| 日志 | Timber |
-| 原生层 | NDK r29 + CMake 4.1（JNI 实现 PTY） |
-
 ## 架构概览
 
 ```
@@ -61,8 +40,6 @@ TerminalService（前台服务）
 环境：JDK 21、Android SDK（compileSdk 37）、Android NDK r29（修改 `app/cpp/` 时必需）。Gradle Wrapper 随仓库提供。
 
 `./gradlew assembleDebug` 或 `./gradlew assembleRelease`
-
-产物位于 `app/build/outputs/apk/release/app-release.apk`。
 
 ## 项目文档
 
