@@ -41,6 +41,14 @@ TerminalService（前台服务）
 
 `./gradlew assembleDebug` 或 `./gradlew assembleRelease`
 
+## 开发计划
+
+- [ ] 1. 完善设置 Activity
+  - [ ] 1.1 字体大小调整
+  - [ ] 1.2 导入自定义字体
+  - [ ] 1.3 隐藏状态栏
+- [ ] 2. 完善屏幕长亮
+
 ## 项目文档
 
 - [生命周期与进程模型](docs/Lifecycle-and-Process-Model.md)：从 Application、前台服务、会话管理器到原生 PTY 子进程的完整生命周期，协程模型、I/O 数据流与状态机
