@@ -81,7 +81,16 @@ TerminalService（前台服务）
 - [Termux](https://github.com/termux/termux-app)：扩展按键栏设计参考；`WcWidth.kt` 与 [termux/wcwidth](https://github.com/termux/wcwidth)、[libandroid-support](https://github.com/termux/libandroid-support) 保持同步
 - [jquast/wcwidth](https://github.com/jquast/wcwidth)：Unicode 字符宽度表移植来源
 
-**开源依赖**：Jetpack Compose / Material 3、Hilt、DataStore Preferences、Kotlinx Serialization、Timber、LeakCanary、Compose Settings、desugar_jdk_libs、[Maple Mono](https://github.com/subframe7536/maple-font)（内置等宽字体 Maple Mono NF CN）。
+**开源依赖**：
+- [Jetpack Compose](https://developer.android.com/compose) / [Material 3](https://developer.android.com/develop/ui/compose/designsystems/material3)
+- [Hilt](https://dagger.dev/hilt/)
+- [DataStore Preferences](https://developer.android.com/topic/libraries/architecture/datastore)
+- [Kotlinx Serialization](https://github.com/Kotlin/kotlinx.serialization)
+- [Timber](https://github.com/JakeWharton/timber)
+- [LeakCanary](https://github.com/square/leakcanary)
+- [Compose Settings](https://github.com/alorma/Compose-Settings)
+- [desugar_jdk_libs](https://github.com/google/desugar_jdk_libs)
+- [Maple Mono](https://github.com/subframe7536/maple-font)：内置等宽字体 Maple Mono NF CN
 
 ## 许可证
 
