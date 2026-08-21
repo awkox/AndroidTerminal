@@ -11,7 +11,6 @@ import android.graphics.Typeface
 import android.os.SystemClock
 import android.text.InputType
 import android.view.ActionMode
-import android.view.KeyCharacterMap
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
@@ -22,7 +21,6 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import com.awkoo.terminal.Constants
-import com.awkoo.terminal.core.KeyHandler
 import com.awkoo.terminal.core.TerminalEmulator
 import com.awkoo.terminal.core.TerminalSession
 import com.awkoo.terminal.ui.view.textselection.TextSelectionCursorController
@@ -74,6 +72,22 @@ class TerminalView(
 
     val touchHandler = TerminalTouchHandler(this)
 
+    // 键盘输入处理器：按键到会话字节流的转换逻辑委托对象
+    private val keyProcessor = KeyInputProcessor(
+        sessionProvider = { currentSession },
+        emulatorProvider = { mEmulator },
+        pokeCursor = { cursorBlinker.poke() },
+        scrollPages = { pages ->
+            val time = SystemClock.uptimeMillis()
+            val motionEvent = MotionEvent.obtain(time, time, MotionEvent.ACTION_DOWN, 0f, 0f, 0)
+            touchHandler.doScroll(motionEvent, pages)
+            motionEvent.recycle()
+        },
+        isSelectingText = { isSelectingText },
+        stopTextSelection = { stopTextSelectionMode() },
+        modifierReader = { extraKeysModifierReader?.invoke() }
+    )
+
     private val cursorBlinker = TerminalBlinker(
         blinkerName = "cursor",
         scope = scope,
@@ -103,7 +117,7 @@ class TerminalView(
             emulatorClipboardCollectJob?.cancel()
             emulatorClipboardCollectJob = null
             topRow = 0
-            mCombiningAccent = 0
+            keyProcessor.reset()
             field = value
 
             if (value != null) {
@@ -327,9 +341,6 @@ class TerminalView(
      */
     var extraKeysModifierReader: (() -> ExtraKeysModifierSnapshot)? = null
 
-    /** 最后收到的组合字符码点，非零时表示处于组合状态。 */
-    private var mCombiningAccent: Int = 0
-
     override fun onKeyPreIme(keyCode: Int, event: KeyEvent): Boolean {
         Timber.v("onKeyPreIme(keyCode=$keyCode, event=$event)")
         if (keyCode == KeyEvent.KEYCODE_BACK) {
@@ -345,64 +356,11 @@ class TerminalView(
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         Timber.v("onKeyDown(keyCode=$keyCode, isSystem=${event.isSystem}, event=$event)")
-        val currentSession = currentSession ?: return false
-        if (this.isSelectingText) stopTextSelectionMode()
-
-        if (event.isSystem) {
-            return super.onKeyDown(keyCode, event)
-        } else if (event.action == KeyEvent.ACTION_MULTIPLE && keyCode == KeyEvent.KEYCODE_UNKNOWN) {
-            currentSession.write(event.characters)
-            return true
-        } else if (keyCode == KeyEvent.KEYCODE_LANGUAGE_SWITCH) {
-            return super.onKeyDown(keyCode, event)
+        return when (keyProcessor.onKeyDown(keyCode, event)) {
+            KeyInputProcessor.KeyDownResult.HANDLED -> true
+            KeyInputProcessor.KeyDownResult.NOT_HANDLED -> false
+            KeyInputProcessor.KeyDownResult.PASS_TO_SUPER -> super.onKeyDown(keyCode, event)
         }
-
-        val metaState = event.metaState
-        val extraMods = extraKeysModifierReader?.invoke() ?: ExtraKeysModifierSnapshot()
-        val controlDown = event.isCtrlPressed || extraMods.ctrl
-        val leftAltDown = (metaState and KeyEvent.META_ALT_LEFT_ON) != 0 || extraMods.alt
-        val shiftDown = event.isShiftPressed || extraMods.shift
-        val fnDown = event.isFunctionPressed || extraMods.fn
-        val rightAltDownFromEvent = (metaState and KeyEvent.META_ALT_RIGHT_ON) != 0
-
-        var keyMod = 0
-        if (controlDown) keyMod = keyMod or KeyHandler.KEYMOD_CTRL
-        if (event.isAltPressed || leftAltDown) keyMod = keyMod or KeyHandler.KEYMOD_ALT
-        if (shiftDown) keyMod = keyMod or KeyHandler.KEYMOD_SHIFT
-        if (event.isNumLockOn) keyMod = keyMod or KeyHandler.KEYMOD_NUM_LOCK
-        if (!fnDown && handleKeyCode(keyCode, keyMod)) {
-            Timber.d("handleKeyCode() took key event")
-            return true
-        }
-
-        var bitsToClear = KeyEvent.META_CTRL_MASK
-        if (rightAltDownFromEvent) {
-            // 允许右 Alt / Alt Gr 用于字符组合
-        } else {
-            bitsToClear = bitsToClear or (KeyEvent.META_ALT_ON or KeyEvent.META_ALT_LEFT_ON)
-        }
-        var effectiveMetaState = event.metaState and bitsToClear.inv()
-
-        if (shiftDown) effectiveMetaState =
-            effectiveMetaState or (KeyEvent.META_SHIFT_ON or KeyEvent.META_SHIFT_LEFT_ON)
-
-        var result = event.getUnicodeChar(effectiveMetaState)
-        Timber.v("KeyEvent#getUnicodeChar($effectiveMetaState) returned: $result")
-        if (result == 0) return false
-
-        if ((result and KeyCharacterMap.COMBINING_ACCENT) != 0) {
-            if (mCombiningAccent != 0) inputCodePoint(event.deviceId, mCombiningAccent, controlDown, leftAltDown)
-            mCombiningAccent = result and KeyCharacterMap.COMBINING_ACCENT_MASK
-        } else {
-            if (mCombiningAccent != 0) {
-                val combinedChar = KeyCharacterMap.getDeadChar(mCombiningAccent, result)
-                if (combinedChar > 0) result = combinedChar
-                mCombiningAccent = 0
-            }
-            inputCodePoint(event.deviceId, result, controlDown, leftAltDown)
-        }
-
-        return true
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
@@ -417,67 +375,9 @@ class TerminalView(
         codePoint: Int,
         controlDownFromEvent: Boolean,
         leftAltDownFromEvent: Boolean
-    ) {
-        Timber.v("inputCodePoint(eventSource=$eventSource, codePoint=$codePoint, controlDown=$controlDownFromEvent, leftAlt=$leftAltDownFromEvent)")
-        val currentSession = currentSession ?: return
+    ) = keyProcessor.inputCodePoint(eventSource, codePoint, controlDownFromEvent, leftAltDownFromEvent)
 
-        // 按需获取键盘修饰符
-        // 只有软键盘输入需要单独获取 extraMods，物理按键和 ExtraKeys 在发送前已经在 onKeyDown 里获取并合并了
-        val extraMods = if (eventSource == TerminalImeConnection.KEY_EVENT_SOURCE_SOFT_KEYBOARD) {
-            extraKeysModifierReader?.invoke() ?: ExtraKeysModifierSnapshot()
-        } else {
-            ExtraKeysModifierSnapshot() 
-        }
-
-        val controlDown = controlDownFromEvent || extraMods.ctrl
-        val leftAltDown = leftAltDownFromEvent || extraMods.alt
-
-        // 判断来源是否是真实的硬件键盘
-        val isHardwareKeyboard = eventSource > TerminalImeConnection.KEY_EVENT_SOURCE_SOFT_KEYBOARD
-
-        // 委托给 KeyHandler 处理转换
-        val finalCodePoint = KeyHandler.processPrintableChar(
-            codePoint = codePoint,
-            isCtrlDown = controlDown,
-            isHardwareKeyboard = isHardwareKeyboard
-        )
-
-        if (finalCodePoint > -1) {
-            cursorBlinker.poke()
-            currentSession.writeCodePoint(leftAltDown, finalCodePoint)
-        }
-    }
-
-    internal fun handleKeyCode(keyCode: Int, keyMod: Int): Boolean {
-        if (handleKeyCodeAction(keyCode, keyMod)) return true
-        val emulator = mEmulator!!
-        val code = KeyHandler.getCode(keyCode, keyMod, emulator.isCursorKeysApplicationMode, emulator.isKeypadApplicationMode)
-            ?: return false
-        cursorBlinker.poke()
-        currentSession!!.write(code)
-        return true
-    }
-
-    private fun handleKeyCodeAction(keyCode: Int, keyMod: Int): Boolean {
-        val shiftDown = (keyMod and KeyHandler.KEYMOD_SHIFT) != 0
-        val emulator = mEmulator!!
-
-        when (keyCode) {
-            KeyEvent.KEYCODE_PAGE_UP,
-            KeyEvent.KEYCODE_PAGE_DOWN ->
-                if (shiftDown) {
-                    val time = SystemClock.uptimeMillis()
-                    val motionEvent = MotionEvent.obtain(time, time, MotionEvent.ACTION_DOWN, 0f, 0f, 0)
-                    touchHandler.doScroll(
-                        motionEvent,
-                        if (keyCode == KeyEvent.KEYCODE_PAGE_UP) -emulator.mRows else emulator.mRows
-                    )
-                    motionEvent.recycle()
-                    return true
-                }
-        }
-        return false
-    }
+    internal fun handleKeyCode(keyCode: Int, keyMod: Int): Boolean = keyProcessor.handleKeyCode(keyCode, keyMod)
 
     override fun isOpaque() = true
 
