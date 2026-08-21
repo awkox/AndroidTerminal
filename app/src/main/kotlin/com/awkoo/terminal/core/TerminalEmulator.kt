@@ -73,6 +73,9 @@ class TerminalEmulator(
     // OSC 处理器：拥有标题状态与剪贴板事件流，依赖 mColors 与写回回调
     private val osc = OscHandler(mColors, writeString)
 
+    // 输入序列编码器：将鼠标/焦点/粘贴事件编码为发往 shell 的转义序列
+    private val inputEncoder = InputSequenceEncoder(writeString, writeByteArray)
+
     /** 窗口标题状态（门面转发，实际状态由 [osc] 持有）。 */
     val titleState get() = osc.titleState
 
@@ -638,21 +641,16 @@ class TerminalEmulator(
     }
 
     fun sendMouseEvent(mouseButton: Int, column: Int, row: Int, pressed: Boolean) {
-        var button = mouseButton
-        val c = min(max(column, 1), mColumns)
-        val r = min(max(row, 1), mRows)
-        if (button == MOUSE_LEFT_BUTTON_MOVED && !isDecsetInternalBitSet(DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT)) {
-            return
-        } else if (isDecsetInternalBitSet(DECSET_BIT_MOUSE_PROTOCOL_SGR)) {
-            if (pressed) writeString("\u001b[<${button};${c};${r}M")
-            else writeString("\u001b[<${button};${c};${r}m")
-        } else {
-            button = if (pressed) button else 3
-            if (!(c > 255 - 32 || r > 255 - 32)) {
-                val data = byteArrayOf('\u001b'.code.toByte(), '['.code.toByte(), 'M'.code.toByte(), (32 + button).toByte(), (32 + c).toByte(), (32 + r).toByte())
-                writeByteArray(data)
-            }
-        }
+        inputEncoder.encodeMouseEvent(
+            button = mouseButton,
+            column = column,
+            row = row,
+            pressed = pressed,
+            buttonEventTracking = isDecsetInternalBitSet(DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT),
+            sgrProtocol = isDecsetInternalBitSet(DECSET_BIT_MOUSE_PROTOCOL_SGR),
+            columns = mColumns,
+            rows = mRows
+        )
     }
 
     fun resize(columns: Int, rows: Int, cellWidthPixels: Int, cellHeightPixels: Int) {
@@ -955,7 +953,9 @@ class TerminalEmulator(
 
     fun clearScrollCounter() { this.scrollCounter = 0 }
     fun toggleAutoScrollDisabled() { this.isAutoScrollDisabled = !this.isAutoScrollDisabled }
-    fun onWindowFocusChanged(hasFocus: Boolean) { if (isDecsetInternalBitSet(DECSET_BIT_SEND_FOCUS_EVENTS)) writeString(if (hasFocus) "\u001b[I" else "\u001b[O") }
+    fun onWindowFocusChanged(hasFocus: Boolean) {
+        inputEncoder.encodeFocusEvent(hasFocus, isDecsetInternalBitSet(DECSET_BIT_SEND_FOCUS_EVENTS))
+    }
 
     fun reset() {
         cursorStyle = Constants.defaultTerminalCursorStyle
@@ -982,21 +982,7 @@ class TerminalEmulator(
 
     fun getSelectedText(x1: Int, y1: Int, x2: Int, y2: Int): String = screen.getSelectedText(x1, y1, x2, y2)
     fun paste(text: String) {
-        val processedText = buildString(text.length) {
-            var i = 0
-            while (i < text.length) {
-                val c = text[i]; val code = c.code
-                if (code == 0x1B || code in 0x80..0x9F) { i++; continue }
-                if (c == '\n' || c == '\r') {
-                    append('\r'); if (c == '\r' && i + 1 < text.length && text[i + 1] == '\n') i++
-                } else append(c)
-                i++
-            }
-        }
-        val bracketed = isDecsetInternalBitSet(DECSET_BIT_BRACKETED_PASTE_MODE)
-        if (bracketed) writeString("\u001b[200~")
-        writeString(processedText)
-        if (bracketed) writeString("\u001b[201~")
+        inputEncoder.encodePastedText(text, isDecsetInternalBitSet(DECSET_BIT_BRACKETED_PASTE_MODE))
     }
 
     internal class SavedScreenState {
