@@ -80,8 +80,10 @@ android {
 }
 
 dependencies {
+    implementation(libs.androidx.compose.ui.tooling.preview)
     coreLibraryDesugaring(libs.android.desugar)
     implementation(libs.hilt.android)
+    debugImplementation(libs.androidx.compose.ui.tooling)
     ksp(libs.hilt.android.compiler)
     testImplementation(libs.junit)
     debugImplementation(libs.leakcanary)

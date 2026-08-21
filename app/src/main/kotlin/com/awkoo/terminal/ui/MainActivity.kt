@@ -6,6 +6,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.flowWithLifecycle
@@ -32,17 +34,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            MaterialTheme(
-                colorScheme = darkColorScheme()
-            ) {
-                SessionListDrawer { innerPadding, terminalViewRef, modifierState ->
-                    SessionViewScreen(
-                        innerPadding = innerPadding,
-                        terminalViewRef = terminalViewRef,
-                        modifierState = modifierState
-                    )
-                }
-            }
+            MainScreen()
         }
 
         viewModel.sessionListState
@@ -51,6 +43,22 @@ class MainActivity : ComponentActivity() {
             .drop(1)
             .onEach { finish() }
             .launchIn(lifecycleScope)
+    }
+
+    @Composable
+    @Preview
+    fun MainScreen() {
+        MaterialTheme(
+            colorScheme = darkColorScheme()
+        ) {
+            SessionListDrawer { innerPadding, terminalViewRef, modifierState ->
+                SessionViewScreen(
+                    innerPadding = innerPadding,
+                    terminalViewRef = terminalViewRef,
+                    modifierState = modifierState
+                )
+            }
+        }
     }
 
     override fun onDestroy() {

@@ -9,6 +9,8 @@ kotlin = "2.4.10"
 materialIconsCore = "1.7.8"
 serialization = "1.11.0"
 compose-settings = "3.1.0"
+uiToolingPreview = "1.12.0"
+uiTooling = "1.12.0"
 
 [libraries]
 android-desugar = { group = "com.android.tools", name = "desugar_jdk_libs", version = "2.1.5" }
@@ -29,6 +31,8 @@ composeSettings-ui-extended = { group = "com.github.alorma.compose-settings", na
 serialization-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-core", version.ref = "serialization" }
 serialization-protobuf = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-protobuf", version.ref = "serialization" }
 timber = { group = "com.jakewharton.timber", name = "timber", version = "5.0.1" }
+androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview", version.ref = "uiToolingPreview" }
+androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling", version.ref = "uiTooling" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "androidGradlePlugin" }
