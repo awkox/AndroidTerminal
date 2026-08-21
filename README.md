@@ -60,10 +60,7 @@ TerminalService（前台服务）
 
 环境：JDK 21、Android SDK（compileSdk 37）、Android NDK r29（修改 `app/cpp/` 时必需）。Gradle Wrapper 随仓库提供。
 
-```bash
-./gradlew assembleDebug    # Debug 构建
-./gradlew assembleRelease  # Release 构建（CI 使用）
-```
+`./gradlew assembleDebug` 或 `./gradlew assembleRelease`
 
 产物位于 `app/build/outputs/apk/release/app-release.apk`。
 
@@ -76,8 +73,7 @@ TerminalService（前台服务）
 ## 鸣谢
 
 **参考项目**：
-- [Termux](https://github.com/termux/termux-app)：扩展按键栏设计参考；`WcWidth.kt` 与 [termux/wcwidth](https://github.com/termux/wcwidth)、[libandroid-support](https://github.com/termux/libandroid-support) 保持同步
-- [jquast/wcwidth](https://github.com/jquast/wcwidth)：Unicode 字符宽度表移植来源
+- [Termux](https://github.com/termux/termux-app)：本项目的前身
 
 **开源依赖**：
 - [Jetpack Compose](https://developer.android.com/compose) / [Material 3](https://developer.android.com/develop/ui/compose/designsystems/material3)
