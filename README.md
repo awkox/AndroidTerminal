@@ -104,6 +104,7 @@ TerminalService（前台服务）
 
 ## 项目文档
 
+- [生命周期与进程模型](docs/Lifecycle-and-Process-Model.md)：从 Application、前台服务、会话管理器到原生 PTY 子进程的完整生命周期，涵盖协程模型、I/O 数据流、状态机与资源清理机制
 - [支持的 xterm 转义序列](docs/xterm-sequences.md)：仿真器所支持的全部转义序列参考，含输入方向编码、终端响应一览与已知限制
 - [屏幕缓冲区架构设计](docs/ScreenBuffer.md)：双缓冲区机制、样式位压缩编码、复杂文本布局与行重排等实现细节
 
