@@ -13,6 +13,7 @@ android {
     ndkVersion = "29.0.14206865"
 
     defaultConfig {
+        applicationId = "com.awkoo.terminal"
         minSdk = 28
         targetSdk = 28
         versionCode = 260
@@ -21,6 +22,7 @@ android {
 
     signingConfigs {
         getByName("debug") {
+            applicationIdSuffix = ".debug"
             storeFile = file("testkey_untrusted.jks")
             keyAlias = "alias"
             storePassword = "xrj45yWGLbsO7W0v"
