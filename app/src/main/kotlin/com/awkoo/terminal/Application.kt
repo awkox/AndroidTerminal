@@ -1,7 +1,6 @@
 package com.awkoo.terminal
 
 import android.app.Application
-import com.awkoo.terminal.core.AppPreferences
 import com.awkoo.terminal.core.TimberLogTree
 import com.awkoo.terminal.constants.LogLevel
 import dagger.hilt.android.HiltAndroidApp

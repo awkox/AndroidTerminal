@@ -1,4 +1,4 @@
-package com.awkoo.terminal.core
+package com.awkoo.terminal
 
 import android.content.Context
 import androidx.datastore.preferences.core.edit

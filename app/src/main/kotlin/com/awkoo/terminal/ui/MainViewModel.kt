@@ -6,7 +6,7 @@ import androidx.core.content.ContextCompat.startForegroundService
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.awkoo.terminal.TerminalService
-import com.awkoo.terminal.core.AppPreferences
+import com.awkoo.terminal.AppPreferences
 import com.awkoo.terminal.core.SessionManager
 import com.awkoo.terminal.core.ShellInfo
 import dagger.hilt.android.lifecycle.HiltViewModel
