@@ -370,6 +370,23 @@ class TerminalView(
     override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
         super.onWindowFocusChanged(hasWindowFocus)
         mEmulator?.onWindowFocusChanged(hasWindowFocus)
+        
+        // 当窗口失去焦点时，自动关闭文本选择
+        if (!hasWindowFocus && isSelectingText) {
+            stopTextSelectionMode()
+        }
+    }
+
+    // 当 View 自身失去焦点时，自动关闭文本选择
+    override fun onFocusChanged(
+        gainFocus: Boolean,
+        direction: Int,
+        previouslyFocusedRect: android.graphics.Rect?
+    ) {
+        super.onFocusChanged(gainFocus, direction, previouslyFocusedRect)
+        if (!gainFocus && isSelectingText) {
+            stopTextSelectionMode()
+        }
     }
 
     override fun onAttachedToWindow() {
