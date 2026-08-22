@@ -31,8 +31,9 @@ import javax.inject.Inject
 /**
  * 终端前台服务。
  *
- * 管理会话生命周期、通知
- * 会话列表变更时自动更新通知；无会话且无锁时自动停止服务。
+ * 作用：延长会话生命周期，增加后台稳定性
+ *      没有前台服务不影响基本功能
+ * 附带功能：一键退出、通过通知展示状态
  */
 @AndroidEntryPoint
 class TerminalService : Service() {

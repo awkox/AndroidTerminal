@@ -40,6 +40,8 @@ class MainViewModel @Inject constructor(
             shellInfo.commandLabel.update { name }
 
         sessionManager.addSession(shellInfo)
+
+        // 启动前台服务用于增加生命周期稳定性
         if (!TerminalService.isRunning) {
             val serviceIntent = Intent(context, TerminalService::class.java)
             startForegroundService(context, serviceIntent)
