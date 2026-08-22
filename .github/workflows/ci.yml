@@ -22,7 +22,7 @@ jobs:
           echo "${{ secrets.KEYSTORE_GZ_B64 }}" \
             | base64 --decode \
             | gunzip > app/release.keystore
-          ACTUAL_SHA=$(sha256sum release.keystore | awk '{print $1}')
+          ACTUAL_SHA=$(sha256sum app/release.keystore | awk '{print $1}')
           EXPECTED_SHA=${{ secrets.KEYSTORE_EXPECTED_SHA256 }}
           if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
               exit 1
