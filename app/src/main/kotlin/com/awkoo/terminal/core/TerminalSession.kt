@@ -131,8 +131,8 @@ class TerminalSession(
         scope.launch {
             try {
                 p.outputStream.use { termOut ->
-                    if (commandInfo.stdin != null) {
-                        termOut.write(commandInfo.stdin.toByteArray())
+                    commandInfo.stdin?.let {
+                        termOut.write(it.toByteArray())
                     }
                     for (buffer in terminalWriteChannel) {
                         termOut.write(buffer, 0, buffer.size)

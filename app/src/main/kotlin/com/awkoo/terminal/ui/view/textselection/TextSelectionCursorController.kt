@@ -190,9 +190,7 @@ class TextSelectionCursorController(private val terminalView: TerminalView) : Cu
                 var bottom = ((mSelY2 + 1 - terminalView.topRow) * terminalView.mRenderer.fontLineSpacing).toFloat().roundToInt()
 
                 if (x1 > x2) {
-                    val tmp = x1
-                    x1 = x2
-                    x2 = tmp
+                    x1 = x2.also { x2 = x1 }
                 }
 
                 val terminalBottom = terminalView.bottom
