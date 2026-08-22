@@ -195,15 +195,14 @@ class TerminalEmulator(
     }
 
     override fun onEscCommand(state: Int, command: Int) {
-        val b = command
         when (state) {
-            AnsiEscapeParser.ESC -> handleEscStandard(b)
+            AnsiEscapeParser.ESC -> handleEscStandard(command)
             AnsiEscapeParser.ESC_POUND -> {
-                if (b == '8'.code) screen.blockSet(0, 0, mColumns, mRows, 'E'.code, this.style)
+                if (command == '8'.code) screen.blockSet(0, 0, mColumns, mRows, 'E'.code, this.style)
             }
 
-            AnsiEscapeParser.ESC_SELECT_LEFT_PAREN -> mUseLineDrawingG0 = (b == '0'.code)
-            AnsiEscapeParser.ESC_SELECT_RIGHT_PAREN -> mUseLineDrawingG1 = (b == '0'.code)
+            AnsiEscapeParser.ESC_SELECT_LEFT_PAREN -> mUseLineDrawingG0 = (command == '0'.code)
+            AnsiEscapeParser.ESC_SELECT_RIGHT_PAREN -> mUseLineDrawingG1 = (command == '0'.code)
             AnsiEscapeParser.ESC_PERCENT -> {} // 字符集选择，当前忽略
         }
     }
@@ -306,11 +305,7 @@ class TerminalEmulator(
             AnsiEscapeParser.ESC_CSI_DOLLAR -> handleCsiDollar(command, args, argCount)
             AnsiEscapeParser.ESC_CSI_DOUBLE_QUOTE -> handleCsiDoubleQuote(command, args)
             AnsiEscapeParser.ESC_CSI_SINGLE_QUOTE -> handleCsiSingleQuote(command, args)
-            AnsiEscapeParser.ESC_CSI_QUESTIONMARK_ARG_DOLLAR -> handleCsiQuestionMarkArgDollar(
-                command,
-                args
-            )
-
+            AnsiEscapeParser.ESC_CSI_QUESTIONMARK_ARG_DOLLAR -> handleCsiQuestionMarkArgDollar(command, args)
             AnsiEscapeParser.ESC_CSI_ARGS_SPACE -> handleCsiArgsSpace(command, args)
             AnsiEscapeParser.ESC_CSI_ARGS_ASTERIX -> handleCsiArgsAsterix(command, args)
             AnsiEscapeParser.ESC_CSI_EXCLAMATION -> onSoftReset()
@@ -931,45 +926,10 @@ class TerminalEmulator(
      * 5. 更新光标位置和预备换行标志
      */
     private fun emitCodePoint(codePoint: Int) {
+        mLastEmittedCodePoint = codePoint
         var cp = codePoint
-        mLastEmittedCodePoint = cp
         if (if (mUseLineDrawingUsesG0) mUseLineDrawingG0 else mUseLineDrawingG1) {
-            cp = when (cp.toChar()) {
-                '_' -> ' '.code
-                '`' -> '◆'.code
-                '0' -> '█'.code
-                'a' -> '▒'.code
-                'b' -> '␉'.code
-                'c' -> '␌'.code
-                'd' -> '\r'.code
-                'e' -> '␊'.code
-                'f' -> '°'.code
-                'g' -> '±'.code
-                'h' -> '\n'.code
-                'i' -> '␋'.code
-                'j' -> '┘'.code
-                'k' -> '┐'.code
-                'l' -> '┌'.code
-                'm' -> '└'.code
-                'n' -> '┼'.code
-                'o' -> '⎺'.code
-                'p' -> '⎻'.code
-                'q' -> '─'.code
-                'r' -> '⎼'.code
-                's' -> '⎽'.code
-                't' -> '├'.code
-                'u' -> '┤'.code
-                'v' -> '┴'.code
-                'w' -> '┬'.code
-                'x' -> '│'.code
-                'y' -> '≤'.code
-                'z' -> '≥'.code
-                '{' -> 'π'.code
-                '|' -> '≠'.code
-                '}' -> '£'.code
-                '~' -> '·'.code
-                else -> cp
-            }
+            cp = CHAR_MAP[cp] ?: cp
         }
 
         // 自动换行：行尾 + (预备换行 + 普通字符) 或 宽字符 → 换行
@@ -1404,6 +1364,42 @@ class TerminalEmulator(
             27 to TextStyle.CHARACTER_ATTRIBUTE_INVERSE,
             28 to TextStyle.CHARACTER_ATTRIBUTE_INVISIBLE,
             29 to TextStyle.CHARACTER_ATTRIBUTE_STRIKETHROUGH,
+        )
+
+        private val CHAR_MAP = mapOf(
+            '_'.code to ' '.code,
+            '`'.code to '◆'.code,
+            '0'.code to '█'.code,
+            'a'.code to '▒'.code,
+            'b'.code to '␉'.code,
+            'c'.code to '␌'.code,
+            'd'.code to '\r'.code,
+            'e'.code to '␊'.code,
+            'f'.code to '°'.code,
+            'g'.code to '±'.code,
+            'h'.code to '\n'.code,
+            'i'.code to '␋'.code,
+            'j'.code to '┘'.code,
+            'k'.code to '┐'.code,
+            'l'.code to '┌'.code,
+            'm'.code to '└'.code,
+            'n'.code to '┼'.code,
+            'o'.code to '⎺'.code,
+            'p'.code to '⎻'.code,
+            'q'.code to '─'.code,
+            'r'.code to '⎼'.code,
+            's'.code to '⎽'.code,
+            't'.code to '├'.code,
+            'u'.code to '┤'.code,
+            'v'.code to '┴'.code,
+            'w'.code to '┬'.code,
+            'x'.code to '│'.code,
+            'y'.code to '≤'.code,
+            'z'.code to '≥'.code,
+            '{'.code to 'π'.code,
+            '|'.code to '≠'.code,
+            '}'.code to '£'.code,
+            '~'.code to '·'.code
         )
 
         private fun mapDecSetBitToInternalBit(decsetBit: Int): Int = when (decsetBit) {
