@@ -14,10 +14,17 @@ class TerminalEmulator(
     private var mCursorRow = 0
     private var mCursorCol = 0
 
-    @JvmField var mRows = defaultRows
-    @JvmField var mColumns = defaultColumns
-    @JvmField var mCellWidthPixels = defaultCellWidthPixels
-    @JvmField var mCellHeightPixels = defaultCellHeightPixels
+    @JvmField
+    var mRows = defaultRows
+
+    @JvmField
+    var mColumns = defaultColumns
+
+    @JvmField
+    var mCellWidthPixels = defaultCellWidthPixels
+
+    @JvmField
+    var mCellHeightPixels = defaultCellHeightPixels
 
     var cursorStyle: TerminalCursorStyle = Constants.terminalCursorStyle
 
@@ -46,7 +53,7 @@ class TerminalEmulator(
     private var mRightMargin = 0
 
     private var mAboutToAutoWrap = false
-    
+
     var isCursorBlinkingEnabled = false
     var cursorBlinkState = false
     var isTextBlinkingEnabled = true
@@ -55,11 +62,20 @@ class TerminalEmulator(
     val isTextVisible: Boolean
         get() = if (isTextBlinkingEnabled) textBlinkState else true
 
-    @JvmField var mForeColor: Int = 0
-    @JvmField var mBackColor: Int = 0
-    @JvmField var mUnderlineColor: Int = 0
-    @JvmField var mEffect: Int = 0
-    @JvmField var mUnderlineStyle: Int = TextStyle.UNDERLINE_STYLE_NONE
+    @JvmField
+    var mForeColor: Int = 0
+
+    @JvmField
+    var mBackColor: Int = 0
+
+    @JvmField
+    var mUnderlineColor: Int = 0
+
+    @JvmField
+    var mEffect: Int = 0
+
+    @JvmField
+    var mUnderlineStyle: Int = TextStyle.UNDERLINE_STYLE_NONE
 
     var scrollCounter: Int = 0
         private set
@@ -68,7 +84,8 @@ class TerminalEmulator(
 
     private var mLastEmittedCodePoint = -1
 
-    @JvmField val mColors: TerminalColors = TerminalColors()
+    @JvmField
+    val mColors: TerminalColors = TerminalColors()
 
     // OSC 处理器：拥有标题状态与剪贴板事件流，依赖 mColors 与写回回调
     private val osc = OscHandler(mColors, writeString)
@@ -94,7 +111,7 @@ class TerminalEmulator(
 
     val isAlternateBufferActive: Boolean
         get() = this.screen == mAltBuffer
-        
+
     var cursorRow: Int
         get() = mCursorRow
         private set(row) {
@@ -116,8 +133,14 @@ class TerminalEmulator(
             if (!isCursorEnabled) return false
             return if (isCursorBlinkingEnabled) cursorBlinkState else true
         }
-    val isKeypadApplicationMode: Boolean get() = isDecsetInternalBitSet(DECSET_BIT_APPLICATION_KEYPAD)
-    val isCursorKeysApplicationMode: Boolean get() = isDecsetInternalBitSet(DECSET_BIT_APPLICATION_CURSOR_KEYS)
+    val isKeypadApplicationMode: Boolean
+        get() = isDecsetInternalBitSet(
+            DECSET_BIT_APPLICATION_KEYPAD
+        )
+    val isCursorKeysApplicationMode: Boolean
+        get() = isDecsetInternalBitSet(
+            DECSET_BIT_APPLICATION_CURSOR_KEYS
+        )
     val isMouseTrackingActive: Boolean
         get() = isDecsetInternalBitSet(DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE) ||
                 isDecsetInternalBitSet(DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT)
@@ -173,11 +196,12 @@ class TerminalEmulator(
 
     override fun onEscCommand(state: Int, command: Int) {
         val b = command
-        when(state) {
+        when (state) {
             AnsiEscapeParser.ESC -> handleEscStandard(b)
             AnsiEscapeParser.ESC_POUND -> {
                 if (b == '8'.code) screen.blockSet(0, 0, mColumns, mRows, 'E'.code, this.style)
             }
+
             AnsiEscapeParser.ESC_SELECT_LEFT_PAREN -> mUseLineDrawingG0 = (b == '0'.code)
             AnsiEscapeParser.ESC_SELECT_RIGHT_PAREN -> mUseLineDrawingG1 = (b == '0'.code)
             AnsiEscapeParser.ESC_PERCENT -> {} // 字符集选择，当前忽略
@@ -190,37 +214,77 @@ class TerminalEmulator(
                 this.cursorCol = mCursorCol - 1
             } else {
                 val rows = mBottomMargin - mTopMargin
-                screen.blockCopy(mLeftMargin, mTopMargin, mRightMargin - mLeftMargin - 1, rows, mLeftMargin + 1, mTopMargin)
-                screen.blockSet(mLeftMargin, mTopMargin, 1, rows, ' '.code, TextStyle.encode(mForeColor, mBackColor, 0))
+                screen.blockCopy(
+                    mLeftMargin,
+                    mTopMargin,
+                    mRightMargin - mLeftMargin - 1,
+                    rows,
+                    mLeftMargin + 1,
+                    mTopMargin
+                )
+                screen.blockSet(
+                    mLeftMargin,
+                    mTopMargin,
+                    1,
+                    rows,
+                    ' '.code,
+                    TextStyle.encode(mForeColor, mBackColor, 0)
+                )
             }
+
             '7' -> saveCursor()
             '8' -> restoreCursor()
             '9' -> if (mCursorCol < mRightMargin - 1) {
                 this.cursorCol = mCursorCol + 1
             } else {
                 val rows = mBottomMargin - mTopMargin
-                screen.blockCopy(mLeftMargin + 1, mTopMargin, mRightMargin - mLeftMargin - 1, rows, mLeftMargin, mTopMargin)
-                screen.blockSet(mRightMargin - 1, mTopMargin, 1, rows, ' '.code, TextStyle.encode(mForeColor, mBackColor, 0))
+                screen.blockCopy(
+                    mLeftMargin + 1,
+                    mTopMargin,
+                    mRightMargin - mLeftMargin - 1,
+                    rows,
+                    mLeftMargin,
+                    mTopMargin
+                )
+                screen.blockSet(
+                    mRightMargin - 1,
+                    mTopMargin,
+                    1,
+                    rows,
+                    ' '.code,
+                    TextStyle.encode(mForeColor, mBackColor, 0)
+                )
             }
+
             'c' -> {
                 reset()
                 mMainBuffer.clearTranscript()
                 blockClear(0, 0, mColumns, mRows)
                 setCursorPosition(0, 0)
             }
+
             'D' -> doLinefeed()
             'E' -> {
                 this.cursorCol = originLeft
                 doLinefeed()
             }
+
             'F' -> setCursorRowCol(0, mBottomMargin - 1)
             'H' -> mTabStop[mCursorCol] = true
             'M' -> if (mCursorRow <= mTopMargin) {
-                screen.blockCopy(mLeftMargin, mTopMargin, mRightMargin - mLeftMargin, mBottomMargin - (mTopMargin + 1), mLeftMargin, mTopMargin + 1)
+                screen.blockCopy(
+                    mLeftMargin,
+                    mTopMargin,
+                    mRightMargin - mLeftMargin,
+                    mBottomMargin - (mTopMargin + 1),
+                    mLeftMargin,
+                    mTopMargin + 1
+                )
                 blockClear(mLeftMargin, mTopMargin, mRightMargin - mLeftMargin)
             } else {
                 mCursorRow--
             }
+
             'N', '0' -> {} // 忽略
             '=' -> setDecsetinternalBit(DECSET_BIT_APPLICATION_KEYPAD, true)
             '>' -> setDecsetinternalBit(DECSET_BIT_APPLICATION_KEYPAD, false)
@@ -228,18 +292,27 @@ class TerminalEmulator(
         }
     }
 
-    override fun onCsiCommand(state: Int, command: Int, args: IntArray, argCount: Int, subParams: Int) {
-        val b = command
+    override fun onCsiCommand(
+        state: Int,
+        command: Int,
+        args: IntArray,
+        argCount: Int,
+        subParams: Int
+    ) {
         when (state) {
-            AnsiEscapeParser.ESC_CSI -> handleCsiStandard(b, args, argCount, subParams)
-            AnsiEscapeParser.ESC_CSI_QUESTIONMARK -> handleCsiQuestionMark(b, args, argCount)
-            AnsiEscapeParser.ESC_CSI_BIGGERTHAN -> handleCsiBiggerThan(b)
-            AnsiEscapeParser.ESC_CSI_DOLLAR -> handleCsiDollar(b, args, argCount)
-            AnsiEscapeParser.ESC_CSI_DOUBLE_QUOTE -> handleCsiDoubleQuote(b, args)
-            AnsiEscapeParser.ESC_CSI_SINGLE_QUOTE -> handleCsiSingleQuote(b, args)
-            AnsiEscapeParser.ESC_CSI_QUESTIONMARK_ARG_DOLLAR -> handleCsiQuestionMarkArgDollar(b, args)
-            AnsiEscapeParser.ESC_CSI_ARGS_SPACE -> handleCsiArgsSpace(b, args)
-            AnsiEscapeParser.ESC_CSI_ARGS_ASTERIX -> handleCsiArgsAsterix(b, args)
+            AnsiEscapeParser.ESC_CSI -> handleCsiStandard(command, args, argCount, subParams)
+            AnsiEscapeParser.ESC_CSI_QUESTIONMARK -> handleCsiQuestionMark(command, args, argCount)
+            AnsiEscapeParser.ESC_CSI_BIGGERTHAN -> handleCsiBiggerThan(command)
+            AnsiEscapeParser.ESC_CSI_DOLLAR -> handleCsiDollar(command, args, argCount)
+            AnsiEscapeParser.ESC_CSI_DOUBLE_QUOTE -> handleCsiDoubleQuote(command, args)
+            AnsiEscapeParser.ESC_CSI_SINGLE_QUOTE -> handleCsiSingleQuote(command, args)
+            AnsiEscapeParser.ESC_CSI_QUESTIONMARK_ARG_DOLLAR -> handleCsiQuestionMarkArgDollar(
+                command,
+                args
+            )
+
+            AnsiEscapeParser.ESC_CSI_ARGS_SPACE -> handleCsiArgsSpace(command, args)
+            AnsiEscapeParser.ESC_CSI_ARGS_ASTERIX -> handleCsiArgsAsterix(command, args)
             AnsiEscapeParser.ESC_CSI_EXCLAMATION -> onSoftReset()
         }
     }
@@ -253,19 +326,41 @@ class TerminalEmulator(
     private fun handleCsiStandard(b: Int, args: IntArray, argCount: Int, subParams: Int) {
         when (b.toChar()) {
             'A' -> {
-                this.cursorRow = max(originTop, mCursorRow - AnsiEscapeParser.getArg(args, 0, 1, true))
+                this.cursorRow =
+                    max(originTop, mCursorRow - AnsiEscapeParser.getArg(args, 0, 1, true))
             }
-            'B' -> this.cursorRow = min(mRows - 1, mCursorRow + AnsiEscapeParser.getArg(args, 0, 1, true))
-            'C', 'a' -> this.cursorCol = min(mRightMargin - 1, mCursorCol + AnsiEscapeParser.getArg(args, 0, 1, true))
-            'D' -> this.cursorCol = max(mLeftMargin, mCursorCol - AnsiEscapeParser.getArg(args, 0, 1, true))
+
+            'B' -> this.cursorRow =
+                min(mRows - 1, mCursorRow + AnsiEscapeParser.getArg(args, 0, 1, true))
+
+            'C', 'a' -> this.cursorCol =
+                min(mRightMargin - 1, mCursorCol + AnsiEscapeParser.getArg(args, 0, 1, true))
+
+            'D' -> this.cursorCol =
+                max(mLeftMargin, mCursorCol - AnsiEscapeParser.getArg(args, 0, 1, true))
+
             'E' -> {
-                setCursorPosition(0, mCursorRow - originTop + AnsiEscapeParser.getArg(args, 0, 1, true))
+                setCursorPosition(
+                    0,
+                    mCursorRow - originTop + AnsiEscapeParser.getArg(args, 0, 1, true)
+                )
             }
+
             'F' -> {
-                setCursorPosition(0, mCursorRow - originTop - AnsiEscapeParser.getArg(args, 0, 1, true))
+                setCursorPosition(
+                    0,
+                    mCursorRow - originTop - AnsiEscapeParser.getArg(args, 0, 1, true)
+                )
             }
-            'G' -> this.cursorCol = min(max(1, AnsiEscapeParser.getArg(args, 0, 1, true)), mColumns) - 1
-            'H', 'f' -> setCursorPosition(AnsiEscapeParser.getArg(args, 1, 1, true) - 1, AnsiEscapeParser.getArg(args, 0, 1, true) - 1)
+
+            'G' -> this.cursorCol =
+                min(max(1, AnsiEscapeParser.getArg(args, 0, 1, true)), mColumns) - 1
+
+            'H', 'f' -> setCursorPosition(
+                AnsiEscapeParser.getArg(args, 1, 1, true) - 1,
+                AnsiEscapeParser.getArg(args, 0, 1, true) - 1
+            )
+
             'I' -> this.cursorCol = nextTabStop(AnsiEscapeParser.getArg(args, 0, 1, true))
             'J' -> handleCsiJ(args)
             'K' -> handleCsiK(args)
@@ -276,17 +371,34 @@ class TerminalEmulator(
                 val linesToScroll = AnsiEscapeParser.getArg(args, 0, 1, true)
                 for (i in 0 until linesToScroll) scrollDownOneLine()
             }
+
             'T' -> {
                 val linesToScrollArg = AnsiEscapeParser.getArg(args, 0, 1, true)
                 val linesBetween = mBottomMargin - mTopMargin
                 val linesToScroll = min(linesBetween, linesToScrollArg)
-                screen.blockCopy(mLeftMargin, mTopMargin, mRightMargin - mLeftMargin, linesBetween - linesToScroll, mLeftMargin, mTopMargin + linesToScroll)
+                screen.blockCopy(
+                    mLeftMargin,
+                    mTopMargin,
+                    mRightMargin - mLeftMargin,
+                    linesBetween - linesToScroll,
+                    mLeftMargin,
+                    mTopMargin + linesToScroll
+                )
                 blockClear(mLeftMargin, mTopMargin, mRightMargin - mLeftMargin, linesToScroll)
             }
+
             'X' -> {
                 mAboutToAutoWrap = false
-                screen.blockSet(mCursorCol, mCursorRow, min(AnsiEscapeParser.getArg(args, 0, 1, true), mColumns - mCursorCol), 1, ' '.code, this.style)
+                screen.blockSet(
+                    mCursorCol,
+                    mCursorRow,
+                    min(AnsiEscapeParser.getArg(args, 0, 1, true), mColumns - mCursorCol),
+                    1,
+                    ' '.code,
+                    this.style
+                )
             }
+
             'Z' -> {
                 var numberOfTabs = AnsiEscapeParser.getArg(args, 0, 1, true)
                 var newCol = mCursorCol
@@ -300,6 +412,7 @@ class TerminalEmulator(
                 }
                 mCursorCol = newCol
             }
+
             '`' -> setCursorColRespectingOriginMode(AnsiEscapeParser.getArg(args, 0, 1, true) - 1)
             'b' -> {
                 if (mLastEmittedCodePoint != -1) {
@@ -307,40 +420,78 @@ class TerminalEmulator(
                     for (i in 0 until numRepeat) emitCodePoint(mLastEmittedCodePoint)
                 }
             }
-            'c' -> if (AnsiEscapeParser.getArg(args, 0, 0, true) == 0) writeString("\u001b[?64;1;2;6;9;15;18;21;22c")
+
+            'c' -> if (AnsiEscapeParser.getArg(
+                    args,
+                    0,
+                    0,
+                    true
+                ) == 0
+            ) writeString("\u001b[?64;1;2;6;9;15;18;21;22c")
+
             'd' -> this.cursorRow = AnsiEscapeParser.getArg(args, 0, 1, true).coerceIn(1, mRows) - 1
             'e' -> {
-                setCursorPosition(mCursorCol, mCursorRow - originTop + AnsiEscapeParser.getArg(args, 0, 1, true))
+                setCursorPosition(
+                    mCursorCol,
+                    mCursorRow - originTop + AnsiEscapeParser.getArg(args, 0, 1, true)
+                )
             }
+
             'g' -> when (AnsiEscapeParser.getArg(args, 0, 0, true)) {
                 0 -> mTabStop[mCursorCol] = false
-                3 -> { for (i in 0 until mColumns) mTabStop[i] = false }
+                3 -> {
+                    for (i in 0 until mColumns) mTabStop[i] = false
+                }
             }
+
             'h' -> doSetMode(true, AnsiEscapeParser.getArg(args, 0, 0, true))
             'l' -> doSetMode(false, AnsiEscapeParser.getArg(args, 0, 0, true))
             'm' -> selectGraphicRendition(args, argCount, subParams)
             'n' -> when (AnsiEscapeParser.getArg(args, 0, 0, true)) {
-                5 -> writeByteArray(byteArrayOf(27, '['.code.toByte(), '0'.code.toByte(), 'n'.code.toByte()))
+                5 -> writeByteArray(
+                    byteArrayOf(
+                        27,
+                        '['.code.toByte(),
+                        '0'.code.toByte(),
+                        'n'.code.toByte()
+                    )
+                )
+
                 6 -> writeString("\u001b[${mCursorRow + 1};${mCursorCol + 1}R")
             }
+
             'r' -> {
                 mTopMargin = max(0, min(AnsiEscapeParser.getArg(args, 0, 1, true) - 1, mRows - 2))
-                mBottomMargin = max(mTopMargin + 1, min(AnsiEscapeParser.getArg(args, 1, mRows, true), mRows))
+                mBottomMargin =
+                    max(mTopMargin + 1, min(AnsiEscapeParser.getArg(args, 1, mRows, true), mRows))
                 setCursorPosition(0, 0)
             }
+
             's' -> if (isDecsetInternalBitSet(DECSET_BIT_LEFTRIGHT_MARGIN_MODE)) {
                 mLeftMargin = min(AnsiEscapeParser.getArg(args, 0, 1, true) - 1, mColumns - 2)
-                mRightMargin = max(mLeftMargin + 1, min(AnsiEscapeParser.getArg(args, 1, mColumns, true), mColumns))
+                mRightMargin = max(
+                    mLeftMargin + 1,
+                    min(AnsiEscapeParser.getArg(args, 1, mColumns, true), mColumns)
+                )
                 setCursorPosition(0, 0)
             } else saveCursor()
+
             't' -> handleCsiT(args)
             'u' -> restoreCursor()
             '@' -> {
                 mAboutToAutoWrap = false
                 val columnsAfterCursor = mColumns - mCursorCol
-                val spacesToInsert = min(AnsiEscapeParser.getArg(args, 0, 1, true), columnsAfterCursor)
+                val spacesToInsert =
+                    min(AnsiEscapeParser.getArg(args, 0, 1, true), columnsAfterCursor)
                 val charsToMove = columnsAfterCursor - spacesToInsert
-                screen.blockCopy(mCursorCol, mCursorRow, charsToMove, 1, mCursorCol + spacesToInsert, mCursorRow)
+                screen.blockCopy(
+                    mCursorCol,
+                    mCursorRow,
+                    charsToMove,
+                    1,
+                    mCursorCol + spacesToInsert,
+                    mCursorRow
+                )
                 blockClear(mCursorCol, mCursorRow, spacesToInsert)
             }
         }
@@ -351,12 +502,19 @@ class TerminalEmulator(
         when (AnsiEscapeParser.getArg(args, 0, 0, true)) {
             0 -> {
                 blockClear(mCursorCol, mCursorRow, mRightMargin - mCursorCol)
-                blockClear(mLeftMargin, mCursorRow + 1, mRightMargin - mLeftMargin, mBottomMargin - (mCursorRow + 1))
+                blockClear(
+                    mLeftMargin,
+                    mCursorRow + 1,
+                    mRightMargin - mLeftMargin,
+                    mBottomMargin - (mCursorRow + 1)
+                )
             }
+
             1 -> {
                 blockClear(0, mTopMargin, mColumns, mCursorRow - mTopMargin)
                 blockClear(0, mCursorRow, mCursorCol + 1)
             }
+
             2 -> blockClear(0, 0, mColumns, mRows)
             3 -> mMainBuffer.clearTranscript()
         }
@@ -393,7 +551,14 @@ class TerminalEmulator(
         val cellsAfterCursor = mColumns - mCursorCol
         val cellsToDelete = min(AnsiEscapeParser.getArg(args, 0, 1, true), cellsAfterCursor)
         val cellsToMove = cellsAfterCursor - cellsToDelete
-        screen.blockCopy(mCursorCol + cellsToDelete, mCursorRow, cellsToMove, 1, mCursorCol, mCursorRow)
+        screen.blockCopy(
+            mCursorCol + cellsToDelete,
+            mCursorRow,
+            cellsToMove,
+            1,
+            mCursorCol,
+            mCursorRow
+        )
         blockClear(mCursorCol + cellsToMove, mCursorRow, cellsToDelete)
     }
 
@@ -423,24 +588,52 @@ class TerminalEmulator(
             'J', 'K' -> {
                 mAboutToAutoWrap = false
                 val fillChar = ' '.code
-                var startCol = -1; var startRow = -1; var endCol = -1; var endRow = -1
+                var startCol = -1
+                var startRow = -1
+                var endCol = -1
+                var endRow = -1
                 val justRow = (b == 'K'.code)
                 when (AnsiEscapeParser.getArg(args, 0, 0, true)) {
-                    0 -> { startCol = mCursorCol; startRow = mCursorRow; endCol = mColumns; endRow = if (justRow) (mCursorRow + 1) else mRows }
-                    1 -> { startCol = 0; startRow = if (justRow) mCursorRow else 0; endCol = mCursorCol + 1; endRow = mCursorRow + 1 }
-                    2 -> { startCol = 0; startRow = if (justRow) mCursorRow else 0; endCol = mColumns; endRow = if (justRow) (mCursorRow + 1) else mRows }
+                    0 -> {
+                        startCol = mCursorCol; startRow = mCursorRow; endCol = mColumns; endRow =
+                            if (justRow) (mCursorRow + 1) else mRows
+                    }
+
+                    1 -> {
+                        startCol = 0; startRow = if (justRow) mCursorRow else 0; endCol =
+                            mCursorCol + 1; endRow = mCursorRow + 1
+                    }
+
+                    2 -> {
+                        startCol = 0; startRow = if (justRow) mCursorRow else 0; endCol =
+                            mColumns; endRow = if (justRow) (mCursorRow + 1) else mRows
+                    }
                 }
                 val style = this.style
                 for (row in startRow until endRow) {
                     for (col in startCol until endCol) {
-                        if (!screen.getStyleAt(row, col).isProtected) screen.setChar(col, row, fillChar, style)
+                        if (!screen.getStyleAt(row, col).isProtected) screen.setChar(
+                            col,
+                            row,
+                            fillChar,
+                            style
+                        )
                     }
                 }
             }
+
             'h', 'l' -> {
                 for (i in 0 until argCount) doDecSetOrReset(b == 'h'.code, args[i])
             }
-            'n' -> if (AnsiEscapeParser.getArg(args, 0, -1, true) == 6) writeString("\u001b[?${mCursorRow + 1};${mCursorCol + 1};1R")
+
+            'n' -> if (AnsiEscapeParser.getArg(
+                    args,
+                    0,
+                    -1,
+                    true
+                ) == 6
+            ) writeString("\u001b[?${mCursorRow + 1};${mCursorCol + 1};1R")
+
             'r', 's' -> {
                 for (i in 0 until argCount) {
                     val externalBit = args[i]
@@ -463,16 +656,36 @@ class TerminalEmulator(
     private fun handleCsiDollar(b: Int, args: IntArray, argCount: Int) {
         when (b.toChar()) {
             'v' -> {
-                val topSource = min(AnsiEscapeParser.getArg(args, 0, 1, true) - 1 + originTop, mRows)
-                val leftSource = min(AnsiEscapeParser.getArg(args, 1, 1, true) - 1 + originLeft, mColumns)
-                val bottomSource = min(max(AnsiEscapeParser.getArg(args, 2, mRows, true) + originTop, topSource), mRows)
-                val rightSource = min(max(AnsiEscapeParser.getArg(args, 3, mColumns, true) + originLeft, leftSource), mColumns)
-                val destionationTop = min(AnsiEscapeParser.getArg(args, 5, 1, true) - 1 + originTop, mRows)
-                val destinationLeft = min(AnsiEscapeParser.getArg(args, 6, 1, true) - 1 + originLeft, mColumns)
+                val topSource =
+                    min(AnsiEscapeParser.getArg(args, 0, 1, true) - 1 + originTop, mRows)
+                val leftSource =
+                    min(AnsiEscapeParser.getArg(args, 1, 1, true) - 1 + originLeft, mColumns)
+                val bottomSource = min(
+                    max(AnsiEscapeParser.getArg(args, 2, mRows, true) + originTop, topSource),
+                    mRows
+                )
+                val rightSource = min(
+                    max(
+                        AnsiEscapeParser.getArg(args, 3, mColumns, true) + originLeft,
+                        leftSource
+                    ), mColumns
+                )
+                val destionationTop =
+                    min(AnsiEscapeParser.getArg(args, 5, 1, true) - 1 + originTop, mRows)
+                val destinationLeft =
+                    min(AnsiEscapeParser.getArg(args, 6, 1, true) - 1 + originLeft, mColumns)
                 val heightToCopy = min(mRows - destionationTop, bottomSource - topSource)
                 val widthToCopy = min(mColumns - destinationLeft, rightSource - leftSource)
-                screen.blockCopy(leftSource, topSource, widthToCopy, heightToCopy, destinationLeft, destionationTop)
+                screen.blockCopy(
+                    leftSource,
+                    topSource,
+                    widthToCopy,
+                    heightToCopy,
+                    destinationLeft,
+                    destionationTop
+                )
             }
+
             '{', 'x', 'z' -> handleCsiDollarErase(b, args)
             'r', 't' -> handleCsiDollarRect(b, args, argCount)
         }
@@ -484,18 +697,34 @@ class TerminalEmulator(
         val keepVisualAttributes = erase && selective
         var argIdx = 0
         val fillChar = if (erase) ' '.code else AnsiEscapeParser.getArg(args, argIdx++, -1, true)
-        when(fillChar) {
+        when (fillChar) {
             in 32..126, in 160..255 -> {
-                val top = min(AnsiEscapeParser.getArg(args, argIdx++, 1, true) + originTop, originBottom + 1)
-                val left = min(AnsiEscapeParser.getArg(args, argIdx++, 1, true) + originLeft, originRight + 1)
-                val bottom = min(AnsiEscapeParser.getArg(args, argIdx++, mRows, true) + originTop, originBottom)
-                val right = min(AnsiEscapeParser.getArg(args, argIdx, mColumns, true) + originLeft, originRight)
+                val top = min(
+                    AnsiEscapeParser.getArg(args, argIdx++, 1, true) + originTop,
+                    originBottom + 1
+                )
+                val left = min(
+                    AnsiEscapeParser.getArg(args, argIdx++, 1, true) + originLeft,
+                    originRight + 1
+                )
+                val bottom = min(
+                    AnsiEscapeParser.getArg(args, argIdx++, mRows, true) + originTop,
+                    originBottom
+                )
+                val right = min(
+                    AnsiEscapeParser.getArg(args, argIdx, mColumns, true) + originLeft,
+                    originRight
+                )
                 val style = this.style
                 for (row in (top - 1) until bottom) {
                     for (col in (left - 1) until right) {
                         if (!selective || !screen.getStyleAt(row, col).isProtected) {
-                            val applyStyle = if (keepVisualAttributes) screen.getStyleAt(row, col) else style
-                            val applyExt = if (keepVisualAttributes) screen.allocateFullLineIfNecessary(screen.externalToInternalRow(row)).getExtendedEffect(col) else currentExtendedEffect
+                            val applyStyle =
+                                if (keepVisualAttributes) screen.getStyleAt(row, col) else style
+                            val applyExt =
+                                if (keepVisualAttributes) screen.allocateFullLineIfNecessary(
+                                    screen.externalToInternalRow(row)
+                                ).getExtendedEffect(col) else currentExtendedEffect
 
                             screen.setChar(col, row, fillChar, applyStyle, applyExt)
                         }
@@ -509,17 +738,20 @@ class TerminalEmulator(
         val reverse = b == 't'.code
         val top = min(AnsiEscapeParser.getArg(args, 0, 1, true) - 1 + originTop, originBottom)
         val left = min(AnsiEscapeParser.getArg(args, 1, 1, true) - 1 + originLeft, originRight)
-        val bottom = min(AnsiEscapeParser.getArg(args, 2, mRows, true) + 1 + originTop, originBottom)
-        val right = min(AnsiEscapeParser.getArg(args, 3, mColumns, true) + 1 + originLeft, originRight)
+        val bottom =
+            min(AnsiEscapeParser.getArg(args, 2, mRows, true) + 1 + originTop, originBottom)
+        val right =
+            min(AnsiEscapeParser.getArg(args, 3, mColumns, true) + 1 + originLeft, originRight)
         for (i in 4 until argCount) {
-            val COMBINED_ATTRS = TextStyle.CHARACTER_ATTRIBUTE_BOLD or TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE or
-                TextStyle.CHARACTER_ATTRIBUTE_BLINK or TextStyle.CHARACTER_ATTRIBUTE_INVERSE
+            val COMBINED_ATTRS =
+                TextStyle.CHARACTER_ATTRIBUTE_BOLD or TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE or
+                        TextStyle.CHARACTER_ATTRIBUTE_BLINK or TextStyle.CHARACTER_ATTRIBUTE_INVERSE
             val (bits, setOrClear) = when (AnsiEscapeParser.getArg(args, i, 0, false)) {
-                0  -> COMBINED_ATTRS to reverse
-                1  -> TextStyle.CHARACTER_ATTRIBUTE_BOLD to true
-                4  -> TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE to true
-                5  -> TextStyle.CHARACTER_ATTRIBUTE_BLINK to true
-                7  -> TextStyle.CHARACTER_ATTRIBUTE_INVERSE to true
+                0 -> COMBINED_ATTRS to reverse
+                1 -> TextStyle.CHARACTER_ATTRIBUTE_BOLD to true
+                4 -> TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE to true
+                5 -> TextStyle.CHARACTER_ATTRIBUTE_BLINK to true
+                7 -> TextStyle.CHARACTER_ATTRIBUTE_INVERSE to true
                 22 -> TextStyle.CHARACTER_ATTRIBUTE_BOLD to false
                 24 -> TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE to false
                 25 -> TextStyle.CHARACTER_ATTRIBUTE_BLINK to false
@@ -527,7 +759,18 @@ class TerminalEmulator(
                 else -> 0 to true
             }
             if (!(reverse && !setOrClear)) {
-                screen.setOrClearEffect(bits, setOrClear, reverse, isDecsetInternalBitSet(DECSET_BIT_RECTANGULAR_CHANGEATTRIBUTE), originLeft, originRight, top, left, bottom, right)
+                screen.setOrClearEffect(
+                    bits,
+                    setOrClear,
+                    reverse,
+                    isDecsetInternalBitSet(DECSET_BIT_RECTANGULAR_CHANGEATTRIBUTE),
+                    originLeft,
+                    originRight,
+                    top,
+                    left,
+                    bottom,
+                    right
+                )
             }
         }
     }
@@ -547,11 +790,26 @@ class TerminalEmulator(
         val columnsToMove = columnsAfterCursor - columnsToChange
         when (b) {
             '}'.code -> {
-                screen.blockCopy(mCursorCol, 0, columnsToMove, mRows, mCursorCol + columnsToChange, 0)
+                screen.blockCopy(
+                    mCursorCol,
+                    0,
+                    columnsToMove,
+                    mRows,
+                    mCursorCol + columnsToChange,
+                    0
+                )
                 blockClear(mCursorCol, 0, columnsToChange, mRows)
             }
+
             '~'.code -> {
-                screen.blockCopy(mCursorCol + columnsToChange, 0, columnsToMove, mRows, mCursorCol, 0)
+                screen.blockCopy(
+                    mCursorCol + columnsToChange,
+                    0,
+                    columnsToMove,
+                    mRows,
+                    mCursorCol,
+                    0
+                )
                 blockClear(mCursorCol + columnsToMove, 0, columnsToChange, mRows)
             }
         }
@@ -560,7 +818,7 @@ class TerminalEmulator(
     private fun handleCsiQuestionMarkArgDollar(b: Int, args: IntArray) {
         if (b == 'p'.code) {
             val mode = AnsiEscapeParser.getArg(args, 0, 0, true)
-            val value = when(mode) {
+            val value = when (mode) {
                 47, 1047, 1049 -> if (isAlternateBufferActive) 1 else 2
                 else -> {
                     val internalBit = mapDecSetBitToInternalBit(mode)
@@ -625,7 +883,7 @@ class TerminalEmulator(
     fun resize(columns: Int, rows: Int, cellWidthPixels: Int, cellHeightPixels: Int) {
         this.mCellWidthPixels = cellWidthPixels
         this.mCellHeightPixels = cellHeightPixels
-        
+
         val sizeChanged = mColumns != columns || mRows != rows
 
         if (sizeChanged) {
@@ -649,7 +907,14 @@ class TerminalEmulator(
         if (sizeChanged || screen.mColumns != mColumns || screen.mScreenRows != mRows) {
             val cursor = intArrayOf(mCursorCol, mCursorRow)
             val newTotalRows = if (isAlternateBufferActive) mRows else mMainBuffer.mTotalRows
-            screen.resize(mColumns, mRows, newTotalRows, cursor, this.style, this.isAlternateBufferActive)
+            screen.resize(
+                mColumns,
+                mRows,
+                newTotalRows,
+                cursor,
+                this.style,
+                this.isAlternateBufferActive
+            )
             mCursorCol = cursor[0]
             mCursorRow = cursor[1]
         }
@@ -724,13 +989,28 @@ class TerminalEmulator(
 
         if (mInsertMode && displayWidth > 0) {
             val destCol = mCursorCol + displayWidth
-            if (destCol < mRightMargin) screen.blockCopy(mCursorCol, mCursorRow, mRightMargin - destCol, 1, destCol, mCursorRow)
+            if (destCol < mRightMargin) screen.blockCopy(
+                mCursorCol,
+                mCursorRow,
+                mRightMargin - destCol,
+                1,
+                destCol,
+                mCursorRow
+            )
         }
 
-        val offsetDueToCombiningChar = (if (displayWidth <= 0 && mCursorCol > 0 && !mAboutToAutoWrap) 1 else 0)
-        screen.setChar(mCursorCol - offsetDueToCombiningChar, mCursorRow, cp, this.style, currentExtendedEffect)
+        val offsetDueToCombiningChar =
+            (if (displayWidth <= 0 && mCursorCol > 0 && !mAboutToAutoWrap) 1 else 0)
+        screen.setChar(
+            mCursorCol - offsetDueToCombiningChar,
+            mCursorRow,
+            cp,
+            this.style,
+            currentExtendedEffect
+        )
 
-        if (autoWrap && displayWidth > 0) mAboutToAutoWrap = (mCursorCol == mRightMargin - displayWidth)
+        if (autoWrap && displayWidth > 0) mAboutToAutoWrap =
+            (mCursorCol == mRightMargin - displayWidth)
         mCursorCol = min(mCursorCol + displayWidth, mRightMargin - 1)
     }
 
@@ -739,7 +1019,8 @@ class TerminalEmulator(
         if (mCursorRow >= mBottomMargin) {
             if (mCursorRow != mRows - 1) this.cursorRow = mCursorRow + 1
         } else {
-            if (mCursorRow + 1 == mBottomMargin) scrollDownOneLine() else this.cursorRow = mCursorRow + 1
+            if (mCursorRow + 1 == mBottomMargin) scrollDownOneLine() else this.cursorRow =
+                mCursorRow + 1
         }
     }
 
@@ -747,8 +1028,22 @@ class TerminalEmulator(
         this.scrollCounter++
         val currentStyle = this.style
         if (mLeftMargin != 0 || mRightMargin != mColumns) {
-            screen.blockCopy(mLeftMargin, mTopMargin + 1, mRightMargin - mLeftMargin, mBottomMargin - mTopMargin - 1, mLeftMargin, mTopMargin)
-            screen.blockSet(mLeftMargin, mBottomMargin - 1, mRightMargin - mLeftMargin, 1, ' '.code, currentStyle)
+            screen.blockCopy(
+                mLeftMargin,
+                mTopMargin + 1,
+                mRightMargin - mLeftMargin,
+                mBottomMargin - mTopMargin - 1,
+                mLeftMargin,
+                mTopMargin
+            )
+            screen.blockSet(
+                mLeftMargin,
+                mBottomMargin - 1,
+                mRightMargin - mLeftMargin,
+                1,
+                ' '.code,
+                currentStyle
+            )
         } else {
             screen.scrollDownOneLine(mTopMargin, mBottomMargin, currentStyle)
         }
@@ -764,23 +1059,37 @@ class TerminalEmulator(
                 blockClear(0, 0, mColumns, mRows)
                 setCursorRowCol(0, 0)
             }
+
             6 -> if (setting) setCursorPosition(0, 0)
-            69 -> if (!setting) { mLeftMargin = 0; mRightMargin = mColumns }
+            69 -> if (!setting) {
+                mLeftMargin = 0; mRightMargin = mColumns
+            }
+
             1048 -> if (setting) saveCursor() else restoreCursor()
             47, 1047, 1049 -> {
                 val newScreen = if (setting) mAltBuffer else mMainBuffer
                 if (newScreen != this.screen) {
-                    val resized = !(newScreen.mColumns == mColumns && newScreen.mScreenRows == mRows)
+                    val resized =
+                        !(newScreen.mColumns == mColumns && newScreen.mScreenRows == mRows)
                     if (setting) saveCursor()
                     this.screen = newScreen
                     if (!setting) {
                         val col = mSavedStateMain.mSavedCursorCol
                         val row = mSavedStateMain.mSavedCursorRow
                         restoreCursor()
-                        if (resized) { mCursorCol = col; mCursorRow = row }
+                        if (resized) {
+                            mCursorCol = col; mCursorRow = row
+                        }
                     }
                     if (resized) resize(mColumns, mRows, mCellWidthPixels, mCellHeightPixels)
-                    if (externalBit == 1049 && newScreen == mAltBuffer) newScreen.blockSet(0, 0, mColumns, mRows, ' '.code, this.style)
+                    if (externalBit == 1049 && newScreen == mAltBuffer) newScreen.blockSet(
+                        0,
+                        0,
+                        mColumns,
+                        mRows,
+                        ' '.code,
+                        this.style
+                    )
                 }
             }
         }
@@ -795,11 +1104,23 @@ class TerminalEmulator(
     private fun selectGraphicRendition(args: IntArray, argCount: Int, argsSubParamsBitSet: Int) {
         var i = 0
         while (i < argCount) {
-            if ((argsSubParamsBitSet and (1 shl i)) != 0) { i++; continue }
+            if ((argsSubParamsBitSet and (1 shl i)) != 0) {
+                i++; continue
+            }
             var code = AnsiEscapeParser.getArg(args, i, 0, false)
-            if (code < 0) { if (i > 0) { i++; continue } else code = 0 }
-            when(code) {
-                0 -> { mForeColor = TextStyle.COLOR_INDEX_FOREGROUND; mBackColor = TextStyle.COLOR_INDEX_BACKGROUND; mEffect = 0; mUnderlineStyle = TextStyle.UNDERLINE_STYLE_NONE; mUnderlineColor = TextStyle.COLOR_INDEX_FOREGROUND }
+            if (code < 0) {
+                if (i > 0) {
+                    i++; continue
+                } else code = 0
+            }
+            when (code) {
+                0 -> {
+                    mForeColor = TextStyle.COLOR_INDEX_FOREGROUND; mBackColor =
+                        TextStyle.COLOR_INDEX_BACKGROUND; mEffect = 0; mUnderlineStyle =
+                        TextStyle.UNDERLINE_STYLE_NONE; mUnderlineColor =
+                        TextStyle.COLOR_INDEX_FOREGROUND
+                }
+
                 4 -> {
                     if (i + 1 < argCount && ((argsSubParamsBitSet and (1 shl (i + 1))) != 0)) {
                         i++
@@ -809,8 +1130,9 @@ class TerminalEmulator(
                             mUnderlineStyle = TextStyle.UNDERLINE_STYLE_NONE
                         } else {
                             mEffect = mEffect or TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE
-                            mUnderlineStyle = if (style in TextStyle.UNDERLINE_STYLE_NONE..TextStyle.UNDERLINE_STYLE_DASHED) style
-                                              else TextStyle.UNDERLINE_STYLE_SINGLE
+                            mUnderlineStyle =
+                                if (style in TextStyle.UNDERLINE_STYLE_NONE..TextStyle.UNDERLINE_STYLE_DASHED) style
+                                else TextStyle.UNDERLINE_STYLE_SINGLE
                         }
                     } else {
                         mEffect = mEffect or TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE
@@ -822,14 +1144,15 @@ class TerminalEmulator(
                     mEffect = mEffect and TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE.inv()
                     mUnderlineStyle = TextStyle.UNDERLINE_STYLE_NONE
                 }
+
                 in sgrEffectMap -> {
                     val attr = sgrEffectMap[code]!!
                     mEffect = if (code < 20) mEffect or attr else mEffect and attr.inv()
                 }
-                in 30..37 -> mForeColor = code - 30
+
                 // 38/48/58: 前景色/背景色/下划线色的扩展格式（256色和24-bit RGB）
                 38, 48, 58 -> if (i + 2 < argCount) {
-                    when(args[i + 1]) {
+                    when (args[i + 1]) {
                         2 -> {
                             if (i + 4 < argCount) {
                                 val r = AnsiEscapeParser.getArg(args, i + 2, 0, false)
@@ -837,18 +1160,25 @@ class TerminalEmulator(
                                 val b = AnsiEscapeParser.getArg(args, i + 4, 0, false)
                                 if (r in 0..255 && g in 0..255 && b in 0..255) {
                                     val argb = -0x1000000 or (r shl 16) or (g shl 8) or b
-                                    when (code) { 38 -> mForeColor = argb; 48 -> mBackColor = argb; 58 -> mUnderlineColor = argb }
+                                    when (code) {
+                                        38 -> mForeColor = argb; 48 -> mBackColor =
+                                        argb; 58 -> mUnderlineColor = argb
+                                    }
                                 }
                                 i += 4
                             } else {
                                 i += 2
                             }
                         }
+
                         5 -> {
                             val color = AnsiEscapeParser.getArg(args, i + 2, 0, false)
                             i += 2
                             if (color in 0 until TextStyle.NUM_INDEXED_COLORS) {
-                                when (code) { 38 -> mForeColor = color; 48 -> mBackColor = color; 58 -> mUnderlineColor = color }
+                                when (code) {
+                                    38 -> mForeColor = color; 48 -> mBackColor =
+                                    color; 58 -> mUnderlineColor = color
+                                }
                             }
                         }
                     }
@@ -856,10 +1186,12 @@ class TerminalEmulator(
                     // 参数不足，跳过当前 SGR 代码
                     i++
                 }
+
                 39 -> mForeColor = TextStyle.COLOR_INDEX_FOREGROUND
-                in 40..47 -> mBackColor = code - 40
                 49 -> mBackColor = TextStyle.COLOR_INDEX_BACKGROUND
                 59 -> mUnderlineColor = TextStyle.COLOR_INDEX_FOREGROUND
+                in 30..37 -> mForeColor = code - 30
+                in 40..47 -> mBackColor = code - 40
                 in 90..97 -> mForeColor = code - 90 + 8
                 in 100..107 -> mBackColor = code - 100 + 8
             }
@@ -875,26 +1207,41 @@ class TerminalEmulator(
 
     private fun saveCursor() {
         val state = if (isAlternateBufferActive) mSavedStateAlt else mSavedStateMain
-        state.mSavedCursorRow = mCursorRow; state.mSavedCursorCol = mCursorCol
-        state.mSavedEffect = mEffect; state.mSavedForeColor = mForeColor; state.mSavedBackColor = mBackColor
-        state.mSavedUnderlineStyle = mUnderlineStyle; state.mSavedUnderlineColor = mUnderlineColor
+        state.mSavedCursorRow = mCursorRow
+        state.mSavedCursorCol = mCursorCol
+        state.mSavedEffect = mEffect
+        state.mSavedForeColor = mForeColor
+        state.mSavedBackColor = mBackColor
+        state.mSavedUnderlineStyle = mUnderlineStyle;
+        state.mSavedUnderlineColor = mUnderlineColor
         state.mSavedDecFlags = mCurrentDecSetFlags
-        state.mUseLineDrawingG0 = mUseLineDrawingG0; state.mUseLineDrawingG1 = mUseLineDrawingG1; state.mUseLineDrawingUsesG0 = mUseLineDrawingUsesG0
+        state.mUseLineDrawingG0 = mUseLineDrawingG0
+        state.mUseLineDrawingG1 = mUseLineDrawingG1
+        state.mUseLineDrawingUsesG0 = mUseLineDrawingUsesG0
     }
 
     private fun restoreCursor() {
         val state = if (isAlternateBufferActive) mSavedStateAlt else mSavedStateMain
         setCursorRowCol(state.mSavedCursorRow, state.mSavedCursorCol)
-        mEffect = state.mSavedEffect; mForeColor = state.mSavedForeColor; mBackColor = state.mSavedBackColor
-        mUnderlineStyle = state.mSavedUnderlineStyle; mUnderlineColor = state.mSavedUnderlineColor
+        mEffect = state.mSavedEffect;
+        mForeColor = state.mSavedForeColor;
+        mBackColor = state.mSavedBackColor
+        mUnderlineStyle = state.mSavedUnderlineStyle;
+        mUnderlineColor = state.mSavedUnderlineColor
         val mask = DECSET_BIT_AUTOWRAP or DECSET_BIT_ORIGIN_MODE
-        mCurrentDecSetFlags = (mCurrentDecSetFlags and mask.inv()) or (state.mSavedDecFlags and mask)
-        mUseLineDrawingG0 = state.mUseLineDrawingG0; mUseLineDrawingG1 = state.mUseLineDrawingG1; mUseLineDrawingUsesG0 = state.mUseLineDrawingUsesG0
+        mCurrentDecSetFlags =
+            (mCurrentDecSetFlags and mask.inv()) or (state.mSavedDecFlags and mask)
+        mUseLineDrawingG0 = state.mUseLineDrawingG0;
+        mUseLineDrawingG1 = state.mUseLineDrawingG1;
+        mUseLineDrawingUsesG0 = state.mUseLineDrawingUsesG0
     }
 
     private fun nextTabStop(numTabs: Int): Int {
         var n = numTabs
-        for (i in mCursorCol + 1 until mColumns) if (mTabStop[i] && --n == 0) return min(i, mRightMargin)
+        for (i in mCursorCol + 1 until mColumns) if (mTabStop[i] && --n == 0) return min(
+            i,
+            mRightMargin
+        )
         return mRightMargin - 1
     }
 
@@ -903,62 +1250,118 @@ class TerminalEmulator(
         val newCol = max(originLeft, min(originLeft + x, originRight - 1))
         setCursorRowCol(newRow, newCol)
     }
+
     private fun setCursorColRespectingOriginMode(col: Int) = setCursorPosition(col, mCursorRow)
     private fun setCursorRowCol(row: Int, col: Int) {
-        mCursorRow = max(0, min(row, mRows - 1)); mCursorCol = max(0, min(col, mColumns - 1)); mAboutToAutoWrap = false
+        mCursorRow = max(0, min(row, mRows - 1)); mCursorCol =
+            max(0, min(col, mColumns - 1)); mAboutToAutoWrap = false
     }
 
-    private fun blockClear(sx: Int, sy: Int, w: Int, h: Int = 1) = screen.blockSet(sx, sy, w, h, ' '.code, this.style)
+    private fun blockClear(sx: Int, sy: Int, w: Int, h: Int = 1) =
+        screen.blockSet(sx, sy, w, h, ' '.code, this.style)
+
     private val style: TextStyle get() = TextStyle.encode(mForeColor, mBackColor, mEffect)
-    private val currentExtendedEffect: Long get() = TextStyle.encodeExtendedEffect(mUnderlineStyle, mUnderlineColor)
-    private fun setDefaultTabStops() { for (i in 0 until mColumns) mTabStop[i] = (i and 7) == 0 && i != 0 }
+    private val currentExtendedEffect: Long
+        get() = TextStyle.encodeExtendedEffect(
+            mUnderlineStyle,
+            mUnderlineColor
+        )
+
+    private fun setDefaultTabStops() {
+        for (i in 0 until mColumns) mTabStop[i] = (i and 7) == 0 && i != 0
+    }
 
     private fun isDecsetInternalBitSet(bit: Int) = (mCurrentDecSetFlags and bit) != 0
     private fun setDecsetinternalBit(internalBit: Int, set: Boolean) {
-        if (set && internalBit == DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE) setDecsetinternalBit(DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT, false)
-        else if (set && internalBit == DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT) setDecsetinternalBit(DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE, false)
-        mCurrentDecSetFlags = if (set) mCurrentDecSetFlags or internalBit else mCurrentDecSetFlags and internalBit.inv()
+        if (set && internalBit == DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE) setDecsetinternalBit(
+            DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT,
+            false
+        )
+        else if (set && internalBit == DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT) setDecsetinternalBit(
+            DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE,
+            false
+        )
+        mCurrentDecSetFlags =
+            if (set) mCurrentDecSetFlags or internalBit else mCurrentDecSetFlags and internalBit.inv()
     }
 
-    fun clearScrollCounter() { this.scrollCounter = 0 }
-    fun toggleAutoScrollDisabled() { this.isAutoScrollDisabled = !this.isAutoScrollDisabled }
+    fun clearScrollCounter() {
+        this.scrollCounter = 0
+    }
+
+    fun toggleAutoScrollDisabled() {
+        this.isAutoScrollDisabled = !this.isAutoScrollDisabled
+    }
+
     fun onWindowFocusChanged(hasFocus: Boolean) {
-        inputEncoder.encodeFocusEvent(hasFocus, isDecsetInternalBitSet(DECSET_BIT_SEND_FOCUS_EVENTS))
+        inputEncoder.encodeFocusEvent(
+            hasFocus,
+            isDecsetInternalBitSet(DECSET_BIT_SEND_FOCUS_EVENTS)
+        )
     }
 
     fun reset() {
         cursorStyle = Constants.defaultTerminalCursorStyle
-        mInsertMode = false; mLeftMargin = 0; mTopMargin = 0; mBottomMargin = mRows; mRightMargin = mColumns; mAboutToAutoWrap = false
-        mSavedStateAlt.mSavedForeColor = TextStyle.COLOR_INDEX_FOREGROUND; mSavedStateMain.mSavedForeColor = TextStyle.COLOR_INDEX_FOREGROUND
+        mInsertMode = false
+        mLeftMargin = 0
+        mTopMargin = 0
+        mBottomMargin = mRows
+        mRightMargin = mColumns
+        mAboutToAutoWrap = false
+        mSavedStateAlt.mSavedForeColor = TextStyle.COLOR_INDEX_FOREGROUND
+        mSavedStateMain.mSavedForeColor = TextStyle.COLOR_INDEX_FOREGROUND
         mForeColor = TextStyle.COLOR_INDEX_FOREGROUND
-        mSavedStateAlt.mSavedBackColor = TextStyle.COLOR_INDEX_BACKGROUND; mSavedStateMain.mSavedBackColor = TextStyle.COLOR_INDEX_BACKGROUND
+        mSavedStateAlt.mSavedBackColor = TextStyle.COLOR_INDEX_BACKGROUND
+        mSavedStateMain.mSavedBackColor = TextStyle.COLOR_INDEX_BACKGROUND
         mBackColor = TextStyle.COLOR_INDEX_BACKGROUND
-        mUnderlineStyle = TextStyle.UNDERLINE_STYLE_NONE; mUnderlineColor = TextStyle.COLOR_INDEX_FOREGROUND
-        mSavedStateAlt.mSavedUnderlineStyle = TextStyle.UNDERLINE_STYLE_NONE; mSavedStateMain.mSavedUnderlineStyle = TextStyle.UNDERLINE_STYLE_NONE
-        mSavedStateAlt.mSavedUnderlineColor = TextStyle.COLOR_INDEX_FOREGROUND; mSavedStateMain.mSavedUnderlineColor = TextStyle.COLOR_INDEX_FOREGROUND
+        mUnderlineStyle = TextStyle.UNDERLINE_STYLE_NONE
+        mUnderlineColor = TextStyle.COLOR_INDEX_FOREGROUND
+        mSavedStateAlt.mSavedUnderlineStyle = TextStyle.UNDERLINE_STYLE_NONE
+        mSavedStateMain.mSavedUnderlineStyle = TextStyle.UNDERLINE_STYLE_NONE
+        mSavedStateAlt.mSavedUnderlineColor = TextStyle.COLOR_INDEX_FOREGROUND
+        mSavedStateMain.mSavedUnderlineColor = TextStyle.COLOR_INDEX_FOREGROUND
         setDefaultTabStops()
-        mUseLineDrawingG1 = false; mUseLineDrawingG0 = false; mUseLineDrawingUsesG0 = true
-        mSavedStateMain.mSavedDecFlags = 0; mSavedStateMain.mSavedEffect = 0; mSavedStateMain.mSavedCursorCol = 0; mSavedStateMain.mSavedCursorRow = 0
-        mSavedStateAlt.mSavedDecFlags = 0; mSavedStateAlt.mSavedEffect = 0; mSavedStateAlt.mSavedCursorCol = 0; mSavedStateAlt.mSavedCursorRow = 0
+        mUseLineDrawingG1 = false
+        mUseLineDrawingG0 = false
+        mUseLineDrawingUsesG0 = true
+        mSavedStateMain.mSavedDecFlags = 0
+        mSavedStateMain.mSavedEffect = 0
+        mSavedStateMain.mSavedCursorCol = 0
+        mSavedStateMain.mSavedCursorRow = 0
+        mSavedStateAlt.mSavedDecFlags = 0
+        mSavedStateAlt.mSavedEffect = 0
+        mSavedStateAlt.mSavedCursorCol = 0
+        mSavedStateAlt.mSavedCursorRow = 0
         mCurrentDecSetFlags = 0
         setDecsetinternalBit(DECSET_BIT_AUTOWRAP, true)
         setDecsetinternalBit(DECSET_BIT_CURSOR_ENABLED, true)
-        mSavedStateAlt.mSavedDecFlags = mCurrentDecSetFlags; mSavedStateMain.mSavedDecFlags = mCurrentDecSetFlags; mSavedDecSetFlags = mCurrentDecSetFlags
+        mSavedStateAlt.mSavedDecFlags = mCurrentDecSetFlags
+        mSavedStateMain.mSavedDecFlags = mCurrentDecSetFlags
+        mSavedDecSetFlags = mCurrentDecSetFlags
         mColors.reset()
         utf8Decoder.reset()
         ansiParser.reset()
     }
 
-    fun getSelectedText(x1: Int, y1: Int, x2: Int, y2: Int): String = screen.getSelectedText(x1, y1, x2, y2)
+    fun getSelectedText(x1: Int, y1: Int, x2: Int, y2: Int): String =
+        screen.getSelectedText(x1, y1, x2, y2)
+
     fun paste(text: String) {
         inputEncoder.encodePastedText(text, isDecsetInternalBitSet(DECSET_BIT_BRACKETED_PASTE_MODE))
     }
 
     internal class SavedScreenState {
-        var mSavedCursorRow: Int = 0; var mSavedCursorCol: Int = 0; var mSavedEffect: Int = 0
-        var mSavedForeColor: Int = 0; var mSavedBackColor: Int = 0; var mSavedDecFlags: Int = 0
-        var mSavedUnderlineStyle: Int = TextStyle.UNDERLINE_STYLE_NONE; var mSavedUnderlineColor: Int = TextStyle.COLOR_INDEX_FOREGROUND
-        var mUseLineDrawingG0: Boolean = false; var mUseLineDrawingG1: Boolean = false; var mUseLineDrawingUsesG0: Boolean = true
+        var mSavedCursorRow: Int = 0
+        var mSavedCursorCol: Int = 0
+        var mSavedEffect: Int = 0
+        var mSavedForeColor: Int = 0
+        var mSavedBackColor: Int = 0
+        var mSavedDecFlags: Int = 0
+        var mSavedUnderlineStyle: Int = TextStyle.UNDERLINE_STYLE_NONE
+        var mSavedUnderlineColor: Int = TextStyle.COLOR_INDEX_FOREGROUND
+        var mUseLineDrawingG0: Boolean = false
+        var mUseLineDrawingG1: Boolean = false
+        var mUseLineDrawingUsesG0: Boolean = true
     }
 
 
@@ -967,7 +1370,7 @@ class TerminalEmulator(
         private const val defaultColumns = 80
         private const val defaultCellWidthPixels = 10
         private const val defaultCellHeightPixels = 20
-        
+
         const val MOUSE_LEFT_BUTTON: Int = 0
         const val MOUSE_LEFT_BUTTON_MOVED: Int = 32
         const val MOUSE_WHEELUP_BUTTON: Int = 64
