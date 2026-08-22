@@ -22,7 +22,6 @@ android {
 
     signingConfigs {
         getByName("debug") {
-            applicationIdSuffix = ".debug"
             storeFile = file("testkey_untrusted.jks")
             keyAlias = "alias"
             storePassword = "xrj45yWGLbsO7W0v"
@@ -49,6 +48,7 @@ android {
         }
 
         debug {
+            applicationIdSuffix = ".debug"
             signingConfig = signingConfigs["debug"]
         }
     }
