@@ -17,13 +17,22 @@ jobs:
       - name: 检出代码
         uses: actions/checkout@v7
 
-      - name: 编译
+      - name: 解密KeyStore
         run: |
-          echo "org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=1024m" >> gradle.properties
-          ./gradlew assembleRelease
+          echo "${{ secrets.KEYSTORE_GZ_B64 }}" \
+            | base64 --decode \
+            | gunzip > app/release.keystore
+
+      - name: 编译
+        env:
+          KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.KEY_PASS }}
+        run: |
+          ./gradlew :app:assembleRelease
 
       - name: 上传 Release APK
         uses: actions/upload-artifact@v7
         with:
-          name: package
+          archive: false
           path: app/build/outputs/apk/release/app-release.apk

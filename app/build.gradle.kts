@@ -26,6 +26,12 @@ android {
             storePassword = "xrj45yWGLbsO7W0v"
             keyPassword = "xrj45yWGLbsO7W0v"
         }
+        register("release") {
+            storeFile = file("release.keystore")
+            storePassword = System.getenv("KEYSTORE_PASS")
+            keyAlias = System.getenv("KEY_ALIAS")
+            keyPassword = System.getenv("KEY_PASS")
+        }
     }
 
     buildTypes {
@@ -37,21 +43,17 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs["release"]
         }
 
         debug {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs["debug"]
         }
     }
 
     compileOptions {
         // Flag to enable support for the new language APIs
         isCoreLibraryDesugaringEnabled = true
-    }
-    
-    kotlin {
-        jvmToolchain(21)
     }
 
     externalNativeBuild {
@@ -78,6 +80,10 @@ android {
         viewBinding = true
         compose = true
     }
+}
+
+kotlin {
+    jvmToolchain(21)
 }
 
 dependencies {
