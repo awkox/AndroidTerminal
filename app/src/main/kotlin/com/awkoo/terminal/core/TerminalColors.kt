@@ -61,42 +61,40 @@ class TerminalColors {
          */
         @JvmStatic
         fun parse(c: String): Int {
-            try {
-                val skipInitial: Int
-                val skipBetween: Int
-                if (c[0] == '#') {
-                    // 支持 #RGB、#RRGGBB、#RRRGGGBBB 或 #RRRRGGGGBBBB 格式，高位对齐
-                    skipInitial = 1
-                    skipBetween = 0
-                } else if (c.startsWith("rgb:")) {
-                    // rgb:<red>/<green>/<blue>，每个分量为 h | hh | hhh | hhhh，按比例缩放
-                    skipInitial = 4
-                    skipBetween = 1
-                } else {
-                    return 0
-                }
-                val charsForColors = c.length - skipInitial - 2 * skipBetween
-                if (charsForColors % 3 != 0) return 0 // 三分量长度不等
-
-                val componentLength = charsForColors / 3
-                val mult = 255 / (2.0.pow((componentLength * 4).toDouble()) - 1)
-
-                var currentPosition = skipInitial
-                val rString = c.substring(currentPosition, currentPosition + componentLength)
-                currentPosition += componentLength + skipBetween
-                val gString = c.substring(currentPosition, currentPosition + componentLength)
-                currentPosition += componentLength + skipBetween
-                val bString = c.substring(currentPosition, currentPosition + componentLength)
-
-                val r = (rString.toInt(16) * mult).toInt()
-                val g = (gString.toInt(16) * mult).toInt()
-                val b = (bString.toInt(16) * mult).toInt()
-                return 0xFF shl 24 or (r shl 16) or (g shl 8) or b
-            } catch (e: NumberFormatException) {
-                return 0
-            } catch (e: IndexOutOfBoundsException) {
+            val skipInitial: Int
+            val skipBetween: Int
+            if (c.startsWith("#")) {
+                skipInitial = 1
+                skipBetween = 0
+            } else if (c.startsWith("rgb:")) {
+                skipInitial = 4
+                skipBetween = 1
+            } else {
                 return 0
             }
+
+            val charsForColors = c.length - skipInitial - 2 * skipBetween
+            if (charsForColors % 3 != 0) return 0
+
+            val componentLength = charsForColors / 3
+            val mult = 255 / (Math.pow(2.0, (componentLength * 4).toDouble()) - 1)
+
+            var currentPosition = skipInitial
+            val rString = c.substring(currentPosition, currentPosition + componentLength)
+            currentPosition += componentLength + skipBetween
+            val gString = c.substring(currentPosition, currentPosition + componentLength)
+            currentPosition += componentLength + skipBetween
+            val bString = c.substring(currentPosition, currentPosition + componentLength)
+
+            val rRaw = rString.toIntOrNull(16) ?: return 0
+            val gRaw = gString.toIntOrNull(16) ?: return 0
+            val bRaw = bString.toIntOrNull(16) ?: return 0
+
+            val r = (rRaw * mult).toInt()
+            val g = (gRaw * mult).toInt()
+            val b = (bRaw * mult).toInt()
+
+            return 0xFF shl 24 or (r shl 16) or (g shl 8) or b
         }
 
         /**

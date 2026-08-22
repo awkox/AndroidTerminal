@@ -126,10 +126,9 @@ class OscHandler(
             var lastIndex = 0
             for (i in 0..textParameter.length) {
                 if (i == textParameter.length || textParameter[i] == ';') {
-                    try {
-                        val colorToReset = textParameter.substring(lastIndex, i).toInt()
-                        colors.reset(colorToReset)
-                    } catch (e: NumberFormatException) {}
+                    textParameter.substring(lastIndex, i)
+                        .toIntOrNull()
+                        ?.let { colors.reset(it) }
                     lastIndex = i + 1
                 }
             }
