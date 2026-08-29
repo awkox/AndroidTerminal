@@ -38,6 +38,11 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
     private var customItems: List<ActionModeItem> = emptyList()
 
     override fun show(event: MotionEvent) {
+        // 触发选择的瞬间最先冻结屏幕，再执行定位等其它操作，避免冻结前的间隙里后台输出使选区漂移
+        terminalView.mEmulator?.let { emulator ->
+            synchronized(emulator) { emulator.setInputPaused(true) }
+        }
+
         setInitialTextSelectionPosition(event)
 
         mShowStartTime = System.currentTimeMillis()
@@ -66,6 +71,11 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
         mSelY1 = -1
         mSelX1 = -1
         mIsSelectingText = false
+
+        // 退出选择模式即解除冻结，按序重放冻结期间的输出并恢复实时
+        terminalView.mEmulator?.let { emulator ->
+            synchronized(emulator) { emulator.setInputPaused(false) }
+        }
 
         return true
     }

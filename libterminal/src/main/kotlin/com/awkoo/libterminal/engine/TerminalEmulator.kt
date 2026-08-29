@@ -263,6 +263,11 @@ internal class TerminalEmulator(
     var isAutoScrollDisabled: Boolean = false
         private set
 
+    // 输入冻结状态：为真时 append 的字节只进缓存队列而不解码，
+    // 用于文本选择期间冻结屏幕，解除后按序重放。全部字段仅在 synchronized(emulator) 内访问。
+    private var mInputPaused: Boolean = false
+    private val mFrozenInputQueue = ArrayDeque<ByteArray>()
+
     val isReverseVideo: Boolean get() = isDecsetInternalBitSet(DECSET_BIT_REVERSE_VIDEO)
     val isCursorEnabled: Boolean get() = isDecsetInternalBitSet(DECSET_BIT_CURSOR_ENABLED)
     val isCursorVisible: Boolean
@@ -292,7 +297,29 @@ internal class TerminalEmulator(
         get() = isDecsetInternalBitSet(DECSET_BIT_MOUSE_TRACKING_ANY_EVENT)
 
     fun append(buffer: ByteArray, length: Int) {
+        if (mInputPaused) {
+            // 文本选择期间冻结屏幕：仅缓存字节，不进入解码，整屏保持不变
+            mFrozenInputQueue.add(buffer.copyOf(length))
+            return
+        }
         utf8Decoder.decode(buffer, length)
+    }
+
+    /**
+     * 开关输入冻结。
+     *
+     * frozen 为真时后续 [append] 的原始字节被缓存而不解码（屏幕完全静止）；
+     * 为假时按序重放缓存并恢复实时。需在 synchronized(emulator) 内调用。
+     */
+    fun setInputPaused(frozen: Boolean) {
+        if (frozen == mInputPaused) return
+        mInputPaused = frozen
+        if (!frozen) {
+            while (mFrozenInputQueue.isNotEmpty()) {
+                val bytes = mFrozenInputQueue.removeFirst()
+                utf8Decoder.decode(bytes, bytes.size)
+            }
+        }
     }
 
     override fun onCodePoint(codePoint: Int) {
