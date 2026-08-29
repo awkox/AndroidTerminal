@@ -2,6 +2,7 @@ package com.awkoo.libterminal.engine.buffer
 
 import com.awkoo.libterminal.text.TextStyle
 import kotlin.math.max
+import kotlin.math.min
 
 /**
  * 终端行缓冲区（环形数组）。
@@ -117,6 +118,29 @@ internal class TerminalBuffer(
             }
         }
         return builder.toString()
+    }
+
+    /**
+     * 判断外部行的指定列是否是空白格（空格或越界空）。
+     *
+     * 与 [getSelectedText] 单格选择"是否为空"的语义保持一致，
+     * 但在 [TextSelectionCursorController] 的单词扩展中避免每次构建字符串的开销，
+     * 直接扫描 char 数组判断。
+     */
+    fun isCellBlank(column: Int, row: Int): Boolean {
+        if (column < 0 || column >= mColumns) return true
+        val lineObject = mLines[externalToInternalRow(row)] ?: return true
+        var x1 = lineObject.findStartOfColumn(column)
+        var x2 = lineObject.findStartOfColumn(column + 1)
+        if (x2 == x1) {
+            x2 = lineObject.findStartOfColumn(column + 2)
+        }
+        x2 = min(x2, lineObject.mSpaceUsed)
+        val line = lineObject.mText
+        for (i in x1 until x2) {
+            if (line[i] != ' ') return false
+        }
+        return true
     }
 
     val activeRows: Int

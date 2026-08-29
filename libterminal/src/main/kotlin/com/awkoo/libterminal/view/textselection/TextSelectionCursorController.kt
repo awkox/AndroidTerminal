@@ -119,18 +119,40 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
             mSelY1 = coord.row
 
             if (" " != screen.getSelectedText(mSelX1, mSelY1, mSelX1, mSelY1)) {
-                // 选中的不是空白字符，扩展为单词选择
-                while (mSelX1 > 0 && "" != screen.getSelectedText(
-                        mSelX1 - 1, mSelY1, mSelX1 - 1, mSelY1
-                    )
-                ) {
-                    mSelX1--
+                // 选中的不是空白字符，扩展为单词选择。
+                // 单词可能跨折行行续到下一行，且折行处无空格：扩展需跨越行边界。
+                // 左扩：
+                while (true) {
+                    if (mSelX1 > 0) {
+                        // 用 isCellBlank 轻量检测，避免逐格构造字符串的性能开销
+                        if (!screen.isCellBlank(mSelX1 - 1, mSelY1)) {
+                            mSelX1--
+                        } else break
+                    } else if (mSelY1 - 1 >= -screen.activeTranscriptRows &&
+                        screen.getLineWrap(mSelY1 - 1) &&
+                        // 上一行折行且行尾格非空白才跨行，避免把空白格兜进选区
+                        !screen.isCellBlank(emulator.mColumns - 1, mSelY1 - 1)
+                    ) {
+                        // 当前行是上一行的折行继续行，跳回上一行行尾继续扩展
+                        mSelY1--
+                        mSelX1 = emulator.mColumns - 1
+                    } else break
                 }
-                while (mSelX2 < emulator.mColumns - 1 && "" != screen.getSelectedText(
-                        mSelX2 + 1, mSelY1, mSelX2 + 1, mSelY1
-                    )
-                ) {
-                    mSelX2++
+                // 右扩：
+                while (true) {
+                    if (mSelX2 < emulator.mColumns - 1) {
+                        if (!screen.isCellBlank(mSelX2 + 1, mSelY2)) {
+                            mSelX2++
+                        } else break
+                    } else if (mSelY2 < emulator.mRows - 1 &&
+                        screen.getLineWrap(mSelY2) &&
+                        // 下一行折行起始格非空白才跨行，避免把空白格兜进选区
+                        !screen.isCellBlank(0, mSelY2 + 1)
+                    ) {
+                        // 当前行折行到下一行，跳到下一行列 0 继续扩展
+                        mSelY2++
+                        mSelX2 = 0
+                    } else break
                 }
             }
         }
