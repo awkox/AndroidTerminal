@@ -1,0 +1,43 @@
+name: 编译
+
+on:
+  push:
+    paths-ignore:
+      - 'README.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-26.04
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+
+      - name: 解密KeyStore
+        run: |
+          echo "${{ secrets.KEYSTORE_GZ_B64 }}" \
+            | base64 --decode \
+            | gunzip > app/release.keystore
+          ACTUAL_SHA=$(sha256sum app/release.keystore | awk '{print $1}')
+          EXPECTED_SHA=${{ secrets.KEYSTORE_EXPECTED_SHA256 }}
+          if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+              exit 1
+          fi
+
+      - name: 编译
+        env:
+          KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.KEY_PASS }}
+        run: |
+          ./gradlew :app:assembleRelease
+
+      - name: 上传 Release APK
+        uses: actions/upload-artifact@v7
+        with:
+          archive: false
+          path: app/build/outputs/apk/release/app-release.apk
