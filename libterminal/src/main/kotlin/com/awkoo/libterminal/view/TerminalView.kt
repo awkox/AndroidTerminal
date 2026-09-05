@@ -15,6 +15,7 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import com.awkoo.libterminal.color.TerminalColorScheme
 import com.awkoo.libterminal.engine.TerminalEmulator
+import com.awkoo.libterminal.engine.TerminalCursorStyle
 import com.awkoo.libterminal.engine.TerminalSession
 import com.awkoo.libterminal.engine.buffer.CursorCoord
 import com.awkoo.libterminal.view.input.ImeController
@@ -163,10 +164,11 @@ class TerminalView(
 
             if (value != null) {
                 applyColorScheme(value)
+                value.emulator.cursorStyle = cursorStyle
                 updateSize()
                 onScreenUpdated()
-                cursorBlinker.start(value.emulator)
-                textBlinker.start(value.emulator)
+                if (cursorBlinking) cursorBlinker.start(value.emulator) else cursorBlinker.stop()
+                if (textBlinking) textBlinker.start(value.emulator) else textBlinker.stop()
                 toggleIme(true)
             } else {
                 currentPalette = null
@@ -214,6 +216,54 @@ class TerminalView(
 
     /** 浮动工具栏定制器，用于本地化按钮文字或添加额外操作。 */
     var actionModeCustomizer: ActionModeCustomizer? = null
+
+    /**
+     * 终端默认光标样式。
+     *
+     * 设置后立即写入当前模拟器，绑定新会话时也会应用该默认值。
+     * 注意：应用 / Shell 通过 DECSET 序列主动切换的光标形状优先于该默认值，不会被覆盖。
+     */
+    var cursorStyle: TerminalCursorStyle = TerminalCursorStyle.BAR
+        set(value) {
+            if (field == value) return
+            field = value
+            mEmulator?.cursorStyle = value
+            invalidate()
+        }
+
+    /**
+     * 光标闪烁开关（默认开启）。
+     *
+     * 关闭时立即停止闪烁动画，光标保持常亮；绑定新会话时同样生效。
+     */
+    var cursorBlinking: Boolean = true
+        set(value) {
+            if (field == value) return
+            field = value
+            val emulator = mEmulator
+            if (value) {
+                emulator?.let { cursorBlinker.start(it) }
+            } else {
+                cursorBlinker.stop()
+            }
+        }
+
+    /**
+     * 文本（带闪烁属性）闪烁开关（默认开启）。
+     *
+     * 关闭时立即停止闪烁动画，相关文本保持常亮；绑定新会话时同样生效。
+     */
+    var textBlinking: Boolean = true
+        set(value) {
+            if (field == value) return
+            field = value
+            val emulator = mEmulator
+            if (value) {
+                emulator?.let { textBlinker.start(it) }
+            } else {
+                textBlinker.stop()
+            }
+        }
 
     private val textSelectionCursorController = TextSelectionCursorController(this)
 

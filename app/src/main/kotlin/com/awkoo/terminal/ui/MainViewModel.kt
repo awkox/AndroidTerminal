@@ -7,14 +7,17 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.awkoo.terminal.TerminalService
 import com.awkoo.terminal.AppPreferences
+import com.awkoo.terminal.Constants
 import com.awkoo.terminal.core.SessionManager
 import com.awkoo.terminal.core.ShellInfo
 import com.awkoo.terminal.ui.theme.ThemeMode
+import com.awkoo.libterminal.engine.TerminalCursorStyle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -40,7 +43,7 @@ class MainViewModel @Inject constructor(
         if (name != null)
             shellInfo.commandLabel.update { name }
 
-        sessionManager.addSession(shellInfo)
+        sessionManager.addSession(shellInfo, maxTranscriptRows = transcriptRows.value)
 
         // 启动前台服务用于增加生命周期稳定性
         if (!TerminalService.isRunning) {
@@ -69,4 +72,44 @@ class MainViewModel @Inject constructor(
         SharingStarted.Lazily,
         ThemeMode.DARK
     )
+
+    val terminalCursorStyle = preferences.terminalCursorStyle.stateIn(
+        viewModelScope,
+        SharingStarted.Lazily,
+        TerminalCursorStyle.BAR
+    )
+
+    fun setTerminalCursorStyle(style: TerminalCursorStyle) {
+        viewModelScope.launch { preferences.setTerminalCursorStyle(style) }
+    }
+
+    val cursorBlinking = preferences.cursorBlinking.stateIn(
+        viewModelScope,
+        SharingStarted.Lazily,
+        true
+    )
+
+    fun setCursorBlinking(enabled: Boolean) {
+        viewModelScope.launch { preferences.setCursorBlinking(enabled) }
+    }
+
+    val textBlinking = preferences.textBlinking.stateIn(
+        viewModelScope,
+        SharingStarted.Lazily,
+        true
+    )
+
+    fun setTextBlinking(enabled: Boolean) {
+        viewModelScope.launch { preferences.setTextBlinking(enabled) }
+    }
+
+    val transcriptRows = preferences.transcriptRows.stateIn(
+        viewModelScope,
+        SharingStarted.Lazily,
+        Constants.DEFAULT_TERMINAL_TRANSCRIPT_ROWS
+    )
+
+    fun setTranscriptRows(rows: Int) {
+        viewModelScope.launch { preferences.setTranscriptRows(rows) }
+    }
 }

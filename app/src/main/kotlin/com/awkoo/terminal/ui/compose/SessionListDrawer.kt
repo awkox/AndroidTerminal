@@ -29,6 +29,7 @@ import com.awkoo.terminal.extrakeys.ExtraKeysModifierState
 import com.awkoo.terminal.ui.MainActivity
 import com.awkoo.libterminal.view.TerminalView
 import com.awkoo.libterminal.view.ExtraKeysModifierSnapshot
+import com.awkoo.libterminal.engine.TerminalCursorStyle
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -46,6 +47,9 @@ fun MainActivity.SessionListDrawer(useLightTheme: Boolean) {
 
     val currentSession by viewModel.currentSessionState.collectAsStateWithLifecycle()
     val sessionList by viewModel.sessionListState.collectAsStateWithLifecycle()
+    val cursorStyle by viewModel.terminalCursorStyle.collectAsStateWithLifecycle()
+    val cursorBlinking by viewModel.cursorBlinking.collectAsStateWithLifecycle()
+    val textBlinking by viewModel.textBlinking.collectAsStateWithLifecycle()
 
     LaunchedEffect(drawerState.targetValue) {
         if (drawerState.targetValue == DrawerValue.Open) {
@@ -145,7 +149,10 @@ fun MainActivity.SessionListDrawer(useLightTheme: Boolean) {
                     innerPadding = innerPadding,
                     terminalViewRef = terminalViewRef,
                     modifierState = modifierState,
-                    useLightTheme = useLightTheme
+                    useLightTheme = useLightTheme,
+                    cursorStyle = cursorStyle,
+                    cursorBlinking = cursorBlinking,
+                    textBlinking = textBlinking,
                 )
             }
         }
@@ -157,7 +164,10 @@ private fun MainActivity.SessionViewScreen(
     innerPadding: PaddingValues,
     terminalViewRef: MutableState<TerminalView?>,
     modifierState: ExtraKeysModifierState,
-    useLightTheme: Boolean
+    useLightTheme: Boolean,
+    cursorStyle: TerminalCursorStyle,
+    cursorBlinking: Boolean,
+    textBlinking: Boolean
 ) {
     val currentSession by viewModel.currentSessionState.collectAsStateWithLifecycle()
     val fontSize by viewModel.terminalFontSize.collectAsStateWithLifecycle()
@@ -197,6 +207,12 @@ private fun MainActivity.SessionViewScreen(
                 it.textSize = fontSize
             if (useLightTheme != it.useLightTheme)
                 it.useLightTheme = useLightTheme
+            if (cursorStyle != it.cursorStyle)
+                it.cursorStyle = cursorStyle
+            if (cursorBlinking != it.cursorBlinking)
+                it.cursorBlinking = cursorBlinking
+            if (textBlinking != it.textBlinking)
+                it.textBlinking = textBlinking
         },
         onRelease = { view ->
             view.dispose()

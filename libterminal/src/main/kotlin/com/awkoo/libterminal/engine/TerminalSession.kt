@@ -29,6 +29,7 @@ class TerminalSession(
     val id: Int,
     val sessionName: MutableStateFlow<String>,
     private val stdin: ByteArray? = null,
+    private val maxTranscriptRows: Int = 5000,
     private val processFactory: (Int, Int, Int, Int) -> ITerminalProcess
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -56,7 +57,7 @@ class TerminalSession(
     var exitStatus: Int = 0
         private set
 
-    internal val emulator = TerminalEmulator(::write, ::write)
+    internal val emulator = TerminalEmulator(::write, ::write, maxTranscriptRows)
 
     private var process: ITerminalProcess? = null
 

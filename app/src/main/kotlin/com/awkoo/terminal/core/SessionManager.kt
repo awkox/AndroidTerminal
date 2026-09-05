@@ -53,7 +53,7 @@ class SessionManager @Inject constructor() {
         }
     }
 
-    fun addSession(commandInfo: CommandInfo) {
+    fun addSession(commandInfo: CommandInfo, maxTranscriptRows: Int = 5000) {
         val sessionId = idGenerator.incrementAndFetch()
 
         // 设置终端环境变量
@@ -63,7 +63,8 @@ class SessionManager @Inject constructor() {
         val targetSession = TerminalSession(
             id = sessionId,
             sessionName = commandInfo.commandLabel,
-            stdin = commandInfo.stdin?.toByteArray()
+            stdin = commandInfo.stdin?.toByteArray(),
+            maxTranscriptRows = maxTranscriptRows
         ) { rows, cols, w, h ->
             LocalPtyProcess(commandInfo, rows, cols, w, h)
         }

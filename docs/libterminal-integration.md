@@ -49,6 +49,7 @@ val session = TerminalSession(
     id = 1,
     sessionName = MutableStateFlow("sh"),      // 会话名称（可更新的 StateFlow）
     stdin = null,                              // 可选：启动时写入进程的初始输入
+    maxTranscriptRows = 5000,                  // 可选：历史回滚缓冲区行数（默认 5000，仅作用于此会话）
 ) { rows, cols, cellWidth, cellHeight ->       // 工厂函数，参数依次为 (行, 列, 单元格宽, 单元格高)
     LocalPtyProcess(command, rows, cols, cellWidth, cellHeight)
 }
@@ -98,6 +99,9 @@ fun TerminalScreen(session: TerminalSession?) {
 | `textSize` | `Int`（var） | 字号（dp，自动约束在 4..100） |
 | `typeface` | `Typeface`（var） | 等宽字体，例如 `Typeface.MONOSPACE` 或 Assets 中字体 |
 | `useLightTheme` | `Boolean`（var） | 切换浅色/深色基底（OSC 动态改色仍作为覆盖生效） |
+| `cursorStyle` | `TerminalCursorStyle`（var） | 默认光标样式（`BLOCK`/`UNDERLINE`/`BAR`）；立即应用并作用于新绑定会话，DECSET 主动切换优先于它 |
+| `cursorBlinking` | `Boolean`（var） | 光标闪烁开关（默认开启）；关闭时光标常亮 |
+| `textBlinking` | `Boolean`（var） | 文本（带闪烁属性）闪烁开关（默认开启）；关闭时相关文本常亮 |
 | `actionModeCustomizer` | `ActionModeCustomizer?`（var） | 定制长按选择的浮动工具栏 |
 | `extraKeysModifierReader` | `(() -> ExtraKeysModifierSnapshot)?`（var） | 外部粘性修饰键状态快照提供者 |
 | `stopTextSelectionMode()` | fun | 手动退出文本选择模式 |
@@ -128,6 +132,7 @@ fun TerminalScreen(session: TerminalSession?) {
 
 | 成员 | 类型 | 说明 |
 |------|------|------|
+| `TerminalSession(id, sessionName, stdin, maxTranscriptRows)` | 构造 | `maxTranscriptRows`：历史回滚缓冲区行数（默认 `5000`，范围 `100..100000`，仅作用于此会话） |
 | `id` | `Int` | 会话 ID |
 | `pid` | `Int` | 子进程 PID（`-1` 表示未运行） |
 | `sessionName` | `MutableStateFlow<String>` | 会话名（顶栏显示用） |
