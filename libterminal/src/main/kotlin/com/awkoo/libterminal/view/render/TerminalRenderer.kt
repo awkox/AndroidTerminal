@@ -9,6 +9,7 @@ import android.graphics.PathEffect
 import android.graphics.PorterDuff
 import android.graphics.Typeface
 import com.awkoo.libterminal.engine.TerminalEmulator
+import com.awkoo.libterminal.engine.TerminalCursorStyle
 import com.awkoo.libterminal.text.TextStyle
 import com.awkoo.libterminal.text.WcWidth
 import com.awkoo.libterminal.text.charCountAtSafe

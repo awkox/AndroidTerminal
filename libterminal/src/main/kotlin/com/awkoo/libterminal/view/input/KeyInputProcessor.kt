@@ -4,6 +4,7 @@ import android.view.KeyCharacterMap
 import android.view.KeyEvent
 import com.awkoo.libterminal.engine.TerminalEmulator
 import com.awkoo.libterminal.engine.TerminalSession
+import com.awkoo.libterminal.engine.protocol.KeySequenceEncoder
 import com.awkoo.libterminal.view.ExtraKeysModifierSnapshot
 
 /**
@@ -56,10 +57,10 @@ internal class KeyInputProcessor(
         val rightAltDownFromEvent = (metaState and KeyEvent.META_ALT_RIGHT_ON) != 0
 
         var keyMod = 0
-        if (controlDown) keyMod = keyMod or KeyHandler.KEYMOD_CTRL
-        if (event.isAltPressed || leftAltDown) keyMod = keyMod or KeyHandler.KEYMOD_ALT
-        if (shiftDown) keyMod = keyMod or KeyHandler.KEYMOD_SHIFT
-        if (event.isNumLockOn) keyMod = keyMod or KeyHandler.KEYMOD_NUM_LOCK
+        if (controlDown) keyMod = keyMod or KeySequenceEncoder.KEYMOD_CTRL
+        if (event.isAltPressed || leftAltDown) keyMod = keyMod or KeySequenceEncoder.KEYMOD_ALT
+        if (shiftDown) keyMod = keyMod or KeySequenceEncoder.KEYMOD_SHIFT
+        if (event.isNumLockOn) keyMod = keyMod or KeySequenceEncoder.KEYMOD_NUM_LOCK
         if (!fnDown && handleKeyCode(keyCode, keyMod)) {
             return KeyDownResult.HANDLED
         }
@@ -131,7 +132,7 @@ internal class KeyInputProcessor(
     fun handleKeyCode(keyCode: Int, keyMod: Int): Boolean {
         if (handleKeyCodeAction(keyCode, keyMod)) return true
         val emulator = emulatorProvider()!!
-        val code = KeyHandler.getCode(keyCode, keyMod, emulator.isCursorKeysApplicationMode, emulator.isKeypadApplicationMode)
+        val code = KeySequenceEncoder.getCode(keyCode, keyMod, emulator.isCursorKeysApplicationMode, emulator.isKeypadApplicationMode)
             ?: return false
         pokeCursor()
         sessionProvider()!!.write(code)
@@ -139,7 +140,7 @@ internal class KeyInputProcessor(
     }
 
     private fun handleKeyCodeAction(keyCode: Int, keyMod: Int): Boolean {
-        val shiftDown = (keyMod and KeyHandler.KEYMOD_SHIFT) != 0
+        val shiftDown = (keyMod and KeySequenceEncoder.KEYMOD_SHIFT) != 0
         val emulator = emulatorProvider()!!
 
         when (keyCode) {

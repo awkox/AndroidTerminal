@@ -1,6 +1,5 @@
 package com.awkoo.libterminal.engine
 
-import com.awkoo.libterminal.view.render.TerminalCursorStyle
 import com.awkoo.libterminal.engine.protocol.ansi.AnsiEscapeParser
 import com.awkoo.libterminal.engine.protocol.ansi.TerminalActionHandler
 import com.awkoo.libterminal.engine.protocol.OscHandler
