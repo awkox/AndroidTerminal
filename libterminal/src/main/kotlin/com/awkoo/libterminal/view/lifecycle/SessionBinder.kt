@@ -1,4 +1,4 @@
-package com.awkoo.libterminal.view
+package com.awkoo.libterminal.view.lifecycle
 
 import com.awkoo.libterminal.engine.TerminalSession
 import kotlinx.coroutines.CoroutineScope

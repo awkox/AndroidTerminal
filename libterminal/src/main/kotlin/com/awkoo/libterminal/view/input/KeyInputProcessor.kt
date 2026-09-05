@@ -2,7 +2,6 @@ package com.awkoo.libterminal.view.input
 
 import android.view.KeyCharacterMap
 import android.view.KeyEvent
-import com.awkoo.libterminal.engine.KeyHandler
 import com.awkoo.libterminal.engine.TerminalEmulator
 import com.awkoo.libterminal.engine.TerminalSession
 import com.awkoo.libterminal.view.ExtraKeysModifierSnapshot

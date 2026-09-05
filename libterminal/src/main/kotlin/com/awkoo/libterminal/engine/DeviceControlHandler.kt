@@ -1,5 +1,7 @@
 package com.awkoo.libterminal.engine
 
+import com.awkoo.libterminal.view.input.KeyHandler
+
 /**
  * DCS（Device Control String）设备控制串处理器。
  *
