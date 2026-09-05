@@ -81,10 +81,7 @@ fun MainActivity.SessionListDrawer(useLightTheme: Boolean) {
                 }
 
                 override fun sendCodePoint(codePoint: Int, ctrlDown: Boolean, altDown: Boolean) {
-                    terminalViewRef.value?.inputCodePoint(
-                        TerminalView.KEY_EVENT_SOURCE_VIRTUAL_KEYBOARD,
-                        codePoint, ctrlDown, altDown
-                    )
+                    terminalViewRef.value?.inputVirtualKeyCodePoint(codePoint, ctrlDown, altDown)
                 }
             }
         )

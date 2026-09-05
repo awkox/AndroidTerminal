@@ -13,9 +13,11 @@
 
 - （待完善）
 
-## 构建
+## libterminal集成
 
-（实际编译请查看[ci.yml](.github/workflows/ci.yml)）
+参见 [集成文档](docs/libterminal-integration.md)
+
+## 编译
 
 环境要求：
 
@@ -23,7 +25,7 @@
 - Android SDK 37
 - Android NDK 29.0.14206865
 
-构建 debug 版本：
+debug 版本：
 
 ```bash
 ./gradlew assembleDebug

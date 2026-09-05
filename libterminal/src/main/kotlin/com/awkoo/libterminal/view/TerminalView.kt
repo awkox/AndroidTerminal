@@ -81,8 +81,8 @@ class TerminalView(
     useLightTheme: Boolean = false
 ) : View(context) {
     companion object {
-        /** 虚拟 / 扩展按键键盘的事件来源标识。 */
-        const val KEY_EVENT_SOURCE_VIRTUAL_KEYBOARD = 2
+        /** 虚拟 / 扩展按键键盘的事件来源标识，仅供模块内部使用。 */
+        internal const val KEY_EVENT_SOURCE_VIRTUAL_KEYBOARD = 2
     }
 
     /**
@@ -388,7 +388,25 @@ class TerminalView(
         return true
     }
 
-    fun inputCodePoint(
+    /**
+     * 将虚拟 / 扩展按键栏产生的 Unicode 码点注入终端。
+     *
+     * 与 [android.view.KeyEvent] 注入不同，此入口专供应用自建的扩展按键栏使用；
+     * 内部固定为虚拟来源，调用方无需感知来源标识。
+     */
+    fun inputVirtualKeyCodePoint(
+        codePoint: Int,
+        controlDownFromEvent: Boolean = false,
+        leftAltDownFromEvent: Boolean = false
+    ) =
+        inputCodePoint(
+            KEY_EVENT_SOURCE_VIRTUAL_KEYBOARD,
+            codePoint,
+            controlDownFromEvent,
+            leftAltDownFromEvent
+        )
+
+    internal fun inputCodePoint(
         eventSource: Int,
         codePoint: Int,
         controlDownFromEvent: Boolean,
