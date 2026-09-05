@@ -1,6 +1,6 @@
 package com.awkoo.libterminal.engine
 
-import com.awkoo.libterminal.engine.ansi.AnsiEscapeParser
+import com.awkoo.libterminal.engine.protocol.ansi.AnsiEscapeParser
 import com.awkoo.libterminal.text.TextStyle
 
 /**

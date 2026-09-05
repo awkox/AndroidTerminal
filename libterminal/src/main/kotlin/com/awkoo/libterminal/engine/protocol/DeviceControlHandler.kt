@@ -1,4 +1,4 @@
-package com.awkoo.libterminal.engine
+package com.awkoo.libterminal.engine.protocol
 
 import com.awkoo.libterminal.view.input.KeyHandler
 

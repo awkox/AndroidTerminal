@@ -1,4 +1,4 @@
-package com.awkoo.libterminal.engine.ansi
+package com.awkoo.libterminal.engine.protocol.ansi
 
 import kotlin.math.min
 

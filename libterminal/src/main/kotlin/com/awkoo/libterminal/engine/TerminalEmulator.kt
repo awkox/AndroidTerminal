@@ -1,8 +1,11 @@
 package com.awkoo.libterminal.engine
 
 import com.awkoo.libterminal.view.render.TerminalCursorStyle
-import com.awkoo.libterminal.engine.ansi.AnsiEscapeParser
-import com.awkoo.libterminal.engine.ansi.TerminalActionHandler
+import com.awkoo.libterminal.engine.protocol.ansi.AnsiEscapeParser
+import com.awkoo.libterminal.engine.protocol.ansi.TerminalActionHandler
+import com.awkoo.libterminal.engine.protocol.OscHandler
+import com.awkoo.libterminal.engine.protocol.InputSequenceEncoder
+import com.awkoo.libterminal.engine.protocol.DeviceControlHandler
 import com.awkoo.libterminal.engine.buffer.TerminalBuffer
 import com.awkoo.libterminal.engine.buffer.CursorCoord
 import com.awkoo.libterminal.color.SparsePalette

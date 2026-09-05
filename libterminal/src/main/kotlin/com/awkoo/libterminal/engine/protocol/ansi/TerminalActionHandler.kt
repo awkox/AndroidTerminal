@@ -1,4 +1,4 @@
-package com.awkoo.libterminal.engine.ansi
+package com.awkoo.libterminal.engine.protocol.ansi
 
 /**
  * 终端动作回调接口。

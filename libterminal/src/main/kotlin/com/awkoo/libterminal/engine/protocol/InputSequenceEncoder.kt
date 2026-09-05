@@ -1,5 +1,6 @@
-package com.awkoo.libterminal.engine
+package com.awkoo.libterminal.engine.protocol
 
+import com.awkoo.libterminal.engine.TerminalEmulator
 import kotlin.math.max
 import kotlin.math.min
 

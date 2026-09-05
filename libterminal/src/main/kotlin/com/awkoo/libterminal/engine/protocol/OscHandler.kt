@@ -1,4 +1,4 @@
-package com.awkoo.libterminal.engine
+package com.awkoo.libterminal.engine.protocol
 
 import com.awkoo.libterminal.color.SparsePalette
 import com.awkoo.libterminal.color.TerminalColorScheme
