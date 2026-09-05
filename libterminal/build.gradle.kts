@@ -41,8 +41,9 @@ mavenPublishing {
         licenses {
             license {
                 name.set("GNU General Public License v3.0 or later")
-                url.set("https://www.gnu.org/licenses/gpl-3.0-standalone.html")
-                comments.set("GPL-3.0-or-later")
+                url.set("https://www.gnu.org/licenses/gpl-3.0.html")
+                distribution.set("repo")
+                comments.set("SPDX-License-Identifier: GPL-3.0-or-later")
             }
         }
         developers {
