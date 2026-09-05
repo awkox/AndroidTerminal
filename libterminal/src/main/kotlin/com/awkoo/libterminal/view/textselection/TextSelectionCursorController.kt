@@ -11,7 +11,7 @@ import android.view.View
 import com.awkoo.libterminal.R
 import com.awkoo.libterminal.engine.buffer.TerminalBuffer
 import com.awkoo.libterminal.text.forEachColumn
-import com.awkoo.libterminal.view.ActionModeItem
+import com.awkoo.libterminal.view.interact.ActionModeItem
 import com.awkoo.libterminal.view.TerminalView
 import kotlin.math.max
 import kotlin.math.min

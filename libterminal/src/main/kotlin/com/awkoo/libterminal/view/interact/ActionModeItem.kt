@@ -1,4 +1,4 @@
-package com.awkoo.libterminal.view
+package com.awkoo.libterminal.view.interact
 
 import android.graphics.drawable.Drawable
 

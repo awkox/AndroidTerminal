@@ -23,6 +23,8 @@ import com.awkoo.libterminal.view.input.TerminalImeConnection
 import com.awkoo.libterminal.view.input.TerminalTouchHandler
 import com.awkoo.libterminal.view.textselection.TextSelectionCursorController
 import com.awkoo.libterminal.view.lifecycle.SessionBinder
+import com.awkoo.libterminal.view.interact.TerminalClipboard
+import com.awkoo.libterminal.view.interact.ActionModeCustomizer
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

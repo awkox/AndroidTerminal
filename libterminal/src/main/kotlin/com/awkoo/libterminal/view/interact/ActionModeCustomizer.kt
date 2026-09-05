@@ -1,4 +1,4 @@
-package com.awkoo.libterminal.view
+package com.awkoo.libterminal.view.interact
 
 /**
  * 浮动工具栏（ActionMode）的定制基类。
