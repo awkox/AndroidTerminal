@@ -21,6 +21,9 @@ import com.awkoo.libterminal.view.input.ImeController
 import com.awkoo.libterminal.view.input.KeyInputProcessor
 import com.awkoo.libterminal.view.input.TerminalImeConnection
 import com.awkoo.libterminal.view.input.TerminalTouchHandler
+import com.awkoo.libterminal.view.render.TerminalRenderer
+import com.awkoo.libterminal.view.render.TerminalBlinker
+import com.awkoo.libterminal.view.render.TerminalPaletteResolver
 import com.awkoo.libterminal.view.textselection.TextSelectionCursorController
 import com.awkoo.libterminal.view.lifecycle.SessionBinder
 import com.awkoo.libterminal.view.interact.TerminalClipboard

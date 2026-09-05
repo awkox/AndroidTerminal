@@ -1,4 +1,4 @@
-package com.awkoo.libterminal.view
+package com.awkoo.libterminal.view.render
 
 import androidx.annotation.Keep
 
