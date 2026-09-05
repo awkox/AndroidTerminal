@@ -3,6 +3,7 @@
 [![Platform: Android](https://img.shields.io/badge/Platform-Android-green.svg)](https://developer.android.com)
 [![minSdk](https://img.shields.io/badge/minSdk-28-orange.svg)](https://developer.android.com/studio)
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/awkox/AndroidTerminal/ci.yml?label=编译&logo=github)](.github/workflows/ci.yml)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.awkox/libterminal?logo=apachemaven&logoColor=white&label=Maven%20Central&color=blue)](https://search.maven.org/artifact/io.github.awkox/libterminal)
 
 
 # AndroidTerminal
@@ -41,7 +42,7 @@ release 版本需要环境变量 `KEYSTORE_PASS`、`KEY_ALIAS`、`KEY_PASS` 指�
 
 ```
 .
-├── demo/          # Demo
+├── app/          # Demo
 │   ├── cpp/       # 原生 PTY 实现（C23/C++23，JNI）
 │   ├── core/      # PTY 进程、会话管理
 │   ├── extrakeys/ # 扩展按键栏
