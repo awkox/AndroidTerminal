@@ -94,11 +94,11 @@ fun TerminalScreen(session: TerminalSession?) {
 
 | 成员 | 类型 | 说明 |
 |------|------|------|
-| `TerminalView(context, useLightTheme)` | 构造 | `useLightTheme=false` 为深色（黑底白字），否则浅色 |
+| `TerminalView(context)` | 构造 | 渲染配色由 `colorScheme` 属性完全控制，默认深色（黑底白字） |
 | `currentSession` | `TerminalSession?`（var） | 切换当前会话；内部自动重绑定、重建配色 |
 | `textSize` | `Int`（var） | 字号（dp，自动约束在 4..100） |
 | `typeface` | `Typeface`（var） | 等宽字体，例如 `Typeface.MONOSPACE` 或 Assets 中字体 |
-| `useLightTheme` | `Boolean`（var） | 切换浅色/深色基底（OSC 动态改色仍作为覆盖生效） |
+| `colorScheme` | `TerminalColorScheme`（var） | 渲染配色主题基底，见 §3.5；可在运行时修改，已绑定会话立即重建（OSC 动态改色仍作为覆盖生效） |
 | `cursorStyle` | `TerminalCursorStyle`（var） | 默认光标样式（`BLOCK`/`UNDERLINE`/`BAR`）；立即应用并作用于新绑定会话，DECSET 主动切换优先于它 |
 | `cursorBlinking` | `Boolean`（var） | 光标闪烁开关（默认开启）；关闭时光标常亮 |
 | `textBlinking` | `Boolean`（var） | 文本（带闪烁属性）闪烁开关（默认开启）；关闭时相关文本常亮 |
@@ -172,3 +172,47 @@ view.extraKeysModifierReader = {
 
 `ExtraKeysModifierSnapshot` 为内联值类，构造函数四个参数均有默认值（`false`），
 底层 `mask` 属性位掩码编码四个修饰键，一般无需直接操作。
+
+### 3.5 `com.awkoo.libterminal.color.TerminalColorScheme`
+
+终端渲染配色的**主题基底**（深/浅/自定义色板）。槽位布局：
+
+| 槽位 | 含义 |
+|------|------|
+| `0..15` | 基础 ANSI 16 色（8 标准 + 8 高亮） |
+| `16..255` | Xterm 256 色板（6×6×6 立方体 + 24 级灰度） |
+| `INDEX_FOREGROUND` | 默认前景色 |
+| `INDEX_BACKGROUND` | 默认背景色 |
+| `INDEX_CURSOR` | 默认光标色 |
+
+```kotlin
+TerminalColorScheme.dark()   // 深色：白字黑底
+TerminalColorScheme.light()  // 浅色：黑字白底
+
+// 便捷构造：覆盖前景/背景/光标 + 前 16 色，其余保持 Xterm 256 板
+val dracula = TerminalColorScheme.custom(
+    foreground = 0xFFF8F8F2.toInt(),
+    background = 0xFF282A36.toInt(),
+    cursor    = 0xFFFF79C6.toInt(),
+    ansi16Colors = intArrayOf(
+        0xFF21222C.toInt(), 0xFFFF5555.toInt(), 0xFF50FA7B.toInt(), 0xFFF1FA8C.toInt(),
+        0xFFBD93F9.toInt(), 0xFFFF79C6.toInt(), 0xFF8BE9FD.toInt(), 0xFFF8F8F2.toInt(),
+        0xFF6272A4.toInt(), 0xFFFF6E6E.toInt(), 0xFF69FF94.toInt(), 0xFFFFFFA7.toInt(),
+        0xFFD6ACFF.toInt(), 0xFFFF92DF.toInt(), 0xFFA4FFFF.toInt(), 0xFFFFFFFF.toInt()
+    )
+)
+
+// 全量自定义：全部槽位可任意修改，数组会被拷贝，之后改动不影响主题
+val full = TerminalColorScheme.custom(IntArray(TerminalColorScheme.COLOR_COUNT).apply {
+    fill(0xFF000000.toInt())
+    this[0] = 0xFF000000.toInt(); this[7] = 0xFFE5E5E5.toInt() /* ... */
+    this[TerminalColorScheme.INDEX_FOREGROUND] = 0xFFEEEEEE.toInt()
+    this[TerminalColorScheme.INDEX_BACKGROUND] = 0xFF111111.toInt()
+    this[TerminalColorScheme.INDEX_CURSOR] = 0xFF00FF00.toInt()
+})
+```
+
+#### 注意事项
+
+- 颜色值统一为 `0xFFRRGGBB`（不透明 ARGB）。
+- `TerminalColorScheme` 是纯值对象（基于内容判等），可在多 view 间安全复用；

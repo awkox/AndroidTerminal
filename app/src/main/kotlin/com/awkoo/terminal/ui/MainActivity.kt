@@ -20,6 +20,7 @@ import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.awkoo.terminal.ui.compose.SessionListDrawer
 import com.awkoo.terminal.ui.theme.resolvedIsDark
+import com.awkoo.libterminal.color.TerminalColorScheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
@@ -63,7 +64,7 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(
                 colorScheme = if (isDark) darkColorScheme() else lightColorScheme()
             ) {
-                MainScreen(useLightTheme = !isDark)
+                MainScreen(colorScheme = if (isDark) TerminalColorScheme.dark() else TerminalColorScheme.light())
             }
         }
 
@@ -76,8 +77,8 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     @Preview
-    fun MainScreen(useLightTheme: Boolean = false) {
-        SessionListDrawer(useLightTheme = useLightTheme)
+    fun MainScreen(colorScheme: TerminalColorScheme = TerminalColorScheme.dark()) {
+        SessionListDrawer(colorScheme = colorScheme)
     }
 
     override fun onDestroy() {

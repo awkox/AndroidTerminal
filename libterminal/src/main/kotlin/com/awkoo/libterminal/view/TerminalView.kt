@@ -74,12 +74,11 @@ inline fun ExtraKeysModifierSnapshot(
  *
  * 键盘处理（[onKeyDown]、[onKeyUp] 等）因与 View 状态和会话 I/O 紧密耦合，保留在此类中。
  *
- * @param useLightTheme 是否使用浅色主题。可在运行时修改，修改且已绑定会话时立即重建配色。
- *                      浅色主题仅调整默认前景/背景/光标三项底色，OSC 动态改色仍作为覆盖层生效。
+ * 渲染配色通过 [colorScheme] 属性完全由外部控制：可在运行时修改，
+ * 修改且已绑定会话时立即重建配色。OSC 动态改色仍作为覆盖层生效。
  */
 class TerminalView(
-    context: Context,
-    useLightTheme: Boolean = false
+    context: Context
 ) : View(context) {
     companion object {
         /** 虚拟 / 扩展按键键盘的事件来源标识，仅供模块内部使用。 */
@@ -87,11 +86,12 @@ class TerminalView(
     }
 
     /**
-     * 是否使用浅色主题基底。
+     * 终端渲染配色的主题基底。
      *
      * 可在运行时修改：若已有绑定会话，会立即重建该会话的渲染配色（主题基底 + OSC 覆盖板）。
+     * shell 通过 OSC 动态改色作为覆盖板叠在此基底之上，仍保持生效。
      */
-    var useLightTheme: Boolean = useLightTheme
+    var colorScheme: TerminalColorScheme = TerminalColorScheme.dark()
         set(value) {
             if (value == field) return
             field = value
@@ -177,20 +177,20 @@ class TerminalView(
         }
 
     /**
-     * 依据当前 [useLightTheme] 为指定会话重建主题基底与合成调色板。
+     * 依据当前 [colorScheme] 为指定会话重建主题基底与合成调色板。
      *
-     * 主题基底只调整默认前景/背景/光标三项底色；OSC 动态改色作为
-     * [TerminalPaletteResolver] 的覆盖板盖在主题之上，仍保持生效。
+     * OSC 动态改色作为 [TerminalPaletteResolver] 的覆盖板盖在主题之上，仍保持生效。
      */
     private fun applyColorScheme(session: TerminalSession) {
-        val scheme = if (useLightTheme) TerminalColorScheme.light() else TerminalColorScheme.dark()
-        session.emulator.colorScheme = scheme
-        currentPalette = TerminalPaletteResolver(scheme, session.emulator.mPalette)
+        synchronized(session.emulator) {
+            session.emulator.colorScheme = colorScheme
+        }
+        currentPalette = TerminalPaletteResolver(colorScheme, session.emulator.mPalette)
     }
 
     /**
      * 当前会话渲染用的合成颜色查询对象（主题基底 + OSC 稀疏覆盖板）。
-     * 绑定会话时构建，主题基底由 [useLightTheme] 决定。
+     * 绑定会话时构建，主题基底由 [colorScheme] 决定。
      */
     private var currentPalette: TerminalPaletteResolver? = null
 

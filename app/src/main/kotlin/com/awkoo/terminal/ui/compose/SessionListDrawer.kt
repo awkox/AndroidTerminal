@@ -30,6 +30,7 @@ import com.awkoo.terminal.ui.MainActivity
 import com.awkoo.libterminal.view.TerminalView
 import com.awkoo.libterminal.view.ExtraKeysModifierSnapshot
 import com.awkoo.libterminal.engine.TerminalCursorStyle
+import com.awkoo.libterminal.color.TerminalColorScheme
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -38,7 +39,7 @@ import kotlinx.serialization.protobuf.ProtoBuf
 
 @OptIn(ExperimentalSerializationApi::class)
 @Composable
-fun MainActivity.SessionListDrawer(useLightTheme: Boolean) {
+fun MainActivity.SessionListDrawer(colorScheme: TerminalColorScheme) {
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
 
@@ -149,7 +150,7 @@ fun MainActivity.SessionListDrawer(useLightTheme: Boolean) {
                     innerPadding = innerPadding,
                     terminalViewRef = terminalViewRef,
                     modifierState = modifierState,
-                    useLightTheme = useLightTheme,
+                    colorScheme = colorScheme,
                     cursorStyle = cursorStyle,
                     cursorBlinking = cursorBlinking,
                     textBlinking = textBlinking,
@@ -164,7 +165,7 @@ private fun MainActivity.SessionViewScreen(
     innerPadding: PaddingValues,
     terminalViewRef: MutableState<TerminalView?>,
     modifierState: ExtraKeysModifierState,
-    useLightTheme: Boolean,
+    colorScheme: TerminalColorScheme,
     cursorStyle: TerminalCursorStyle,
     cursorBlinking: Boolean,
     textBlinking: Boolean
@@ -205,8 +206,8 @@ private fun MainActivity.SessionViewScreen(
                 it.currentSession = currentSession
             if (fontSize != it.textSize)
                 it.textSize = fontSize
-            if (useLightTheme != it.useLightTheme)
-                it.useLightTheme = useLightTheme
+            if (colorScheme != it.colorScheme)
+                it.colorScheme = colorScheme
             if (cursorStyle != it.cursorStyle)
                 it.cursorStyle = cursorStyle
             if (cursorBlinking != it.cursorBlinking)
