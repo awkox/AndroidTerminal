@@ -18,8 +18,8 @@ android {
         applicationId = "com.awkoo.terminal"
         minSdk = 28
         targetSdk = 28
-        versionCode = 263
-        versionName = "2.6.3"
+        versionCode = 300
+        versionName = "3.0.0"
     }
 
     signingConfigs {
