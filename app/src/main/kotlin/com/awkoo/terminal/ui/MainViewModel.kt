@@ -67,11 +67,19 @@ class MainViewModel @Inject constructor(
         0
     )
 
+    fun setTerminalFontSize(size: Int) {
+        viewModelScope.launch { preferences.setTerminalFontSize(size) }
+    }
+
     val themeMode = preferences.themeMode.stateIn(
         viewModelScope,
         SharingStarted.Lazily,
         ThemeMode.DARK
     )
+
+    fun setThemeMode(mode: ThemeMode) {
+        viewModelScope.launch { preferences.setThemeMode(mode) }
+    }
 
     val terminalCursorStyle = preferences.terminalCursorStyle.stateIn(
         viewModelScope,
