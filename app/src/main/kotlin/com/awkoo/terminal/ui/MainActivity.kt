@@ -13,7 +13,9 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.graphics.toArgb
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.flowWithLifecycle
@@ -64,7 +66,18 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(
                 colorScheme = if (isDark) darkColorScheme() else lightColorScheme()
             ) {
-                MainScreen(colorScheme = if (isDark) TerminalColorScheme.dark() else TerminalColorScheme.light())
+                val material = MaterialTheme.colorScheme
+                // 终端前景/背景/光标色联动 Material 主题：
+                // 前景/背景取 onBackground/background，光标取主题强调色 primary，
+                // 跟随主题明暗切换自动换色（remember 避免每次重组重建 256 色板）
+                val terminalColorScheme = remember(material) {
+                    TerminalColorScheme.custom(
+                        foreground = material.onBackground.toArgb(),
+                        background = material.background.toArgb(),
+                        cursor = material.primary.toArgb()
+                    )
+                }
+                MainScreen(colorScheme = terminalColorScheme)
             }
         }
 
