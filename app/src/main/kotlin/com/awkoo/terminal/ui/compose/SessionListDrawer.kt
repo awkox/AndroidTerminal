@@ -1,5 +1,11 @@
 package com.awkoo.terminal.ui.compose
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.imePadding
@@ -15,6 +21,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.viewinterop.AndroidView
@@ -27,6 +35,7 @@ import com.awkoo.terminal.extrakeys.ExtraKeysBar
 import com.awkoo.terminal.extrakeys.ExtraKeysConfig
 import com.awkoo.terminal.extrakeys.ExtraKeysModifierState
 import com.awkoo.terminal.ui.MainActivity
+import com.awkoo.terminal.ui.settings.SettingsNavHost
 import com.awkoo.libterminal.view.TerminalView
 import com.awkoo.libterminal.view.ExtraKeysModifierSnapshot
 import com.awkoo.libterminal.engine.TerminalCursorStyle
@@ -45,6 +54,7 @@ fun MainActivity.SessionListDrawer(colorScheme: TerminalColorScheme) {
 
     val terminalViewRef = remember { mutableStateOf<TerminalView?>(null) }
     val modifierState = remember { ExtraKeysModifierState() }
+    var showSettings by rememberSaveable { mutableStateOf(false) }
 
     val currentSession by viewModel.currentSessionState.collectAsStateWithLifecycle()
     val sessionList by viewModel.sessionListState.collectAsStateWithLifecycle()
@@ -92,72 +102,85 @@ fun MainActivity.SessionListDrawer(colorScheme: TerminalColorScheme) {
         )
     }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        gesturesEnabled = drawerState.isOpen || drawerState.isAnimationRunning,
-        modifier = Modifier.imePadding(),
-        drawerContent = {
-            SessionListScreen(
-                sessionList = sessionList,
-                currentSession = currentSession,
-                onSessionSelected = { id ->
-                    scope.launch {
-                        drawerState.close()
-                        viewModel.setCurrentSession(id)
+    Box(modifier = Modifier.fillMaxSize()) {
+        // 终端界面常驻底部，设置页以覆盖层形式在其上方滑入/滑出，
+        // 避免 AnimatedContent 同时组合两侧导致 TerminalView 反复重建（卡顿/白闪）
+        ModalNavigationDrawer(
+            drawerState = drawerState,
+            gesturesEnabled = drawerState.isOpen || drawerState.isAnimationRunning,
+            modifier = Modifier.imePadding(),
+            drawerContent = {
+                SessionListScreen(
+                    sessionList = sessionList,
+                    currentSession = currentSession,
+                    onSessionSelected = { id ->
+                        scope.launch {
+                            drawerState.close()
+                            viewModel.setCurrentSession(id)
+                        }
+                    },
+                    onNewSession = {
+                        scope.launch {
+                            drawerState.close()
+                            viewModel.addSession(null)
+                        }
                     }
-                },
-                onNewSession = {
-                    scope.launch {
-                        drawerState.close()
-                        viewModel.addSession(null)
-                    }
-                }
-            )
-        },
-        content = {
-            Scaffold(
-                topBar = {
-                    val currentSessionTitle by remember(currentSession) {
-                        currentSession?.titleState ?: MutableStateFlow(null)
-                    }.collectAsStateWithLifecycle()
-                    val currentSessionName by remember(currentSession) {
-                        currentSession?.sessionName ?: MutableStateFlow(null)
-                    }.collectAsStateWithLifecycle()
-                    MainTopBar(
-                        title = currentSessionTitle ?: currentSessionName,
-                        onNavigationClick = {
-                            scope.launch {
-                                if (drawerState.isClosed) {
-                                    drawerState.open()
-                                } else {
-                                    drawerState.close()
-                                }
-                            }
-                        },
-                        onSettingsClick = {}
-                    )
-                },
-                bottomBar = {
-                    ExtraKeysBar(
-                        // TODO：持久化存储，目前读取默认值
-                        config = ProtoBuf.decodeFromByteArray<ExtraKeysConfig>(byteArrayOf()),
-                        modifierState = modifierState,
-                        onDispatch = { dispatcher.dispatch(it) }
-                    )
-                }
-            ) { innerPadding ->
-                SessionViewScreen(
-                    innerPadding = innerPadding,
-                    terminalViewRef = terminalViewRef,
-                    modifierState = modifierState,
-                    colorScheme = colorScheme,
-                    cursorStyle = cursorStyle,
-                    cursorBlinking = cursorBlinking,
-                    textBlinking = textBlinking,
                 )
+            },
+            content = {
+                Scaffold(
+                    topBar = {
+                        val currentSessionTitle by remember(currentSession) {
+                            currentSession?.titleState ?: MutableStateFlow(null)
+                        }.collectAsStateWithLifecycle()
+                        val currentSessionName by remember(currentSession) {
+                            currentSession?.sessionName ?: MutableStateFlow(null)
+                        }.collectAsStateWithLifecycle()
+                        MainTopBar(
+                            title = currentSessionTitle ?: currentSessionName,
+                            onNavigationClick = {
+                                scope.launch {
+                                    if (drawerState.isClosed) {
+                                        drawerState.open()
+                                    } else {
+                                        drawerState.close()
+                                    }
+                                }
+                            },
+                            onSettingsClick = { showSettings = true }
+                        )
+                    },
+                    bottomBar = {
+                        ExtraKeysBar(
+                            // TODO：持久化存储，目前读取默认值
+                            config = ProtoBuf.decodeFromByteArray<ExtraKeysConfig>(byteArrayOf()),
+                            modifierState = modifierState,
+                            onDispatch = { dispatcher.dispatch(it) }
+                        )
+                    }
+                ) { innerPadding ->
+                    SessionViewScreen(
+                        innerPadding = innerPadding,
+                        terminalViewRef = terminalViewRef,
+                        modifierState = modifierState,
+                        colorScheme = colorScheme,
+                        cursorStyle = cursorStyle,
+                        cursorBlinking = cursorBlinking,
+                        textBlinking = textBlinking,
+                    )
+                }
             }
+        )
+
+        AnimatedVisibility(
+            visible = showSettings,
+            enter = slideInHorizontally { it } + fadeIn(),
+            exit = slideOutHorizontally { it } + fadeOut(),
+            label = "settings-overlay"
+        ) {
+            SettingsNavHost(onExit = { showSettings = false })
         }
-    )
+    }
 }
 
 @Composable
