@@ -35,8 +35,8 @@ class LocalPtyProcess(
         @JvmStatic private external fun waitFor(processId: Int): Int
     }
 
-    override var pid: Int = -1
-        private set
+    /** 本地 OS 进程号，仅本类内部用于 [kill]/[waitFor]，不对外暴露。 */
+    private var pid: Int = -1
 
     private var fdObj: ParcelFileDescriptor? = null
     override var inputStream: InputStream

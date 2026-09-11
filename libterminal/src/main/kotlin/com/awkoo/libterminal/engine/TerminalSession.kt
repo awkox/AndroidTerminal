@@ -45,11 +45,10 @@ class TerminalSession(
         }
     }
 
+    /** 进程是否仍在运行：绑定成功后为 true，进程退出后置 false。 */
     @Volatile
-    var pid: Int = -1
-
-    val isRunning: Boolean
-        get() = pid > 0
+    var isRunning: Boolean = false
+        private set
 
     /** 进程退出状态，仅在 [isRunning] 为 false 时有效。 */
     /** Shell 进程的退出码，仅在进程结束后有效。 */
@@ -84,7 +83,7 @@ class TerminalSession(
             emulator.mCellHeightPixels
         )
         this.process = p
-        this.pid = p.pid
+        this.isRunning = true
 
         launchInputReader(p)
         launchOutputWriter(p)
@@ -173,7 +172,7 @@ class TerminalSession(
 
     private inline fun handleProcessExit(exitCode: Int) {
         exitStatus = exitCode
-        pid = -1
+        isRunning = false
 
         synchronized(emulator) {
             while (true) {
