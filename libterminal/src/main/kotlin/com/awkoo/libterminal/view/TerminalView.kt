@@ -169,7 +169,6 @@ class TerminalView(
                 onScreenUpdated()
                 if (cursorBlinking) cursorBlinker.start(value.emulator) else cursorBlinker.stop()
                 if (textBlinking) textBlinker.start(value.emulator) else textBlinker.stop()
-                toggleIme(true)
             } else {
                 currentPalette = null
                 invalidate()
@@ -406,6 +405,9 @@ class TerminalView(
     override fun onCheckIsTextEditor() = true
 
     fun toggleIme(show: Boolean? = null) = imeController.toggleIme(show)
+
+    /** 隐藏软键盘（不请求焦点），供覆盖层（如设置页）打开时收起键盘。 */
+    fun hideIme() = imeController.hideIme()
 
     /**
      * 外部修饰键状态读取器（如来自屏幕扩展按键栏）。
