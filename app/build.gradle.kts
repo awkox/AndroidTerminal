@@ -105,7 +105,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.core)
-    //implementation(libs.composeSettings.ui.extended)
+    implementation(libs.composeSettings.ui.extended)
     implementation(libs.serialization.core)
     implementation(libs.serialization.protobuf)
     //implementation(libs.timber)

@@ -193,7 +193,7 @@ fun MainActivity.SessionListDrawer(colorScheme: TerminalColorScheme) {
             exit = slideOutHorizontally { it } + fadeOut(),
             label = "settings-overlay"
         ) {
-            SettingsNavHost(onExit = { showSettings = false })
+            SettingsNavHost(onExit = { showSettings = false }, viewModel = viewModel)
         }
     }
 }

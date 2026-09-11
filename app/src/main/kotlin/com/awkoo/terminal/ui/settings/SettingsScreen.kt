@@ -3,6 +3,7 @@ package com.awkoo.terminal.ui.settings
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -24,7 +25,7 @@ import androidx.compose.ui.Modifier
  * @param title 页面标题
  * @param showBackButton 是否显示返回按钮。根页面如需在初始状态隐藏返回，可传 false
  * @param onBack 返回按钮回调
- * @param content 页面主体内容
+ * @param content 页面主体内容，以 [LazyListScope] 为接收者，可直接使用 [LazyListScope.item]
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -32,7 +33,7 @@ fun SettingsScreen(
     title: String,
     showBackButton: Boolean,
     onBack: () -> Unit,
-    content: @Composable () -> Unit
+    content: LazyListScope.() -> Unit
 ) {
     Scaffold(
         topBar = {
@@ -54,11 +55,8 @@ fun SettingsScreen(
         LazyColumn(
             modifier = Modifier
                 .padding(innerPadding)
-                .fillMaxSize()
-        ) {
-            item {
-                content()
-            }
-        }
+                .fillMaxSize(),
+            content = content
+        )
     }
 }
