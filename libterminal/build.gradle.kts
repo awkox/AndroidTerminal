@@ -30,7 +30,7 @@ mavenPublishing {
 
     signAllPublications()
 
-    coordinates("io.github.awkox", "libterminal", "3.0.0")
+    coordinates("io.github.awkox", "libterminal", "3.1.0")
 
     pom {
         name.set("Android Terminal Library")
