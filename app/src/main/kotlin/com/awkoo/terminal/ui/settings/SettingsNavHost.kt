@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -18,6 +19,7 @@ import com.alorma.compose.settings.ui.SettingsSlider
 import com.alorma.compose.settings.ui.SettingsSwitch
 import com.awkoo.libterminal.engine.TerminalCursorStyle
 import com.awkoo.terminal.Constants
+import com.awkoo.terminal.R
 import com.awkoo.terminal.ui.MainViewModel
 import com.awkoo.terminal.ui.theme.ThemeMode
 import kotlin.math.roundToInt
@@ -57,35 +59,41 @@ fun SettingsNavHost(onExit: () -> Unit, viewModel: MainViewModel) {
             val textBlinking by viewModel.textBlinking.collectAsStateWithLifecycle()
             val transcriptRows by viewModel.transcriptRows.collectAsStateWithLifecycle()
 
+            // itemTitleMap 为非 @Composable 回调，标签需在组合上下文提前解析
+            val themeLabels = mapOf(
+                ThemeMode.DARK to stringResource(R.string.settings_theme_dark),
+                ThemeMode.LIGHT to stringResource(R.string.settings_theme_light),
+                ThemeMode.SYSTEM to stringResource(R.string.settings_theme_system)
+            )
+            val cursorStyleLabels = mapOf(
+                TerminalCursorStyle.BLOCK to stringResource(R.string.settings_cursor_style_block),
+                TerminalCursorStyle.UNDERLINE to stringResource(R.string.settings_cursor_style_underline),
+                TerminalCursorStyle.BAR to stringResource(R.string.settings_cursor_style_bar)
+            )
+
             SettingsScreen(
-                title = "设置",
+                title = stringResource(R.string.settings_title),
                 showBackButton = true,
                 onBack = onExit
             ) {
                 item {
-                    SettingsGroup(title = { Text("外观") }) {
+                    SettingsGroup(title = { Text(stringResource(R.string.settings_group_appearance)) }) {
                         SettingsSegmented(
-                            title = { Text("主题模式") },
+                            title = { Text(stringResource(R.string.settings_theme_mode)) },
                             items = ThemeMode.entries,
                             selectedItem = themeMode,
-                            itemTitleMap = { mode ->
-                                when (mode) {
-                                    ThemeMode.DARK -> "深色"
-                                    ThemeMode.LIGHT -> "浅色"
-                                    ThemeMode.SYSTEM -> "跟随系统"
-                                }
-                            },
+                            itemTitleMap = { themeLabels.getValue(it) },
                             onItemSelected = { viewModel.setThemeMode(it) }
                         )
                     }
                 }
                 item {
-                    SettingsGroup(title = { Text("终端") }) {
+                    SettingsGroup(title = { Text(stringResource(R.string.settings_group_terminal)) }) {
                         var fontSizeSlider by remember(fontSize) {
                             mutableFloatStateOf(fontSize.toFloat())
                         }
                         SettingsSlider(
-                            title = { Text("字体大小") },
+                            title = { Text(stringResource(R.string.settings_font_size)) },
                             subtitle = { Text("${fontSizeSlider.roundToInt()}") },
                             value = fontSizeSlider,
                             onValueChange = { fontSizeSlider = it },
@@ -98,25 +106,19 @@ fun SettingsNavHost(onExit: () -> Unit, viewModel: MainViewModel) {
                                 Constants.MIN_TERMINAL_FONT_SIZE - 1
                         )
                         SettingsSegmented(
-                            title = { Text("光标样式") },
+                            title = { Text(stringResource(R.string.settings_cursor_style)) },
                             items = TerminalCursorStyle.entries,
                             selectedItem = cursorStyle,
-                            itemTitleMap = { style ->
-                                when (style) {
-                                    TerminalCursorStyle.BLOCK -> "块状"
-                                    TerminalCursorStyle.UNDERLINE -> "下划线"
-                                    TerminalCursorStyle.BAR -> "竖线"
-                                }
-                            },
+                            itemTitleMap = { cursorStyleLabels.getValue(it) },
                             onItemSelected = { viewModel.setTerminalCursorStyle(it) }
                         )
                         SettingsSwitch(
-                            title = { Text("光标闪烁") },
+                            title = { Text(stringResource(R.string.settings_cursor_blinking)) },
                             state = cursorBlinking,
                             onCheckedChange = { viewModel.setCursorBlinking(it) }
                         )
                         SettingsSwitch(
-                            title = { Text("文本闪烁") },
+                            title = { Text(stringResource(R.string.settings_text_blinking)) },
                             state = textBlinking,
                             onCheckedChange = { viewModel.setTextBlinking(it) }
                         )
@@ -124,7 +126,7 @@ fun SettingsNavHost(onExit: () -> Unit, viewModel: MainViewModel) {
                             mutableFloatStateOf(transcriptRows.toFloat())
                         }
                         SettingsSlider(
-                            title = { Text("回滚缓冲行数") },
+                            title = { Text(stringResource(R.string.settings_scrollback_lines)) },
                             subtitle = { Text("${rowsSlider.roundToInt()}") },
                             value = rowsSlider,
                             onValueChange = { rowsSlider = it },

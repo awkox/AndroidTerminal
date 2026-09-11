@@ -25,10 +25,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import android.graphics.Typeface
 import android.view.KeyEvent
+import com.awkoo.terminal.R
 import com.awkoo.terminal.extrakeys.ExtraKeyActions
 import com.awkoo.terminal.extrakeys.ExtraKeyDispatcher
 import com.awkoo.terminal.extrakeys.ExtraKeysBar
@@ -38,6 +40,7 @@ import com.awkoo.terminal.ui.MainActivity
 import com.awkoo.terminal.ui.settings.SettingsNavHost
 import com.awkoo.libterminal.view.TerminalView
 import com.awkoo.libterminal.view.ExtraKeysModifierSnapshot
+import com.awkoo.libterminal.view.interact.ActionModeCustomizer
 import com.awkoo.libterminal.engine.TerminalCursorStyle
 import com.awkoo.libterminal.color.TerminalColorScheme
 import kotlinx.coroutines.launch
@@ -211,6 +214,16 @@ private fun MainActivity.SessionViewScreen(
     val currentSession by viewModel.currentSessionState.collectAsStateWithLifecycle()
     val fontSize by viewModel.terminalFontSize.collectAsStateWithLifecycle()
 
+    // 复制/粘贴浮标菜单文案由 app 侧资源本地化（locale 变化后重组时重建）
+    val copyLabel = stringResource(R.string.action_copy)
+    val pasteLabel = stringResource(R.string.action_paste)
+    val actionModeCustomizer = remember(copyLabel, pasteLabel) {
+        object : ActionModeCustomizer() {
+            override fun copyText() = copyLabel
+            override fun pasteText() = pasteLabel
+        }
+    }
+
     AndroidView(
         modifier = Modifier
             .padding(innerPadding)
@@ -220,6 +233,8 @@ private fun MainActivity.SessionViewScreen(
             TerminalView(context).also {
                 it.isFocusable = true
                 it.isFocusableInTouchMode = true
+
+                it.actionModeCustomizer = actionModeCustomizer
 
                 // 物理键盘输入也遵守粘性 Ctrl/Alt/Shift/Fn 切换
                 it.extraKeysModifierReader = {
@@ -240,6 +255,8 @@ private fun MainActivity.SessionViewScreen(
             }
         },
         update = {
+            if (actionModeCustomizer != it.actionModeCustomizer)
+                it.actionModeCustomizer = actionModeCustomizer
             if (currentSession != it.currentSession)
                 it.currentSession = currentSession
             if (fontSize != it.textSize)

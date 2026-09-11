@@ -80,10 +80,12 @@ class TerminalService : Service() {
     }
 
     private fun buildNotification(): Notification {
-        // Set notification text
         val sessionCount = sessionManager.sessionListSize
-        var notificationText =
-            sessionCount.toString() + " session" + (if (sessionCount == 1) "" else "s")
+        val notificationText = resources.getQuantityString(
+            R.plurals.notification_session_count,
+            sessionCount,
+            sessionCount
+        )
 
         return NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
             .setShowWhen(false)

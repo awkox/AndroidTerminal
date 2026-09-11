@@ -16,6 +16,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
+import com.awkoo.terminal.R
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,7 +52,7 @@ fun MainTopBar(
                 onDismissRequest = { menuMoreExpanded = false },
             ) {
                 DropdownMenuItem(
-                    text = { Text("Settings") },
+                    text = { Text(stringResource(R.string.menu_settings)) },
                     onClick = {
                         menuMoreExpanded = false
                         onSettingsClick()
