@@ -12,7 +12,6 @@ import com.awkoo.libterminal.engine.TerminalEmulator
 import com.awkoo.libterminal.engine.TerminalCursorStyle
 import com.awkoo.libterminal.text.TextStyle
 import com.awkoo.libterminal.text.WcWidth
-import com.awkoo.libterminal.text.charCountAtSafe
 import com.awkoo.libterminal.text.withCodePointAt
 import com.awkoo.libterminal.engine.buffer.TerminalBuffer
 import kotlin.math.abs
@@ -35,6 +34,9 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
     @JvmField
     val mFontLineSpacingAndAscent: Int
     private val asciiMeasures = FloatArray(127)
+
+    // 非 ASCII 的 BMP 码点测量宽度缓存（-1=未测量）。测量仅依赖码点与恒定画笔，跨帧有效
+    private val bmpMeasureCache = FloatArray(0x10000) { -1f }
 
     // 下划线独立画笔：描边模式，粗细随字号在 init 中设定，避免依赖 mTextPaint 状态被文本绘制覆盖
     private val mUnderlinePaint = Paint().apply {
@@ -167,6 +169,9 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
         val lineObject = screen.allocateFullLineIfNecessary(screen.externalToInternalRow(row))
         val line = lineObject.mText
         val charsUsedInLine = lineObject.mSpaceUsed
+        // 行内仅含 BMP 单宽字符时，可整体跳过 wcwidth 计算与零宽字符扫描。
+        // 该标记是保守的：false ⇒ 必为单宽，true 仅表示"可能存在"
+        val hasNonOneWidth = lineObject.mHasNonOneWidthOrSurrogateChars
 
         var lastRunRawStyle: Long = 0L
         var lastRunExtEffect: Long = 0L
@@ -181,15 +186,22 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
         var column = 0
         while (column < columns) {
             line.withCodePointAt(currentCharIndex, charsUsedInLine) { codePoint, charsForCodePoint ->
-                val codePointWcWidth = WcWidth.width(codePoint)
+                val codePointWcWidth = if (hasNonOneWidth) WcWidth.width(codePoint) else 1
                 val insideCursor = (cursorX == column || (codePointWcWidth == 2 && cursorX == column + 1))
                 val insideSelection = column in selx1..selx2
                 val rawStyle = lineObject.getRawStyle(column)
                 val extEffect = lineObject.getExtendedEffect(column)
 
                 val measuredCodePointWidth =
-                    if (codePoint < asciiMeasures.size) asciiMeasures[codePoint] 
-                    else mTextPaint.measureText(line, currentCharIndex, charsForCodePoint)
+                    if (codePoint < asciiMeasures.size) asciiMeasures[codePoint]
+                    else if (charsForCodePoint == 1 && codePoint < bmpMeasureCache.size) {
+                        var cached = bmpMeasureCache[codePoint]
+                        if (cached < 0f) {
+                            cached = mTextPaint.measureText(line, currentCharIndex, charsForCodePoint)
+                            bmpMeasureCache[codePoint] = cached
+                        }
+                        cached
+                    } else mTextPaint.measureText(line, currentCharIndex, charsForCodePoint)
                     
                 val fontWidthMismatch = abs(measuredCodePointWidth / this.fontWidth - codePointWcWidth) > 0.01
 
@@ -234,9 +246,14 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
                 column += codePointWcWidth
                 currentCharIndex += charsForCodePoint
                 
-                // 跳过后续的零宽字符（如组合字符）
-                while (currentCharIndex < charsUsedInLine && WcWidth.width(line, currentCharIndex) <= 0) {
-                    currentCharIndex += line.charCountAtSafe(currentCharIndex, charsUsedInLine)
+                // 跳过后续的零宽字符（如组合字符）；无宽字符行可整体跳过
+                while (hasNonOneWidth && currentCharIndex < charsUsedInLine) {
+                    var advance = 0
+                    line.withCodePointAt(currentCharIndex, charsUsedInLine) { cp, cc ->
+                        if (WcWidth.width(cp) <= 0) advance = cc
+                    }
+                    if (advance == 0) break
+                    currentCharIndex += advance
                 }
             }
         }
