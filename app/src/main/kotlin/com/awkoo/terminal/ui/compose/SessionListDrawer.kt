@@ -68,9 +68,9 @@ fun MainActivity.SessionListDrawer(colorScheme: TerminalColorScheme) {
     }
 
     // 应用级 IME 策略：终端仅在作为活跃界面时才显示键盘。
-    // 覆盖层（设置页）或抽屉打开时收起，避免"进入设置自动弹键盘"；
+    // 仅设置覆盖层打开时收起键盘，避免"进入设置自动弹键盘"；左侧会话抽屉不影响键盘状态。
     // 新会话（首次绑定）且终端活跃时才自动拉起，取代 lib 内绑定时无条件 toggleIme(true)。
-    val terminalActive = !showSettings && drawerState.isClosed
+    val terminalActive = !showSettings
     LaunchedEffect(terminalActive) {
         if (!terminalActive) {
             terminalViewRef.value?.hideIme()
