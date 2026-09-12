@@ -10,6 +10,7 @@ import com.awkoo.terminal.AppPreferences
 import com.awkoo.terminal.Constants
 import com.awkoo.terminal.core.SessionManager
 import com.awkoo.terminal.core.ShellInfo
+import com.awkoo.terminal.extrakeys.ExtraKeysConfig
 import com.awkoo.terminal.ui.theme.ThemeMode
 import com.awkoo.libterminal.engine.TerminalCursorStyle
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -119,5 +120,15 @@ class MainViewModel @Inject constructor(
 
     fun setTranscriptRows(rows: Int) {
         viewModelScope.launch { preferences.setTranscriptRows(rows) }
+    }
+
+    val extraKeysConfig = preferences.extraKeysConfig.stateIn(
+        viewModelScope,
+        SharingStarted.Lazily,
+        ExtraKeysConfig()
+    )
+
+    fun setExtraKeysConfig(config: ExtraKeysConfig) {
+        viewModelScope.launch { preferences.setExtraKeysConfig(config) }
     }
 }

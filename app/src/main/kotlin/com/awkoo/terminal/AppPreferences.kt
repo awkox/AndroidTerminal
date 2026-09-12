@@ -1,6 +1,7 @@
 package com.awkoo.terminal
 
 import android.content.Context
+import android.util.Base64
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
@@ -8,7 +9,12 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.awkoo.libterminal.engine.TerminalCursorStyle
 import com.awkoo.terminal.Constants
+import com.awkoo.terminal.extrakeys.ExtraKeysConfig
 import com.awkoo.terminal.ui.theme.ThemeMode
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.decodeFromByteArray
+import kotlinx.serialization.encodeToByteArray
+import kotlinx.serialization.protobuf.ProtoBuf
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -108,6 +114,29 @@ class AppPreferences @Inject constructor(
         }
     }
 
+    /** 扩展按键栏配置偏好，数据缺失或损坏（解码失败）时回退默认布局。 */
+    @OptIn(ExperimentalSerializationApi::class)
+    val extraKeysConfig: Flow<ExtraKeysConfig> = datastore.data.map { prefs ->
+        val encoded = prefs[extraKeysConfigKey] ?: return@map ExtraKeysConfig()
+        try {
+            ProtoBuf.decodeFromByteArray<ExtraKeysConfig>(
+                Base64.decode(encoded, Base64.NO_WRAP)
+            )
+        } catch (e: Exception) {
+            ExtraKeysConfig()
+        }
+    }
+
+    @OptIn(ExperimentalSerializationApi::class)
+    suspend fun setExtraKeysConfig(config: ExtraKeysConfig) {
+        datastore.edit {
+            it[extraKeysConfigKey] = Base64.encodeToString(
+                ProtoBuf.encodeToByteArray(config),
+                Base64.NO_WRAP
+            )
+        }
+    }
+
     companion object {
         private val terminalFontSizeKey = intPreferencesKey("TerminalFontSize")
         private val themeModeKey = stringPreferencesKey("ThemeMode")
@@ -115,5 +144,6 @@ class AppPreferences @Inject constructor(
         private val cursorBlinkingKey = booleanPreferencesKey("CursorBlinking")
         private val textBlinkingKey = booleanPreferencesKey("TextBlinking")
         private val transcriptRowsKey = intPreferencesKey("TranscriptRows")
+        private val extraKeysConfigKey = stringPreferencesKey("ExtraKeysConfig")
     }
 }

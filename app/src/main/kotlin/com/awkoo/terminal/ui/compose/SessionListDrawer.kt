@@ -34,7 +34,6 @@ import com.awkoo.terminal.R
 import com.awkoo.terminal.extrakeys.ExtraKeyActions
 import com.awkoo.terminal.extrakeys.ExtraKeyDispatcher
 import com.awkoo.terminal.extrakeys.ExtraKeysBar
-import com.awkoo.terminal.extrakeys.ExtraKeysConfig
 import com.awkoo.terminal.extrakeys.ExtraKeysModifierState
 import com.awkoo.terminal.ui.MainActivity
 import com.awkoo.terminal.ui.settings.SettingsNavHost
@@ -45,11 +44,7 @@ import com.awkoo.libterminal.engine.TerminalCursorStyle
 import com.awkoo.libterminal.color.TerminalColorScheme
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.decodeFromByteArray
-import kotlinx.serialization.protobuf.ProtoBuf
 
-@OptIn(ExperimentalSerializationApi::class)
 @Composable
 fun MainActivity.SessionListDrawer(colorScheme: TerminalColorScheme) {
     val scope = rememberCoroutineScope()
@@ -64,6 +59,7 @@ fun MainActivity.SessionListDrawer(colorScheme: TerminalColorScheme) {
     val cursorStyle by viewModel.terminalCursorStyle.collectAsStateWithLifecycle()
     val cursorBlinking by viewModel.cursorBlinking.collectAsStateWithLifecycle()
     val textBlinking by viewModel.textBlinking.collectAsStateWithLifecycle()
+    val extraKeysConfig by viewModel.extraKeysConfig.collectAsStateWithLifecycle()
 
     LaunchedEffect(drawerState.targetValue) {
         if (drawerState.targetValue == DrawerValue.Open) {
@@ -171,8 +167,7 @@ fun MainActivity.SessionListDrawer(colorScheme: TerminalColorScheme) {
                     },
                     bottomBar = {
                         ExtraKeysBar(
-                            // TODO：持久化存储，目前读取默认值
-                            config = ProtoBuf.decodeFromByteArray<ExtraKeysConfig>(byteArrayOf()),
+                            config = extraKeysConfig,
                             modifierState = modifierState,
                             onDispatch = { dispatcher.dispatch(it) }
                         )
