@@ -1,5 +1,6 @@
 package com.awkoo.terminal.extrakeys
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +26,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.PopupProperties
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -71,6 +73,9 @@ private fun ExtraKeyButtonItem(
 ) {
     val scope = rememberCoroutineScope()
     var showPopupMenu by remember { mutableStateOf(false) }
+    // 菜单所在弹窗设为不可聚焦：避免弹窗抢占窗口焦点导致软键盘收起。
+    // BackHandler 兜底关闭（不可聚焦弹窗不再接收返回键）。
+    BackHandler(enabled = showPopupMenu) { showPopupMenu = false }
 
     val isModifier = button.key is ExtraKey.SpecialKey &&
         (button.key.type == SpecialKeyType.CTRL ||
@@ -149,7 +154,8 @@ private fun ExtraKeyButtonItem(
         if (button.popup != null) {
             DropdownMenu(
                 expanded = showPopupMenu,
-                onDismissRequest = { showPopupMenu = false }
+                onDismissRequest = { showPopupMenu = false },
+                properties = PopupProperties(focusable = false)
             ) {
                 DropdownMenuItem(
                     text = { Text(button.popup.display) },

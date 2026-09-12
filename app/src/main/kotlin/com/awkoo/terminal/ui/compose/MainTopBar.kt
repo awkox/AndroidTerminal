@@ -1,5 +1,6 @@
 package com.awkoo.terminal.ui.compose
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MoreVert
@@ -17,6 +18,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.window.PopupProperties
 import com.awkoo.terminal.R
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -42,6 +44,9 @@ fun MainTopBar(
         },
         actions = {
             var menuMoreExpanded by remember { mutableStateOf(false) }
+            // 菜单所在弹窗设为不可聚焦：避免弹窗抢占窗口焦点导致软键盘收起。
+            // BackHandler 兜底关闭（不可聚焦弹窗不再接收返回键）。
+            BackHandler(enabled = menuMoreExpanded) { menuMoreExpanded = false }
             IconButton(
                 onClick = { menuMoreExpanded = true }
             ) {
@@ -50,6 +55,7 @@ fun MainTopBar(
             DropdownMenu(
                 expanded = menuMoreExpanded,
                 onDismissRequest = { menuMoreExpanded = false },
+                properties = PopupProperties(focusable = false)
             ) {
                 DropdownMenuItem(
                     text = { Text(stringResource(R.string.menu_settings)) },
