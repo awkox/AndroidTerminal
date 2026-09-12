@@ -28,7 +28,6 @@ dependencies {
 
 ```kotlin
 interface ITerminalProcess {
-    val pid: Int
     val inputStream: InputStream   // 进程输出 → 喂给终端模拟器
     val outputStream: OutputStream // 终端输入 → 写入进程
     fun resize(columns: Int, rows: Int, cellWidthPixels: Int, cellHeightPixels: Int)
@@ -106,10 +105,11 @@ fun TerminalScreen(session: TerminalSession?) {
 | `extraKeysModifierReader` | `(() -> ExtraKeysModifierSnapshot)?`（var） | 外部粘性修饰键状态快照提供者 |
 | `stopTextSelectionMode()` | fun | 手动退出文本选择模式 |
 | `toggleIme(show: Boolean? = null)` | fun | 切换/强制软键盘显隐 |
+| `hideIme()` | fun | 隐藏软键盘（不请求焦点） |
 | `toggleAutoScrollDisabled()` | fun | 切换自动滚动禁用（配合滚动锁定） |
 | `pasteTextFromClipboard()` | fun | 从剪贴板粘贴到终端 |
 | `dispose()` | fun | 释放协程、移除触摸模式监听，View 分离时**必须**调用 |
-| `inputVirtualKeyCodePoint(codePoint, controlDown, leftAltDown)` | fun | 注入扩展按键栏产生的 Unicode 码点（`controlDown`/`leftAltDown` 默认 `false`） |
+| `inputVirtualKeyCodePoint(codePoint, controlDownFromEvent, leftAltDownFromEvent)` | fun | 注入扩展按键栏产生的 Unicode 码点 |
 | `onKeyDown(keyCode, event)` | fun | 注入完整 `KeyEvent`（扩展键/物理键盘复用） |
 | `onKeyUp(keyCode, event)` | fun | 与 `onKeyDown` 对称；扩展键栏如需注入松开事件可调用 |
 
@@ -132,12 +132,11 @@ fun TerminalScreen(session: TerminalSession?) {
 
 | 成员 | 类型 | 说明 |
 |------|------|------|
-| `TerminalSession(id, sessionName, stdin, maxTranscriptRows)` | 构造 | `maxTranscriptRows`：历史回滚缓冲区行数（默认 `5000`，范围 `100..100000`，仅作用于此会话） |
+| `TerminalSession(id, sessionName, stdin, maxTranscriptRows)` | 构造 | `maxTranscriptRows`：历史回滚缓冲区行数 |
 | `id` | `Int` | 会话 ID |
-| `pid` | `Int` | 子进程 PID（`-1` 表示未运行） |
 | `sessionName` | `MutableStateFlow<String>` | 会话名（顶栏显示用） |
 | `titleState` | `StateFlow<String?>` | OSC 0/1/2 设置的终端标题（如 vim 标签） |
-| `isRunning` | `Boolean` | `pid > 0` 即为运行中 |
+| `isRunning` | `Boolean` | `execute()` 后为 `true`，进程退出后置 `false` |
 | `exitStatus` | `Int` | 进程退出码（负数表示信号编号） |
 | `isRemove` | `MutableStateFlow<Boolean>` | 请求移除标记（回车退出场景） |
 | `execute()` | fun | 启动进程与 I/O 协程 |
@@ -169,9 +168,6 @@ view.extraKeysModifierReader = {
     ExtraKeysModifierSnapshot(ctrl = ctrlOn, alt = altOn, shift = shiftOn, fn = fnOn)
 }
 ```
-
-`ExtraKeysModifierSnapshot` 为内联值类，构造函数四个参数均有默认值（`false`），
-底层 `mask` 属性位掩码编码四个修饰键，一般无需直接操作。
 
 ### 3.5 `com.awkoo.libterminal.color.TerminalColorScheme`
 
