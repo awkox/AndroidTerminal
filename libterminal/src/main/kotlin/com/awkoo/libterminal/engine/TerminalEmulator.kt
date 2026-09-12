@@ -466,7 +466,7 @@ internal class TerminalEmulator(
             }
 
             'B' -> this.cursorRow =
-                min(mRows - 1, mCursorRow + AnsiEscapeParser.getArg(args, 0, 1, true))
+                min(originBottom - 1, mCursorRow + AnsiEscapeParser.getArg(args, 0, 1, true))
 
             'C', 'a' -> this.cursorCol =
                 min(mRightMargin - 1, mCursorCol + AnsiEscapeParser.getArg(args, 0, 1, true))
