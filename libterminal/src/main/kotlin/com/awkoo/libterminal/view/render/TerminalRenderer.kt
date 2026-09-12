@@ -199,8 +199,7 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
                     extEffect != lastRunExtEffect ||
                     insideCursor != lastRunInsideCursor ||
                     insideSelection != lastRunInsideSelection ||
-                    fontWidthMismatch ||
-                    lastRunFontWidthMismatch) {
+                    fontWidthMismatch != lastRunFontWidthMismatch) {
                     if (column == 0) {
                         // 跳过首列（无可绘制内容），仅记录当前样式
                     } else {
