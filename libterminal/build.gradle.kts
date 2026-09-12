@@ -40,12 +40,12 @@ mavenPublishing {
 
         licenses {
             license {
-                name.set("GNU General Public License v3.0 or later")
-                url.set("https://www.gnu.org/licenses/gpl-3.0.html")
+                name.set("GNU General Public License, version 3.0")
+                url.set("https://www.gnu.org/licenses/gpl-3.0.txt")
                 distribution.set("repo")
-                comments.set("SPDX-License-Identifier: GPL-3.0-or-later")
             }
         }
+
         developers {
             developer {
                 id.set("awkoo")
