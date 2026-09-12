@@ -78,6 +78,7 @@ fun MainActivity.SessionListDrawer(colorScheme: TerminalColorScheme) {
     LaunchedEffect(terminalActive) {
         if (!terminalActive) {
             terminalViewRef.value?.hideIme()
+            terminalViewRef.value?.clearFocus()
         }
     }
     LaunchedEffect(sessionList.size) {
