@@ -130,7 +130,7 @@ static int create_subprocess(JNIEnv* env,
 
 extern "C" {
 
-JNIEXPORT jint JNICALL Java_com_awkoo_terminal_core_LocalPtyProcess_createSubprocess(
+JNIEXPORT jint JNICALL Java_com_awkoo_libterminal_lpty_LibPtyProcess_createSubprocess(
         JNIEnv* env,
         jclass UNUSED(clazz),
         jstring cmd,
@@ -279,7 +279,7 @@ JNIEXPORT jint JNICALL Java_com_awkoo_terminal_core_LocalPtyProcess_createSubpro
     return ptm;
 }
 
-JNIEXPORT void JNICALL Java_com_awkoo_terminal_core_LocalPtyProcess_setPtyWindowSize(
+JNIEXPORT void JNICALL Java_com_awkoo_libterminal_lpty_LibPtyProcess_setPtyWindowSize(
         JNIEnv* UNUSED(env),
         jclass UNUSED(clazz),
         jint fd,
@@ -296,7 +296,7 @@ JNIEXPORT void JNICALL Java_com_awkoo_terminal_core_LocalPtyProcess_setPtyWindow
     ioctl(fd, TIOCSWINSZ, &sz);
 }
 
-JNIEXPORT jint JNICALL Java_com_awkoo_terminal_core_LocalPtyProcess_waitFor(
+JNIEXPORT jint JNICALL Java_com_awkoo_libterminal_lpty_LibPtyProcess_waitFor(
         JNIEnv* UNUSED(env),
         jclass UNUSED(clazz),
         jint pid) {

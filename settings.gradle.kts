@@ -26,4 +26,5 @@ dependencyResolutionManagement {
 rootProject.name = "AndroidTerminal"
 include(":app")
 include(":libterminal")
+include(":libterminal-lpty")
 include(":libterminal-ssh")

@@ -1,4 +1,4 @@
-package com.awkoo.ssh
+package com.awkoo.libterminal.ssh
 
 import android.os.ParcelFileDescriptor
 import com.awkoo.libterminal.process.ITerminalProcess

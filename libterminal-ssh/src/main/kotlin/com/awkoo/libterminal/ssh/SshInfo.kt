@@ -1,4 +1,4 @@
-package com.awkoo.ssh
+package com.awkoo.libterminal.ssh
 
 /**
  * SSH 连接配置（协议参数）。

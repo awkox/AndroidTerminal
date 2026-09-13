@@ -1,9 +1,11 @@
 package com.awkoo.terminal.core
 
 import com.awkoo.libterminal.engine.TerminalSession
-import com.awkoo.ssh.SshCredentials
-import com.awkoo.ssh.SshInfo
-import com.awkoo.ssh.SshProcess
+import com.awkoo.libterminal.lpty.LibPtyProcess
+import com.awkoo.libterminal.lpty.PtyParams
+import com.awkoo.libterminal.ssh.SshCredentials
+import com.awkoo.libterminal.ssh.SshInfo
+import com.awkoo.libterminal.ssh.SshProcess
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -69,7 +71,15 @@ class SessionManager @Inject constructor() {
             stdin = commandInfo.stdin?.toByteArray(),
             maxTranscriptRows = maxTranscriptRows
         ) { rows, cols, w, h ->
-            LocalPtyProcess(commandInfo, rows, cols, w, h)
+            LibPtyProcess(
+                PtyParams(
+                    executable = commandInfo.executable,
+                    cwd = commandInfo.workingDirectory,
+                    arguments = commandInfo.arguments,
+                    environment = commandInfo.environmentArray
+                ),
+                rows, cols, w, h
+            )
         }
 
         targetSession.execute()

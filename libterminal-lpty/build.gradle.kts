@@ -3,7 +3,7 @@ plugins {
 }
 
 android {
-    namespace = "com.awkoo.libterminal.ssh"
+    namespace = "com.awkoo.libterminal.lpty"
     ndkVersion = "29.0.14206865"
 
     compileSdk {
@@ -36,6 +36,4 @@ kotlin {
 dependencies {
     coreLibraryDesugaring(libs.android.desugar)
     api(project(":libterminal"))
-    implementation(libs.androidx.core)
-    implementation(libs.kotlinx.coroutines.android)
 }

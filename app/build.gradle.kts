@@ -8,7 +8,6 @@ plugins {
 
 android {
     namespace = "com.awkoo.terminal"
-    ndkVersion = "29.0.14206865"
 
     compileSdk {
         version = release(37)
@@ -60,13 +59,6 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
 
-    externalNativeBuild {
-        cmake {
-            path(file("src/main/cpp/CMakeLists.txt"))
-            version = "4.1.2"
-        }
-    }
-
     lint {
         disable.add("ProtectedPermissions")
         disable.add("ExpiredTargetSdkVersion")
@@ -110,5 +102,6 @@ dependencies {
     implementation(libs.serialization.protobuf)
     //implementation(libs.timber)
     implementation(project(":libterminal"))
+    implementation(project(":libterminal-lpty"))
     implementation(project(":libterminal-ssh"))
 }
