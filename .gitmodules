@@ -1,0 +1,6 @@
+[submodule "app/src/main/cpp/third_party/mbedtls"]
+	path = app/src/main/cpp/third_party/mbedtls
+	url = https://github.com/Mbed-TLS/mbedtls.git
+[submodule "app/src/main/cpp/third_party/libssh"]
+	path = app/src/main/cpp/third_party/libssh
+	url = https://github.com/libssh/libssh-mirror.git

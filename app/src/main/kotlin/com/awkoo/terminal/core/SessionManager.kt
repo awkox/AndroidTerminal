@@ -74,6 +74,39 @@ class SessionManager @Inject constructor() {
         _sessionList.update { it + targetSession }
         currentSessionId.update { targetSession.id }
 
+        observeRemoval(targetSession)
+    }
+
+    /**
+     * 建立 SSH 会话：点击创建即入列并成为当前会话，连接异步进行，
+     * 失败时按"进程立即退出"结束，不抛出到调用线程。
+     */
+    fun addSshSession(
+        sshInfo: SshInfo,
+        cipher: CredentialCipher?,
+        maxTranscriptRows: Int = 5000
+    ) {
+        val sessionId = idGenerator.incrementAndFetch()
+        val displayName = sshInfo.name ?: "${sshInfo.user}@${sshInfo.host}"
+
+        val targetSession = TerminalSession(
+            id = sessionId,
+            sessionName = MutableStateFlow(displayName),
+            stdin = null,
+            maxTranscriptRows = maxTranscriptRows
+        ) { rows, cols, _, _ ->
+            SshProcess(sshInfo, cipher, rows, cols)
+        }
+
+        targetSession.execute()
+
+        _sessionList.update { it + targetSession }
+        currentSessionId.update { targetSession.id }
+
+        observeRemoval(targetSession)
+    }
+
+    private fun observeRemoval(targetSession: TerminalSession) {
         // 使用 combine 联合监听 Session 自身的 isRemove 状态与全局的 _sessionList
         // 一旦会话要求移除，或者它已经被外部手段从列表中剔除，first { it } 都会立刻放行
         // 随后执行兜底的 removeSession 并自然结束协程，杜绝任何内存泄漏的可能。
@@ -81,7 +114,7 @@ class SessionManager @Inject constructor() {
             combine(targetSession.isRemove, _sessionList) { isRemove, list ->
                 isRemove || list.none { it.id == targetSession.id }
             }.first { it }
-            
+
             removeSession(targetSession.id)
         }
     }

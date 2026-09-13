@@ -1,0 +1,4 @@
+/*
+!mbedtls_user_config.h
+# submodule 目录交由 gitlink 管理(ignore 不作用于已跟踪路径),add 时用 -f
+!mbedtls/

@@ -8,8 +8,11 @@ import androidx.lifecycle.viewModelScope
 import com.awkoo.terminal.TerminalService
 import com.awkoo.terminal.AppPreferences
 import com.awkoo.terminal.Constants
+import com.awkoo.terminal.core.CredentialCipher
 import com.awkoo.terminal.core.SessionManager
 import com.awkoo.terminal.core.ShellInfo
+import com.awkoo.terminal.core.SshInfo
+import com.awkoo.terminal.core.SshInfoStore
 import com.awkoo.terminal.extrakeys.ExtraKeysConfig
 import com.awkoo.terminal.ui.theme.ThemeMode
 import com.awkoo.libterminal.engine.TerminalCursorStyle
@@ -30,10 +33,16 @@ import javax.inject.Inject
 class MainViewModel @Inject constructor(
     @param:ApplicationContext private val context: Context,
     val sessionManager: SessionManager,
-    val preferences: AppPreferences
+    val preferences: AppPreferences,
+    val sshInfoStore: SshInfoStore,
+    private val credentialCipher: CredentialCipher
 ): ViewModel() {
     // 数据流
     val sessionListState = sessionManager.sessionList
+
+    /** 持久化的 SSH 连接配置列表。 */
+    val sshInfoList = sshInfoStore.sshInfoList
+
     fun addSession(name: String?) {
         val shellInfo = ShellInfo(
             "sh",
@@ -46,6 +55,17 @@ class MainViewModel @Inject constructor(
 
         sessionManager.addSession(shellInfo, maxTranscriptRows = transcriptRows.value)
 
+        ensureTerminalService()
+    }
+
+    /** 立即建立 SSH 会话（连接异步、失败不抛到调用线程）。 */
+    fun addSshSession(sshInfo: SshInfo) {
+        sessionManager.addSshSession(sshInfo, credentialCipher, maxTranscriptRows = transcriptRows.value)
+
+        ensureTerminalService()
+    }
+
+    private fun ensureTerminalService() {
         // 启动前台服务用于增加生命周期稳定性
         if (!TerminalService.isRunning) {
             val serviceIntent = Intent(context, TerminalService::class.java)
