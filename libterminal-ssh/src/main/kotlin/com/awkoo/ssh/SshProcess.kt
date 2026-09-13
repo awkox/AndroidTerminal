@@ -1,4 +1,4 @@
-package com.awkoo.terminal.core
+package com.awkoo.ssh
 
 import android.os.ParcelFileDescriptor
 import com.awkoo.libterminal.process.ITerminalProcess
@@ -36,10 +36,12 @@ class SshAuthException(message: String) : SshException(message)
  * 真正的连接在后台线程进行。连接成功后 native 的 I/O 线程开始搬运字节，
  * 期间用户先行输入的字节保留在 socket 缓冲中不会丢失；连接失败时 native
  * 关闭对应 fd，App 侧流读到 EOF，会话按"进程立即退出"结束，不会崩溃。
+ *
+ * 凭据（[SshCredentials]）为调用方解密后的明文，仅存在于本进程对象生命周期内。
  */
 class SshProcess(
     sshInfo: SshInfo,
-    cipher: CredentialCipher?,
+    credentials: SshCredentials,
     rows: Int,
     columns: Int
 ) : ITerminalProcess {
@@ -101,14 +103,10 @@ class SshProcess(
 
         val connFd = socketPair[1].detachFd()
         scope.launch {
-            val password =
-                sshInfo.passwordCipher?.let { cipher?.decrypt(it) }
-            val passphrase =
-                sshInfo.keyPassphraseCipher?.let { cipher?.decrypt(it) }
             val h = try {
                 sshConnect(
                     sshInfo.host, sshInfo.port, sshInfo.user,
-                    password, sshInfo.keyPath, passphrase,
+                    credentials.password, sshInfo.keyPath, credentials.keyPassphrase,
                     sshInfo.hostKeyFingerprint,
                     sshInfo.timeoutMs, connFd, rows, columns
                 )

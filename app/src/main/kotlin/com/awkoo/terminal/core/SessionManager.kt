@@ -1,6 +1,9 @@
 package com.awkoo.terminal.core
 
 import com.awkoo.libterminal.engine.TerminalSession
+import com.awkoo.ssh.SshCredentials
+import com.awkoo.ssh.SshInfo
+import com.awkoo.ssh.SshProcess
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -80,9 +83,12 @@ class SessionManager @Inject constructor() {
     /**
      * 建立 SSH 会话：点击创建即入列并成为当前会话，连接异步进行，
      * 失败时按"进程立即退出"结束，不抛出到调用线程。
+     *
+     * [sshInfo] 为含密文的持久化记录；解密后的明文凭据只在本调用中
+     * 构造 [SshCredentials] 交给 libterminal-ssh，不做任何落盘。
      */
     fun addSshSession(
-        sshInfo: SshInfo,
+        sshInfo: PersistedSshInfo,
         cipher: CredentialCipher?,
         maxTranscriptRows: Int = 5000
     ) {
@@ -95,7 +101,15 @@ class SessionManager @Inject constructor() {
             stdin = null,
             maxTranscriptRows = maxTranscriptRows
         ) { rows, cols, _, _ ->
-            SshProcess(sshInfo, cipher, rows, cols)
+            SshProcess(
+                sshInfo.toSshInfo(),
+                SshCredentials(
+                    password = sshInfo.passwordCipher?.let { cipher?.decrypt(it) },
+                    keyPassphrase = sshInfo.keyPassphraseCipher?.let { cipher?.decrypt(it) }
+                ),
+                rows,
+                cols
+            )
         }
 
         targetSession.execute()

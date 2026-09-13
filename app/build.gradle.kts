@@ -110,4 +110,5 @@ dependencies {
     implementation(libs.serialization.protobuf)
     //implementation(libs.timber)
     implementation(project(":libterminal"))
+    implementation(project(":libterminal-ssh"))
 }

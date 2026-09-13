@@ -20,6 +20,8 @@ jobs:
     steps:
       - name: 检出代码
         uses: actions/checkout@v7
+        with:
+          submodules: recursive
 
       - name: 解密KeyStore
         if: github.event_name != 'pull_request'

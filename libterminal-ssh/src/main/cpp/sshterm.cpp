@@ -226,7 +226,7 @@ std::string server_fingerprint_of(ssh_session session) {
 }  // namespace
 
 extern "C" JNIEXPORT jlong JNICALL
-Java_com_awkoo_terminal_core_SshProcess_sshConnect(
+Java_com_awkoo_ssh_SshProcess_sshConnect(
     JNIEnv* env,
     jclass,
     jstring jhost,
@@ -419,7 +419,7 @@ Java_com_awkoo_terminal_core_SshProcess_sshConnect(
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_awkoo_terminal_core_SshProcess_sshResize(JNIEnv*, jclass, jlong handle, jint rows, jint cols) {
+Java_com_awkoo_ssh_SshProcess_sshResize(JNIEnv*, jclass, jlong handle, jint rows, jint cols) {
     native_ssh* h = reinterpret_cast<native_ssh*>(handle);
     if (h == nullptr || h->channel == nullptr) {
         return;
@@ -428,7 +428,7 @@ Java_com_awkoo_terminal_core_SshProcess_sshResize(JNIEnv*, jclass, jlong handle,
 }
 
 extern "C" JNIEXPORT jstring JNICALL
-Java_com_awkoo_terminal_core_SshProcess_sshGetServerFingerprint(JNIEnv* env, jclass, jlong handle) {
+Java_com_awkoo_ssh_SshProcess_sshGetServerFingerprint(JNIEnv* env, jclass, jlong handle) {
     native_ssh* h = reinterpret_cast<native_ssh*>(handle);
     if (h == nullptr || h->server_fingerprint.empty()) {
         return nullptr;
@@ -437,7 +437,7 @@ Java_com_awkoo_terminal_core_SshProcess_sshGetServerFingerprint(JNIEnv* env, jcl
 }
 
 extern "C" JNIEXPORT jint JNICALL
-Java_com_awkoo_terminal_core_SshProcess_sshWait(JNIEnv*, jclass, jlong handle) {
+Java_com_awkoo_ssh_SshProcess_sshWait(JNIEnv*, jclass, jlong handle) {
     native_ssh* h = reinterpret_cast<native_ssh*>(handle);
     if (h == nullptr) {
         return -1;
@@ -453,7 +453,7 @@ Java_com_awkoo_terminal_core_SshProcess_sshWait(JNIEnv*, jclass, jlong handle) {
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_awkoo_terminal_core_SshProcess_sshKill(JNIEnv*, jclass, jlong handle) {
+Java_com_awkoo_ssh_SshProcess_sshKill(JNIEnv*, jclass, jlong handle) {
     native_ssh* h = reinterpret_cast<native_ssh*>(handle);
     if (h == nullptr) {
         return;
@@ -464,7 +464,7 @@ Java_com_awkoo_terminal_core_SshProcess_sshKill(JNIEnv*, jclass, jlong handle) {
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_com_awkoo_terminal_core_SshProcess_sshClose(JNIEnv*, jclass, jlong handle) {
+Java_com_awkoo_ssh_SshProcess_sshClose(JNIEnv*, jclass, jlong handle) {
     native_ssh* h = reinterpret_cast<native_ssh*>(handle);
     dispose(h);
 }

@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.awkoo.ssh.SshInfo
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -33,7 +34,7 @@ enum class SshAuthType {
  * 已知会话指纹存于 [hostKeyFingerprint]，为 null 表示尚未做首次信任（TOFU）。
  */
 @Serializable
-data class SshInfo(
+data class PersistedSshInfo(
     val id: Long = 0,
     val name: String? = null,
     val host: String,
@@ -52,7 +53,7 @@ data class SshInfo(
  * SSH 连接配置持久化存储。
  *
  * 依赖既有的 Preferences DataStore + ProtoBuf 模式（同 [com.awkoo.terminal.extrakeys.ExtraKeysConfig]），
- * 独立文件 [SshInfo]，损坏条目（解码失败）自动跳过。
+ * 独立文件 [PersistedSshInfo]，损坏条目（解码失败）自动跳过。
  */
 @OptIn(ExperimentalSerializationApi::class)
 @Singleton
@@ -62,7 +63,7 @@ class SshInfoStore @Inject constructor(
     private val datastore = context.sshDataStore
 
     /** 全部连接配置，按 id 升序。损坏条目被剔除。 */
-    val sshInfoList: Flow<List<SshInfo>> = datastore.data.map { prefs ->
+    val sshInfoList: Flow<List<PersistedSshInfo>> = datastore.data.map { prefs ->
         prefs.asMap()
             .filterKeys { it.name.startsWith(KEY_PREFIX) }
             .mapNotNull { (key, value) ->
@@ -71,13 +72,13 @@ class SshInfoStore @Inject constructor(
             .sortedBy { it.id }
     }
 
-    suspend fun get(id: Long): SshInfo? {
+    suspend fun get(id: Long): PersistedSshInfo? {
         val list = sshInfoList.first()
         return list.firstOrNull { it.id == id }
     }
 
     /** 分配自增 id 后落盘，返回带 id 的副本。 */
-    suspend fun insert(input: SshInfo): SshInfo {
+    suspend fun insert(input: PersistedSshInfo): PersistedSshInfo {
         var assigned = input.id
         datastore.edit { prefs ->
             if (input.id <= 0) {
@@ -89,7 +90,7 @@ class SshInfoStore @Inject constructor(
         return input.copy(id = assigned)
     }
 
-    suspend fun upsert(info: SshInfo) {
+    suspend fun upsert(info: PersistedSshInfo) {
         if (info.id <= 0) {
             insert(info)
             return
@@ -107,12 +108,12 @@ class SshInfoStore @Inject constructor(
 
     private fun infoKey(id: Long) = stringPreferencesKey(KEY_PREFIX + id)
 
-    private fun encode(info: SshInfo): String =
+    private fun encode(info: PersistedSshInfo): String =
         Base64.encodeToString(ProtoBuf.encodeToByteArray(info), Base64.NO_WRAP)
 
-    private fun decode(encoded: String): SshInfo? =
+    private fun decode(encoded: String): PersistedSshInfo? =
         try {
-            ProtoBuf.decodeFromByteArray<SshInfo>(
+            ProtoBuf.decodeFromByteArray<PersistedSshInfo>(
                 Base64.decode(encoded, Base64.NO_WRAP)
             )
         } catch (e: Exception) {
@@ -124,3 +125,17 @@ class SshInfoStore @Inject constructor(
         private val nextIdKey = intPreferencesKey("nextInfoId")
     }
 }
+
+/** 持久化记录（含密文/标识）→ libterminal-ssh 的纯连接配置。 */
+fun PersistedSshInfo.toSshInfo(): SshInfo =
+    SshInfo(
+        name = name,
+        host = host,
+        port = port,
+        user = user,
+        authType = com.awkoo.ssh.SshAuthType.valueOf(authType.name),
+        keyPath = keyPath,
+        hostKeyFingerprint = hostKeyFingerprint,
+        keepAliveMs = keepAliveMs,
+        timeoutMs = timeoutMs
+    )

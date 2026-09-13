@@ -11,7 +11,7 @@ import com.awkoo.terminal.Constants
 import com.awkoo.terminal.core.CredentialCipher
 import com.awkoo.terminal.core.SessionManager
 import com.awkoo.terminal.core.ShellInfo
-import com.awkoo.terminal.core.SshInfo
+import com.awkoo.terminal.core.PersistedSshInfo
 import com.awkoo.terminal.core.SshInfoStore
 import com.awkoo.terminal.extrakeys.ExtraKeysConfig
 import com.awkoo.terminal.ui.theme.ThemeMode
@@ -59,7 +59,7 @@ class MainViewModel @Inject constructor(
     }
 
     /** 立即建立 SSH 会话（连接异步、失败不抛到调用线程）。 */
-    fun addSshSession(sshInfo: SshInfo) {
+    fun addSshSession(sshInfo: PersistedSshInfo) {
         sessionManager.addSshSession(sshInfo, credentialCipher, maxTranscriptRows = transcriptRows.value)
 
         ensureTerminalService()
