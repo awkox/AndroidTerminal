@@ -37,7 +37,7 @@ interface ITerminalProcess {
 }
 ```
 
-demo（`app/.../core/LocalPtyProcess.kt`）通过 JNI 的 `createSubprocess`/`setPtyWindowSize`
+demo（`app/.../core/PtyFactory.kt`）通过 JNI 的 `createSubprocess`/`setPtyWindowSize`
 实现本地 pty：将 pty 文件描述符包装为 `FileInputStream` / `FileOutputStream` 暴露给上层，
 `kill()` 使用 `Os.kill(pid, SIGKILL)`。你可以用同样模式接入 SSH 或任意远程终端。
 
@@ -50,7 +50,7 @@ val session = TerminalSession(
     stdin = null,                              // 可选：启动时写入进程的初始输入
     maxTranscriptRows = 5000,                  // 可选：历史回滚缓冲区行数（默认 5000，仅作用于此会话）
 ) { rows, cols, cellWidth, cellHeight ->       // 工厂函数，参数依次为 (行, 列, 单元格宽, 单元格高)
-    LocalPtyProcess(command, rows, cols, cellWidth, cellHeight)
+    PtyFactory(command, rows, cols, cellWidth, cellHeight)
 }
 session.execute()   // 必须调用：拉起读/写/仿真协程
 ```

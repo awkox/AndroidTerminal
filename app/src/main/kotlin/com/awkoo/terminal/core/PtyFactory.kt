@@ -10,7 +10,7 @@ import java.io.FileOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 
-class LocalPtyProcess(
+class PtyFactory(
     commandInfo: CommandInfo,
     rows: Int,
     columns: Int,

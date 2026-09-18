@@ -66,7 +66,7 @@ class SessionManager @Inject constructor() {
             stdin = commandInfo.stdin?.toByteArray(),
             maxTranscriptRows = maxTranscriptRows
         ) { rows, cols, w, h ->
-            LocalPtyProcess(commandInfo, rows, cols, w, h)
+            PtyFactory(commandInfo, rows, cols, w, h)
         }
 
         targetSession.execute()
