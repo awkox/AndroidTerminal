@@ -27,3 +27,4 @@ rootProject.name = "AndroidTerminal"
 include(":app")
 include(":libterminal")
 include(":libterminal-pty")
+include(":libterminal-ssh")

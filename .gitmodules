@@ -1,0 +1,6 @@
+[submodule "libterminal-ssh/src/main/cpp/third_party/mbedtls"]
+	path = libterminal-ssh/src/main/cpp/third_party/mbedtls
+	url = https://github.com/Mbed-TLS/mbedtls.git
+[submodule "libterminal-ssh/src/main/cpp/third_party/libssh"]
+	path = libterminal-ssh/src/main/cpp/third_party/libssh
+	url = https://github.com/libssh/libssh-mirror.git

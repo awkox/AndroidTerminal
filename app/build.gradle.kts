@@ -104,4 +104,5 @@ dependencies {
     //implementation(libs.timber)
     implementation(project(":libterminal"))
     implementation(project(":libterminal-pty"))
+    implementation(project(":libterminal-ssh"))
 }
