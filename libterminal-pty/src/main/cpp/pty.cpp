@@ -12,7 +12,8 @@
 #include <vector>
 #include <string>
 #include <climits>
-#include "macro.h" // UNUSED宏
+
+#define UNUSED(x) x [[maybe_unused]]
 
 // 抛出 Java 异常的辅助函数
 static int throw_runtime_exception(JNIEnv* env, char const* message) {
@@ -130,7 +131,7 @@ static int create_subprocess(JNIEnv* env,
 
 extern "C" {
 
-JNIEXPORT jint JNICALL Java_com_awkoo_terminal_core_PtyFactory_createSubprocess(
+JNIEXPORT jint JNICALL Java_com_awkoo_libterminal_pty_PtyFactory_createSubprocess(
         JNIEnv* env,
         jclass UNUSED(clazz),
         jstring cmd,
@@ -279,7 +280,7 @@ JNIEXPORT jint JNICALL Java_com_awkoo_terminal_core_PtyFactory_createSubprocess(
     return ptm;
 }
 
-JNIEXPORT void JNICALL Java_com_awkoo_terminal_core_PtyFactory_setPtyWindowSize(
+JNIEXPORT void JNICALL Java_com_awkoo_libterminal_pty_PtyFactory_setPtyWindowSize(
         JNIEnv* UNUSED(env),
         jclass UNUSED(clazz),
         jint fd,
@@ -296,7 +297,7 @@ JNIEXPORT void JNICALL Java_com_awkoo_terminal_core_PtyFactory_setPtyWindowSize(
     ioctl(fd, TIOCSWINSZ, &sz);
 }
 
-JNIEXPORT jint JNICALL Java_com_awkoo_terminal_core_PtyFactory_waitFor(
+JNIEXPORT jint JNICALL Java_com_awkoo_libterminal_pty_PtyFactory_waitFor(
         JNIEnv* UNUSED(env),
         jclass UNUSED(clazz),
         jint pid) {

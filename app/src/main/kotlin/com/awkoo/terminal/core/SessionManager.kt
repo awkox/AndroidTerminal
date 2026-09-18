@@ -1,6 +1,8 @@
 package com.awkoo.terminal.core
 
 import com.awkoo.libterminal.engine.TerminalSession
+import com.awkoo.libterminal.pty.CommandInfo
+import com.awkoo.libterminal.pty.PtyFactory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob

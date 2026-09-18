@@ -1,5 +1,7 @@
 package com.awkoo.terminal.core
 
+import com.awkoo.libterminal.pty.CommandInfo
+
 /**
  * Shell 命令启动参数。
  *

@@ -60,13 +60,6 @@ android {
         isCoreLibraryDesugaringEnabled = true
     }
 
-    externalNativeBuild {
-        cmake {
-            path(file("src/main/cpp/CMakeLists.txt"))
-            version = "4.1.2"
-        }
-    }
-
     lint {
         disable.add("ProtectedPermissions")
         disable.add("ExpiredTargetSdkVersion")
@@ -110,4 +103,5 @@ dependencies {
     implementation(libs.serialization.protobuf)
     //implementation(libs.timber)
     implementation(project(":libterminal"))
+    implementation(project(":libterminal-pty"))
 }

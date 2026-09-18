@@ -19,8 +19,6 @@ add_link_options(
     -flto
 )
 
-include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/include
+add_library(pty SHARED
+    pty.cpp
 )
-
-add_subdirectory(pty)

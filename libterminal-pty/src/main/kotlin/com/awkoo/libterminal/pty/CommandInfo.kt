@@ -1,4 +1,4 @@
-package com.awkoo.terminal.core
+package com.awkoo.libterminal.pty
 
 import kotlinx.coroutines.flow.MutableStateFlow
 
