@@ -45,6 +45,10 @@ struct native_ssh {
     // 在 waitFor 返回后读取。不走 socketpair，避免与 emulator 处理器竞争丢失。
     std::string error_text;
     pthread_mutex_t error_mutex = PTHREAD_MUTEX_INITIALIZER;
+    // IO 串行化：libssh 单 session 非线程安全。io_reader/io_writer/resize 可能
+    // 并发进入 ssh_channel_read/write/change_pty_size，不加锁会随机损坏内部
+    // 缓冲导致 SSH_ERROR（表现：网络正常却莫名断开且无具体错误描述）。
+    pthread_mutex_t io_mutex = PTHREAD_MUTEX_INITIALIZER;
 };
 
 struct conn_params {
@@ -82,7 +86,9 @@ void apply_pending_resize(native_ssh* h) {
     h->resize_cols = 0;
     pthread_mutex_unlock(&h->resize_mutex);
     if (h->channel != nullptr) {
+        pthread_mutex_lock(&h->io_mutex);
         (void)ssh_channel_change_pty_size(h->channel, cols, rows);
+        pthread_mutex_unlock(&h->io_mutex);
     }
 }
 
@@ -192,9 +198,11 @@ void* io_reader(void* arg) {
             if (h->killed) {
                 return nullptr;
             }
+            pthread_mutex_lock(&h->io_mutex);
             int written = ssh_channel_write(h->channel, buf + off,
                                             static_cast<uint32_t>(n - off));
             if (written == SSH_AGAIN) {
+                pthread_mutex_unlock(&h->io_mutex);
                 usleep(10000);
                 continue;
             }
@@ -206,14 +214,18 @@ void* io_reader(void* arg) {
                         err = e;
                     }
                 }
+                pthread_mutex_unlock(&h->io_mutex);
                 note_error(h, err.empty() ? "SSH channel write failed" : err);
                 return nullptr;
             }
+            pthread_mutex_unlock(&h->io_mutex);
             off += static_cast<size_t>(written);
         }
     }
     if (!h->killed) {
+        pthread_mutex_lock(&h->io_mutex);
         ssh_channel_send_eof(h->channel);
+        pthread_mutex_unlock(&h->io_mutex);
     }
     return nullptr;
 }
@@ -226,8 +238,10 @@ void* io_writer(void* arg) {
             break;
         }
         // is_blocking=1 在本实现中会立即返回 SSH_AGAIN，必须用非阻塞轮询。
+        pthread_mutex_lock(&h->io_mutex);
         int n = ssh_channel_read(h->channel, buf, sizeof(buf), 0);
         if (n == SSH_AGAIN) {
+            pthread_mutex_unlock(&h->io_mutex);
             usleep(10000);
             continue;
         }
@@ -239,10 +253,11 @@ void* io_writer(void* arg) {
                     err = e;
                 }
             }
-            // libssh 可能只返回错误码而不留会话错误文本，兜底用连接丢失措辞。
-            note_error(h, err.empty() ? "SSH connection lost" : err);
+            pthread_mutex_unlock(&h->io_mutex);
+            note_error(h, err.empty() ? "SSH channel read failed" : err);
             break;
         }
+        pthread_mutex_unlock(&h->io_mutex);
         if (n == 0) {
             break;
         }
@@ -260,7 +275,9 @@ void* io_writer(void* arg) {
     if (!h->killed) {
         // 被 kill 时通道可能已被并发释放，只采集退出状态（正常路径）
         uint32_t exit_state = UINT32_MAX;
+        pthread_mutex_lock(&h->io_mutex);
         ssh_channel_get_exit_state(h->channel, &exit_state, nullptr, nullptr);
+        pthread_mutex_unlock(&h->io_mutex);
         if (exit_state != UINT32_MAX) {
             h->exit_st = static_cast<int>(exit_state);
         } else {
@@ -381,7 +398,9 @@ bool handshake_run(native_ssh* h, const conn_params& p) {
         if (h->killed) {
             return false;
         }
+        pthread_mutex_lock(&h->io_mutex);
         rc = ssh_channel_open_session(channel);
+        pthread_mutex_unlock(&h->io_mutex);
         if (rc == SSH_OK) {
             break;
         }
@@ -399,8 +418,10 @@ bool handshake_run(native_ssh* h, const conn_params& p) {
         if (h->killed) {
             return false;
         }
+        pthread_mutex_lock(&h->io_mutex);
         rc = ssh_channel_request_pty_size(channel, "xterm-256color", pty_cols,
                                           pty_rows);
+        pthread_mutex_unlock(&h->io_mutex);
         if (rc == SSH_OK) {
             break;
         }
@@ -412,7 +433,9 @@ bool handshake_run(native_ssh* h, const conn_params& p) {
         if (h->killed) {
             return false;
         }
+        pthread_mutex_lock(&h->io_mutex);
         rc = ssh_channel_request_shell(channel);
+        pthread_mutex_unlock(&h->io_mutex);
         if (rc == SSH_OK) {
             break;
         }
@@ -518,6 +541,7 @@ void dispose(native_ssh* h) {
     teardown(h, true);
     pthread_mutex_destroy(&h->resize_mutex);
     pthread_mutex_destroy(&h->error_mutex);
+    pthread_mutex_destroy(&h->io_mutex);
     delete h;
 }
 
@@ -619,6 +643,7 @@ Java_com_awkoo_libterminal_ssh_SshFactory_sshConnect(
     }
     pthread_mutex_init(&h->resize_mutex, nullptr);
     pthread_mutex_init(&h->error_mutex, nullptr);
+    pthread_mutex_init(&h->io_mutex, nullptr);
 
     if (pipe(h->abort_pipe) != 0) {
         ssh_free(session);
