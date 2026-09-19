@@ -10,74 +10,41 @@ import java.io.FileOutputStream
  *
  * native 侧 [com.awkoo.libterminal.ssh.SshFactory] 通过真实文件路径加载私钥
  * （ssh_pki_import_privkey_file，fopen 语义），因此 SAF 选中的 content:// URI
- * 或粘贴文本都必须落到 app 私有目录 [dirName] 后转为真实路径再使用。
+ * 必须复制到 app 私有目录 [dirName] 后转为真实路径再使用。
  */
 object SshKeyImporter {
 
     private const val dirName = "ssh"
 
-    /** 导入结果：成功时 [path] 非空；失败时 [error] 给出具体原因。 */
-    data class ImportResult(val path: String?, val error: String?)
-
-    fun ok(path: String) = ImportResult(path, null)
-
-    fun fail(error: String?) = ImportResult(null, error)
-
     /**
-     * SAF 文件导入。读取失败/为空/复制异常时返回带原因的结果。
+     * 返回复制后的真实路径；读取失败或内容为空返回 null。
      */
-    fun import(context: Context, uri: Uri?): ImportResult {
+    fun import(context: Context, uri: Uri?): String? {
         if (uri == null) {
-            return fail("No file selected")
+            return null
         }
         val dir = File(context.filesDir, dirName).apply { mkdirs() }
         val target = File(dir, "key_${System.currentTimeMillis()}")
+        val input = context.contentResolver.openInputStream(uri)
+            ?: return null
         return try {
-            val input = context.contentResolver.openInputStream(uri)
-                ?: return fail("Cannot open selected file (provider returned no stream)")
-            input.use {
-                target.outputStream().use { out ->
-                    val copied = it.copyTo(out)
+            input.use { ins ->
+                FileOutputStream(target).use { out ->
+                    val copied = ins.copyTo(out)
                     if (copied <= 0) {
                         target.delete()
-                        return fail("Selected file is empty")
+                        return null
                     }
                     out.flush()
+                    // fsync 落盘：必须在同一个写入流上 force，否则重新打开
+                    // FileOutputStream 会 O_TRUNC 把刚复制的内容截成 0 字节。
+                    out.channel.force(true)
                 }
             }
-            // fsync 落盘：导入完成后即便进程被杀也不丢密钥。
-            runCatching {
-                FileOutputStream(target).use { out ->
-                    out.fd.sync()
-                }
-            }
-            ok(target.absolutePath)
+            target.absolutePath
         } catch (e: Exception) {
             target.delete()
-            fail(e.message ?: e.javaClass.simpleName)
-        }
-    }
-
-    /**
-     * 将粘贴的私钥文本落盘为真实路径（绕过 SAF），供 native 直接加载。
-     * 返回复制后的路径；内容为空或写入失败返回 null。
-     */
-    fun importText(context: Context, content: String?): ImportResult {
-        val cleaned = content?.trim() ?: return fail("No key content")
-        if (cleaned.isEmpty()) {
-            return fail("No key content")
-        }
-        val dir = File(context.filesDir, dirName).apply { mkdirs() }
-        val target = File(dir, "pasted_${System.currentTimeMillis()}")
-        return try {
-            target.writeText(cleaned, Charsets.UTF_8)
-            runCatching {
-                FileOutputStream(target).use { out -> out.fd.sync() }
-            }
-            ok(target.absolutePath)
-        } catch (e: Exception) {
-            target.delete()
-            fail(e.message ?: e.javaClass.simpleName)
+            null
         }
     }
 
