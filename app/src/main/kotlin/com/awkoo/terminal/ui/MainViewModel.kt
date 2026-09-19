@@ -57,7 +57,8 @@ class MainViewModel @Inject constructor(
         user: String,
         password: String?,
         keyPath: String? = null,
-        keyPassphrase: String? = null
+        keyPassphrase: String? = null,
+        hostKeyFingerprint: String? = null
     ) {
         val auth = if (keyPath != null) {
             SshAuth.PrivateKey(keyPath, keyPassphrase)
@@ -69,7 +70,8 @@ class MainViewModel @Inject constructor(
             host = host,
             port = port,
             user = user,
-            auth = auth
+            auth = auth,
+            hostKeyFingerprint = hostKeyFingerprint
         )
         sessionManager.addSshSession(sshInfo, name = "$user@$host",
             maxTranscriptRows = transcriptRows.value)

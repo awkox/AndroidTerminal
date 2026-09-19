@@ -62,6 +62,12 @@ class SshFactory(
         @JvmStatic
         private external fun sshTryLoadKey(path: String, passphrase: String?): String?
 
+        private external fun sshGetServerFingerprint(
+            host: String,
+            port: Int,
+            timeoutMs: Int
+        ): String
+
         /**
          * 连接前校验私钥：返回 null 表示可加载；否则为失败原因文本
          * （找不到/不可读/passphrase 不匹配/格式不支持）。
@@ -69,6 +75,15 @@ class SshFactory(
         @JvmStatic
         fun checkPrivateKey(path: String, passphrase: String?): String? {
             return sshTryLoadKey(path, passphrase)
+        }
+
+        /**
+         * 服务器指纹探测（首连 TOFU 用）：返回 "SHA256:..." 指纹；
+         * 失败时返回以 "ERROR: " 开头的文案。
+         */
+        @JvmStatic
+        fun getServerFingerprint(host: String, port: Int, timeoutMs: Int): String {
+            return sshGetServerFingerprint(host, port, timeoutMs)
         }
     }
 

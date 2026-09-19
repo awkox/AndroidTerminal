@@ -32,6 +32,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -43,8 +44,10 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.awkoo.libterminal.engine.TerminalSession
 import com.awkoo.libterminal.ssh.SshFactory
 import com.awkoo.terminal.R
+import com.awkoo.terminal.core.HostKeyStore
 import com.awkoo.terminal.core.SshKeyImporter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -65,11 +68,47 @@ fun SessionListScreen(
         user: String,
         password: String?,
         keyPath: String?,
-        keyPassphrase: String?
+        keyPassphrase: String?,
+        hostKeyFingerprint: String?
     ) -> Unit
 ) {
     val listState = rememberLazyListState()
     var showSshDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val hostKeyStore = remember { HostKeyStore(context) }
+
+    /** 无已知指纹、等待用户确认服务器指纹的连接请求。 */
+    var pendingHostKey by remember { mutableStateOf<PendingHostKeyConnect?>(null) }
+    var hostKeyProbeError by remember { mutableStateOf<String?>(null) }
+
+    // 连接前策略：已知指纹直接带证连接；未知则先探测、弹确认框。
+    fun verifyAndConnect(
+        host: String,
+        port: Int,
+        user: String,
+        password: String?,
+        keyPath: String?,
+        keyPassphrase: String?
+    ) {
+        scope.launch {
+            val known = hostKeyStore.get(host.trim(), port)
+            if (known != null) {
+                onNewSshSession(host, port, user, password, keyPath, keyPassphrase, known)
+                return@launch
+            }
+            val probe = withContext(Dispatchers.IO) {
+                SshFactory.getServerFingerprint(host.trim(), port, 10000)
+            }
+            if (probe.startsWith("ERROR: ")) {
+                hostKeyProbeError = probe.removePrefix("ERROR: ")
+            } else {
+                pendingHostKey = PendingHostKeyConnect(
+                    host, port, user, password, keyPath, keyPassphrase, probe
+                )
+            }
+        }
+    }
 
     ModalDrawerSheet(
         modifier = Modifier
@@ -133,13 +172,71 @@ fun SessionListScreen(
             onDismiss = { showSshDialog = false },
             onConnect = { host, port, user, password, keyPath, keyPassphrase ->
                 showSshDialog = false
-                onNewSshSession(host, port, user, password, keyPath, keyPassphrase)
+                verifyAndConnect(host, port, user, password, keyPath, keyPassphrase)
+            }
+        )
+    }
+
+    // 首连确认对话框：向用户展示服务器指纹，确认后存储并带证连接。
+    pendingHostKey?.let { pending ->
+        AlertDialog(
+            onDismissRequest = { pendingHostKey = null },
+            title = { Text(stringResource(R.string.ssh_confirm_host_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.ssh_confirm_host_body,
+                        "${pending.host}:${pending.port}",
+                        pending.fingerprint
+                    )
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    hostKeyStore.put(pending.host.trim(), pending.port, pending.fingerprint)
+                    onNewSshSession(
+                        pending.host, pending.port, pending.user, pending.password,
+                        pending.keyPath, pending.keyPassphrase, pending.fingerprint
+                    )
+                    pendingHostKey = null
+                }) {
+                    Text(stringResource(R.string.ssh_confirm_host_accept))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingHostKey = null }) {
+                    Text(stringResource(R.string.ssh_confirm_host_reject))
+                }
+            }
+        )
+    }
+
+    hostKeyProbeError?.let { message ->
+        AlertDialog(
+            onDismissRequest = { hostKeyProbeError = null },
+            title = { Text(stringResource(R.string.ssh_host_probe_failed_title)) },
+            text = { Text(message) },
+            confirmButton = {
+                TextButton(onClick = { hostKeyProbeError = null }) {
+                    Text(stringResource(R.string.ok))
+                }
             }
         )
     }
 }
 
 private enum class SshAuthMode { Password, PrivateKey }
+
+/** 首连指纹待确认的连接请求快照。 */
+private data class PendingHostKeyConnect(
+    val host: String,
+    val port: Int,
+    val user: String,
+    val password: String?,
+    val keyPath: String?,
+    val keyPassphrase: String?,
+    val fingerprint: String
+)
 
 /** SSH 连接信息对话框：主机/端口/用户名 + 认证方式（密码或私钥）。 */
 @Composable

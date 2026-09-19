@@ -34,6 +34,12 @@
     <string name="ssh_host_required">Host is required</string>
     <string name="ssh_user_required">Username is required</string>
     <string name="ssh_port_required">Port must be 1–65535</string>
+    <string name="ssh_confirm_host_title">First connection to this host</string>
+    <string name="ssh_confirm_host_body">The server fingerprint for %1$s is:\n\n%2$s\n\nTrust it and continue?</string>
+    <string name="ssh_confirm_host_accept">Trust and connect</string>
+    <string name="ssh_confirm_host_reject">Cancel</string>
+    <string name="ssh_host_probe_failed_title">Could not reach host</string>
+    <string name="ok">OK</string>
 
     <string name="action_copy">Copy</string>
     <string name="action_paste">Paste</string>

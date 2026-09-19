@@ -587,6 +587,49 @@ std::string server_fingerprint_of(ssh_session session) {
     return fp;
 }
 
+// 一次性主机探针：阻塞连接拿到服务端公钥指纹即断开。不进入现有会话状态机，
+// 供 App 在首连 TOFU 确认时先取指纹再决定是否信任。成功返回 "SHA256:..."；
+// 失败返回 "ERROR: <原因>"。
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_awkoo_libterminal_ssh_SshFactory_sshGetServerFingerprint(
+    JNIEnv* env, jclass, jstring jhost, jint jport, jint jtimeout_ms) {
+    const std::string host = jstring_copy(env, jhost);
+    if (host.empty()) {
+        return env->NewStringUTF("ERROR: empty host");
+    }
+    int port = static_cast<int>(jport);
+    int timeout_ms = static_cast<int>(jtimeout_ms);
+
+    ssh_session session = ssh_new();
+    if (session == nullptr) {
+        return env->NewStringUTF("ERROR: ssh_new failed");
+    }
+    int strict = 0;  // 探测阶段不做校验，仅读取指纹
+    bool ok = ssh_options_set(session, SSH_OPTIONS_HOST, host.c_str()) == SSH_OK &&
+              ssh_options_set(session, SSH_OPTIONS_PORT, &port) == SSH_OK &&
+              ssh_options_set(session, SSH_OPTIONS_STRICTHOSTKEYCHECK, &strict) == SSH_OK;
+    if (ok && timeout_ms > 0) {
+        long seconds = timeout_ms / 1000;
+        long usec = (timeout_ms % 1000) * 1000L;
+        ok = ssh_options_set(session, SSH_OPTIONS_TIMEOUT, &seconds) == SSH_OK &&
+             ssh_options_set(session, SSH_OPTIONS_TIMEOUT_USEC, &usec) == SSH_OK;
+    }
+    jstring result = nullptr;
+    if (ok && ssh_connect(session) == SSH_OK) {
+        const std::string fp = server_fingerprint_of(session);
+        result = fp.empty() ? env->NewStringUTF("ERROR: fingerprint unavailable")
+                            : env->NewStringUTF(fp.c_str());
+    } else {
+        const char* err = ssh_get_error(session);
+        const std::string text = "ERROR: " +
+            std::string(err != nullptr ? err : "connection failed");
+        result = env->NewStringUTF(text.c_str());
+    }
+    ssh_disconnect(session);
+    ssh_free(session);
+    return result;
+}
+
 }  // namespace
 
 extern "C" JNIEXPORT jlong JNICALL
