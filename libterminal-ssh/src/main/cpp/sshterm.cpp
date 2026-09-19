@@ -354,8 +354,20 @@ bool handshake_run(native_ssh* h, const conn_params& p) {
             }
         }
     } else {
-        h->fail_reason = "No authentication method configured";
-        return false;
+        // 密码可选：为空时尝试 none 认证（服务端空密码/免认证账号）。
+        for (;;) {
+            if (h->killed) {
+                return false;
+            }
+            rc = ssh_userauth_none(h->session, user);
+            if (rc == SSH_AUTH_SUCCESS) {
+                break;
+            }
+            if (rc != SSH_AUTH_AGAIN || !round_step(h)) {
+                h->fail_reason = "No authentication method configured";
+                return false;
+            }
+        }
     }
 
     // 阶段 4：打开 session 通道。

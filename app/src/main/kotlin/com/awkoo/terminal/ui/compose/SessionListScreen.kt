@@ -134,15 +134,13 @@ private fun SshConnectDialog(
 
     val hostError = if (host.isBlank()) stringResource(R.string.ssh_host_required) else null
     val userError = if (user.isBlank()) stringResource(R.string.ssh_user_required) else null
-    val passwordError = if (password.isBlank()) stringResource(R.string.ssh_password_required) else null
     val portValue = port.toIntOrNull()
     val portError = if (portValue == null || portValue !in 1..65535) {
         stringResource(R.string.ssh_port_required)
     } else {
         null
     }
-    val canSubmit = hostError == null && userError == null &&
-        passwordError == null && portError == null
+    val canSubmit = hostError == null && userError == null && portError == null
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -178,8 +176,6 @@ private fun SshConnectDialog(
                     value = password,
                     onValueChange = { password = it },
                     label = { Text(stringResource(R.string.ssh_password)) },
-                    isError = passwordError != null,
-                    supportingText = passwordError?.let { { Text(it) } },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)

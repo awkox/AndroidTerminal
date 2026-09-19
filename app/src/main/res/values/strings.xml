@@ -21,7 +21,6 @@
     <string name="cancel">Cancel</string>
     <string name="ssh_host_required">Host is required</string>
     <string name="ssh_user_required">Username is required</string>
-    <string name="ssh_password_required">Password is required</string>
     <string name="ssh_port_required">Port must be 1–65535</string>
 
     <string name="action_copy">Copy</string>
