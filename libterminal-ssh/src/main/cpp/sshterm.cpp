@@ -1,6 +1,7 @@
 #include <jni.h>
 
 #include <libssh/libssh.h>
+#include <libssh/callbacks.h>
 
 #include <poll.h>
 #include <pthread.h>
@@ -741,8 +742,38 @@ Java_com_awkoo_libterminal_ssh_SshFactory_sshErrorText(JNIEnv* env, jclass, jlon
     return env->NewStringUTF(text.c_str());
 }
 
-// 私钥连通性校验（连接前的轻量体检）：成功返回 null，失败返回友好原因。
-// ssh_pki_import_privkey_file 不带 session，错误只能自行分类诊断。
+// ---------- 私钥导入诊断 ----------
+// mbedTLS/OpenSSH 两种容器都走 ssh_pki_import_privkey_file；不带 session 时
+// libssh 只在日志里给原因。这里挂全局日志回调抓最后一条日志，把真实失败
+// 原因透给 App，避免把"口令缺失/格式/内容损坏"一律武断归为"格式不支持"。
+
+namespace {
+
+char g_pki_last_log[256] = {0};
+pthread_mutex_t g_pki_log_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+void pki_log_capture(int, const char*, const char* buffer, void*) {
+    if (buffer == nullptr) {
+        return;
+    }
+    pthread_mutex_lock(&g_pki_log_mutex);
+    std::strncpy(g_pki_last_log, buffer, sizeof(g_pki_last_log) - 1);
+    g_pki_last_log[sizeof(g_pki_last_log) - 1] = '\0';
+    pthread_mutex_unlock(&g_pki_log_mutex);
+}
+
+std::string pki_take_last_log() {
+    std::string s;
+    pthread_mutex_lock(&g_pki_log_mutex);
+    s = g_pki_last_log;
+    g_pki_last_log[0] = '\0';
+    pthread_mutex_unlock(&g_pki_log_mutex);
+    return s;
+}
+
+}  // namespace
+
+// 私钥连通性校验（连接前的轻量体检）：成功返回 null，失败返回原因。
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_awkoo_libterminal_ssh_SshFactory_sshTryLoadKey(JNIEnv* env, jclass,
                                                         jstring path_j,
@@ -756,30 +787,40 @@ Java_com_awkoo_libterminal_ssh_SshFactory_sshTryLoadKey(JNIEnv* env, jclass,
     if (::access(path.c_str(), R_OK) != 0) {
         return env->NewStringUTF("Cannot read key file");
     }
-    ssh_key key = nullptr;
+
+    ssh_set_log_callback(pki_log_capture);
+    auto import_attempt = [](const char* p, const char* pass) {
+        ssh_key key = nullptr;
+        int rc = ssh_pki_import_privkey_file(p, pass, nullptr, nullptr, &key);
+        if (key != nullptr) {
+            ssh_key_free(key);
+        }
+        return rc;
+    };
+
     const char* pass_c = pass.empty() ? nullptr : pass.c_str();
-    int rc = ssh_pki_import_privkey_file(path.c_str(), pass_c, nullptr, nullptr,
-                                         &key);
-    if (rc == SSH_OK && key != nullptr) {
-        ssh_key_free(key);
+    int rc = import_attempt(path.c_str(), pass_c);
+    if (rc == SSH_OK) {
+        ssh_set_log_callback(nullptr);
         return nullptr;
     }
-    if (key != nullptr) {
-        ssh_key_free(key);
+
+    // 无口令/空口令再试一次，区分"口令缺失/错误"与"格式损坏"。
+    if (pass_c != nullptr) {
+        ssh_set_log_callback(pki_log_capture);
+        int rc_plain = import_attempt(path.c_str(), nullptr);
+        if (rc_plain == SSH_OK) {
+            ssh_set_log_callback(nullptr);
+            return env->NewStringUTF("Wrong passphrase");
+        }
     }
-    // 无口令再试一次，区分"口令不匹配"与"格式不支持"。
-    ssh_key key2 = nullptr;
-    int rc_plain = ssh_pki_import_privkey_file(path.c_str(), nullptr, nullptr,
-                                               nullptr, &key2);
-    if (key2 != nullptr) {
-        ssh_key_free(key2);
+
+    std::string reason = pki_take_last_log();
+    ssh_set_log_callback(nullptr);
+    if (reason.empty()) {
+        reason = "Private key import failed";
     }
-    if (rc_plain == SSH_OK) {
-        return env->NewStringUTF(
-            "Wrong passphrase or key is not encrypted");
-    }
-    return env->NewStringUTF(
-        "Unsupported key format (try: ssh-keygen -p -m PEM -f <key>)");
+    return env->NewStringUTF(reason.c_str());
 }
 
 extern "C" JNIEXPORT void JNICALL
