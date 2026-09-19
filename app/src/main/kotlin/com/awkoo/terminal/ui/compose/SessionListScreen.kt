@@ -180,9 +180,10 @@ private fun SshConnectDialog(
     val keyPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
     ) { uri ->
-        keyPath = SshKeyImporter.import(context, uri)
-        keyError = if (keyPath == null) {
-            context.getString(R.string.ssh_key_import_failed)
+        val result = SshKeyImporter.import(context, uri)
+        keyPath = result.path
+        keyError = if (result.path == null) {
+            result.error ?: context.getString(R.string.ssh_key_import_failed)
         } else {
             null
         }
@@ -305,9 +306,11 @@ private fun SshConnectDialog(
                         OutlinedButton(
                             onClick = {
                                 SshKeyImporter.delete(keyPath)
-                                keyPath = SshKeyImporter.importText(context, keyPaste)
-                                keyError = if (keyPath == null) {
-                                    context.getString(R.string.ssh_key_paste_failed)
+                                val result = SshKeyImporter.importText(context, keyPaste)
+                                keyPath = result.path
+                                keyError = if (result.path == null) {
+                                    result.error
+                                        ?: context.getString(R.string.ssh_key_paste_failed)
                                 } else {
                                     null
                                 }
