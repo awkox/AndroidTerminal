@@ -771,6 +771,33 @@ std::string pki_take_last_log() {
     return s;
 }
 
+// 文件外观快照：什么都抓不到时，把这几个事实带回 App，避免继续盲猜。
+std::string pki_file_meta(const char* path) {
+    char line1[48] = {0};
+    long size = -1;
+    long body_lines = 0;
+    std::FILE* f = std::fopen(path, "rb");
+    if (f != nullptr) {
+        std::fseek(f, 0, SEEK_END);
+        size = std::ftell(f);
+        std::rewind(f);
+        std::fgets(line1, sizeof(line1), f);
+        char buf[256];
+        while (std::fgets(buf, sizeof(buf), f) != nullptr) {
+            if (std::strstr(buf, "-----BEGIN") == nullptr &&
+                std::strstr(buf, "-----END") == nullptr) {
+                ++body_lines;
+            }
+        }
+        std::fclose(f);
+    }
+    char meta[192];
+    std::snprintf(meta, sizeof(meta),
+                  "file=%ldB first=\"%s\" base64_lines=%ld", size, line1,
+                  body_lines);
+    return meta;
+}
+
 }  // namespace
 
 // 私钥连通性校验（连接前的轻量体检）：成功返回 null，失败返回原因。
@@ -788,6 +815,10 @@ Java_com_awkoo_libterminal_ssh_SshFactory_sshTryLoadKey(JNIEnv* env, jclass,
         return env->NewStringUTF("Cannot read key file");
     }
 
+    // 失败细节只在 SSH_LOG_TRACE 及以上输出，而全局日志级别默认是 0
+    // （log.c: _ssh_log 按 verbosity<=level 过滤），不调起来什么都抓不到。
+    const int prev_level = ssh_get_log_level();
+    ssh_set_log_level(SSH_LOG_TRACE);
     ssh_set_log_callback(pki_log_capture);
     auto import_attempt = [](const char* p, const char* pass) {
         ssh_key key = nullptr;
@@ -801,24 +832,26 @@ Java_com_awkoo_libterminal_ssh_SshFactory_sshTryLoadKey(JNIEnv* env, jclass,
     const char* pass_c = pass.empty() ? nullptr : pass.c_str();
     int rc = import_attempt(path.c_str(), pass_c);
     if (rc == SSH_OK) {
-        ssh_set_log_callback(nullptr);
+        ssh_set_log_level(prev_level);
         return nullptr;
     }
 
     // 无口令/空口令再试一次，区分"口令缺失/错误"与"格式损坏"。
     if (pass_c != nullptr) {
-        ssh_set_log_callback(pki_log_capture);
         int rc_plain = import_attempt(path.c_str(), nullptr);
         if (rc_plain == SSH_OK) {
-            ssh_set_log_callback(nullptr);
+            ssh_set_log_level(prev_level);
             return env->NewStringUTF("Wrong passphrase");
         }
     }
 
     std::string reason = pki_take_last_log();
-    ssh_set_log_callback(nullptr);
+    ssh_set_log_level(prev_level);
     if (reason.empty()) {
-        reason = "Private key import failed";
+        const bool cb_installed = ssh_get_log_callback() == pki_log_capture;
+        std::string meta = pki_file_meta(path.c_str());
+        reason = "Private key import failed (no debug log, cb=" +
+                 std::string(cb_installed ? "yes" : "no") + ", " + meta + ")";
     }
     return env->NewStringUTF(reason.c_str());
 }
