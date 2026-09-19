@@ -171,6 +171,8 @@ void* io_writer(void* arg) {
     return nullptr;
 }
 
+std::string server_fingerprint_of(ssh_session session);
+
 // 非阻塞握手状态机。各阶段（connect/auth/channel/pty/shell）在 libssh 0.12 下
 // 返回“需续调”常量后，必须放弃 CPU 等待下轮数据或 kill 唤醒。
 // 返回 true 表示整个握手完成；false 表示失败或已被 kill（调用方走 connector_fail）。
@@ -296,8 +298,8 @@ bool handshake_run(native_ssh* h, const conn_params& p) {
 void* connector_entry(void* arg) {
     connector_args* a = static_cast<connector_args*>(arg);
     native_ssh* h = a->h;
-    const bool ok = (ssh_set_blocking(h->session, 0) == SSH_OK) &&
-                    handshake_run(h, a->p);
+    ssh_set_blocking(h->session, 0);
+    const bool ok = handshake_run(h, a->p);
     delete a;
 
     if (!ok) {
