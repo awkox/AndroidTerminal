@@ -2,7 +2,10 @@ package com.awkoo.terminal.core
 
 import com.awkoo.libterminal.engine.TerminalSession
 import com.awkoo.libterminal.pty.CommandInfo
-import com.awkoo.libterminal.pty.PtyFactory
+import com.awkoo.libterminal.ssh.SshAuth
+import com.awkoo.libterminal.ssh.SshFactory
+import com.awkoo.libterminal.ssh.SshInfo
+import com.awkoo.terminal.Constants
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -58,17 +61,21 @@ class SessionManager @Inject constructor() {
     fun addSession(commandInfo: CommandInfo, maxTranscriptRows: Int = 5000) {
         val sessionId = idGenerator.incrementAndFetch()
 
-        // 设置终端环境变量
-        commandInfo.extraEnvironment["TERM"] = "xterm-256color"
-        commandInfo.extraEnvironment["COLORTERM"] = "truecolor"
+        // 测试阶段：临时把本地 PTY 替换为 SSH 连接，参数硬编码见 Constants.SSH_TEST_*
+        val sshInfo = SshInfo(
+            name = "ssh-test",
+            host = Constants.SSH_TEST_HOST,
+            port = Constants.SSH_TEST_PORT,
+            user = Constants.SSH_TEST_USER,
+            auth = SshAuth.Password(Constants.SSH_TEST_PASSWORD)
+        )
 
         val targetSession = TerminalSession(
             id = sessionId,
             sessionName = commandInfo.commandLabel,
-            stdin = commandInfo.stdin?.toByteArray(),
             maxTranscriptRows = maxTranscriptRows
         ) { rows, cols, w, h ->
-            PtyFactory(commandInfo, rows, cols, w, h)
+            SshFactory(sshInfo, rows, cols, w, h)
         }
 
         targetSession.execute()
