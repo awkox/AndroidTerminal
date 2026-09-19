@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <new>
 #include <string>
@@ -32,6 +33,8 @@ struct native_ssh {
     bool writer_joined = true;
     // 终止唤醒通道：kill/close 写入，握手轮询线程读取。
     int abort_pipe[2] = {-1, -1};
+    // 握手阶段预设的友好失败说明；为空时回退到 ssh_get_error。
+    std::string fail_reason;
 };
 
 struct conn_params {
@@ -85,10 +88,32 @@ void free_channel(native_ssh* h) {
     }
 }
 
-// 握手失败（含被 kill）：释放 libssh 对象并关闭 fd，让 App 侧流读到 EOF，
-// 会话按“进程立即退出”结束；随后只能通过 dispose 回收线程与句柄。
+// 握手失败（含被 kill）：先回写失败原因到终端缓冲区，再释放 libssh 对象并
+// 关闭 fd，让 App 侧流读到 EOF，会话按“进程立即退出”结束。
 void connector_fail(native_ssh* h) {
     h->killed = true;
+    // 必须在关闭 fd 前写下原因，消息字节经 App 输入流渲染到终端。
+    if (h->native_fd >= 0) {
+        std::string reason = h->fail_reason;
+        if (reason.empty() && h->session != nullptr) {
+            const char* err = ssh_get_error(h->session);
+            if (err != nullptr && err[0] != '\0') {
+                reason = err;
+            }
+        }
+        if (reason.empty()) {
+            reason = "Connection cancelled";
+        }
+        char out[512];
+        int n = std::snprintf(out, sizeof(out), "\r\n[SSH failed: %.400s - press Enter]\r\n",
+                              reason.c_str());
+        if (n > 0) {
+            const size_t len = static_cast<size_t>(n) < sizeof(out)
+                                   ? static_cast<size_t>(n)
+                                   : sizeof(out);
+            (void)::send(h->native_fd, out, len, MSG_NOSIGNAL);
+        }
+    }
     // 0.12 的 ssh_disconnect 会 do_free session->channels 里的全部 channel，
     // 因此 ssh_channel_free 必须排在 ssh_disconnect 之前，否则构成二次释放。
     free_channel(h);
@@ -198,9 +223,13 @@ bool handshake_run(native_ssh* h, const conn_params& p) {
     if (h->killed) {
         return false;
     }
-    if (server_fingerprint.empty() ||
-        (!p.expected_fingerprint.empty() &&
-         server_fingerprint != p.expected_fingerprint)) {
+    if (server_fingerprint.empty()) {
+        h->fail_reason = "Cannot obtain server host key";
+        return false;
+    }
+    if (!p.expected_fingerprint.empty() &&
+        server_fingerprint != p.expected_fingerprint) {
+        h->fail_reason = "Host key fingerprint mismatch";
         return false;
     }
 
@@ -243,6 +272,7 @@ bool handshake_run(native_ssh* h, const conn_params& p) {
             }
         }
     } else {
+        h->fail_reason = "No authentication method configured";
         return false;
     }
 
