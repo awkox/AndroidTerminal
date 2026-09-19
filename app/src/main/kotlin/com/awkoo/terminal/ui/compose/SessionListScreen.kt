@@ -165,6 +165,8 @@ private fun SshConnectDialog(
     var keyPath by remember { mutableStateOf<String?>(null) }
     var keyPassphrase by remember { mutableStateOf("") }
     var keyError by remember { mutableStateOf<String?>(null) }
+    var keySource by remember { mutableStateOf(KeySource.File) }
+    var keyPaste by remember { mutableStateOf("") }
 
     val hostError = if (host.isBlank()) stringResource(R.string.ssh_host_required) else null
     val userError = if (user.isBlank()) stringResource(R.string.ssh_user_required) else null
@@ -260,20 +262,67 @@ private fun SshConnectDialog(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
                     )
                 } else {
-                    OutlinedButton(
-                        onClick = {
-                            keyPicker.launch(arrayOf("*/*"))
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.Lock, null)
-                        Text(
-                            if (keyPath != null) {
-                                stringResource(R.string.ssh_key_replaced)
-                            } else {
-                                stringResource(R.string.ssh_select_key)
-                            }
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        SegmentedButton(
+                            selected = keySource == KeySource.File,
+                            onClick = { keySource = KeySource.File },
+                            shape = SegmentedButtonDefaults.itemShape(0, 2)
+                        ) {
+                            Text(stringResource(R.string.ssh_key_source_file))
+                        }
+                        SegmentedButton(
+                            selected = keySource == KeySource.Paste,
+                            onClick = { keySource = KeySource.Paste },
+                            shape = SegmentedButtonDefaults.itemShape(1, 2)
+                        ) {
+                            Text(stringResource(R.string.ssh_key_source_paste))
+                        }
+                    }
+                    if (keySource == KeySource.File) {
+                        OutlinedButton(
+                            onClick = {
+                                keyPicker.launch(arrayOf("*/*"))
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Lock, null)
+                            Text(
+                                if (keyPath != null) {
+                                    stringResource(R.string.ssh_key_replaced)
+                                } else {
+                                    stringResource(R.string.ssh_select_key)
+                                }
+                            )
+                        }
+                    } else {
+                        OutlinedTextField(
+                            value = keyPaste,
+                            onValueChange = { keyPaste = it },
+                            label = { Text(stringResource(R.string.ssh_paste_key_hint)) },
+                            supportingText = { Text(stringResource(R.string.ssh_paste_key_apply)) },
+                            minLines = 5
                         )
+                        OutlinedButton(
+                            onClick = {
+                                SshKeyImporter.delete(keyPath)
+                                keyPath = SshKeyImporter.importText(context, keyPaste)
+                                keyError = if (keyPath == null) {
+                                    context.getString(R.string.ssh_key_paste_failed)
+                                } else {
+                                    null
+                                }
+                            },
+                            enabled = keyPaste.isNotBlank(),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                if (keyPath != null) {
+                                    stringResource(R.string.ssh_key_replaced)
+                                } else {
+                                    stringResource(R.string.ssh_paste_key_use)
+                                }
+                            )
+                        }
                     }
                     keyError?.let { error ->
                         Text(
@@ -318,3 +367,6 @@ private fun SshConnectDialog(
         }
     )
 }
+
+/** SSH 私钥来源：文件选择（SAF）或直接粘贴文本。 */
+private enum class KeySource { File, Paste }

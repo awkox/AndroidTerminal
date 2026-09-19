@@ -25,6 +25,12 @@
     <string name="ssh_key_replaced">Choose another key file</string>
     <string name="ssh_key_passphrase">Key passphrase (optional)</string>
     <string name="ssh_key_import_failed">Failed to import key</string>
+    <string name="ssh_key_source_file">Choose file</string>
+    <string name="ssh_key_source_paste">Paste key</string>
+    <string name="ssh_paste_key_hint">Paste private key content</string>
+    <string name="ssh_paste_key_apply">Pasted key will be validated before connecting</string>
+    <string name="ssh_paste_key_use">Use pasted key</string>
+    <string name="ssh_key_paste_failed">Failed to save pasted key</string>
     <string name="ssh_host_required">Host is required</string>
     <string name="ssh_user_required">Username is required</string>
     <string name="ssh_port_required">Port must be 1–65535</string>

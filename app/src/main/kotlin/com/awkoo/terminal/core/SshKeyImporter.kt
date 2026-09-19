@@ -61,4 +61,27 @@ object SshKeyImporter {
             f.delete()
         }
     }
+
+    /**
+     * 将粘贴的私钥文本落盘为真实路径（绕过 SAF），供 native 直接加载。
+     * 返回复制后的路径；内容为空或写入失败返回 null。
+     */
+    fun importText(context: Context, content: String?): String? {
+        val cleaned = content?.trim() ?: return null
+        if (cleaned.isEmpty()) {
+            return null
+        }
+        val dir = File(context.filesDir, dirName).apply { mkdirs() }
+        val target = File(dir, "pasted_${System.currentTimeMillis()}")
+        return try {
+            target.writeText(cleaned, Charsets.UTF_8)
+            runCatching {
+                FileOutputStream(target).use { out -> out.fd.sync() }
+            }
+            target.absolutePath
+        } catch (e: Exception) {
+            target.delete()
+            null
+        }
+    }
 }
