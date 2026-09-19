@@ -239,7 +239,8 @@ void* io_writer(void* arg) {
                     err = e;
                 }
             }
-            note_error(h, err.empty() ? "SSH channel read failed" : err);
+            // libssh 可能只返回错误码而不留会话错误文本，兜底用连接丢失措辞。
+            note_error(h, err.empty() ? "SSH connection lost" : err);
             break;
         }
         if (n == 0) {
