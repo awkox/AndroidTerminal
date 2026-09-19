@@ -41,6 +41,10 @@ struct native_ssh {
     volatile int resize_cols = 0;
     // 尺寸暂存与应用互斥；libssh 单 session 非线程安全。
     pthread_mutex_t resize_mutex = PTHREAD_MUTEX_INITIALIZER;
+    // 结构化失败原因：连接失败/中途掉线时由工作线程快照，App 经 sshErrorText
+    // 在 waitFor 返回后读取。不走 socketpair，避免与 emulator 处理器竞争丢失。
+    std::string error_text;
+    pthread_mutex_t error_mutex = PTHREAD_MUTEX_INITIALIZER;
 };
 
 struct conn_params {
@@ -91,6 +95,38 @@ void request_kill(native_ssh* h) {
     }
 }
 
+// 记录/读取结构化失败原因；仅 set 时加锁，get 在 waitFor 返回后调用。
+void note_error(native_ssh* h, std::string msg) {
+    if (h == nullptr) {
+        return;
+    }
+    pthread_mutex_lock(&h->error_mutex);
+    h->error_text = std::move(msg);
+    pthread_mutex_unlock(&h->error_mutex);
+}
+
+// 当前无原因时才写入：避免被笼统描述覆盖更具体的错误。
+void fill_blank_error(native_ssh* h, std::string msg) {
+    if (h == nullptr) {
+        return;
+    }
+    pthread_mutex_lock(&h->error_mutex);
+    if (h->error_text.empty()) {
+        h->error_text = std::move(msg);
+    }
+    pthread_mutex_unlock(&h->error_mutex);
+}
+
+std::string take_error(native_ssh* h) {
+    if (h == nullptr) {
+        return {};
+    }
+    pthread_mutex_lock(&h->error_mutex);
+    std::string s = h->error_text;
+    pthread_mutex_unlock(&h->error_mutex);
+    return s;
+}
+
 // 握手轮询步进：最多等 50ms，被 kill（pipe 收到数据）立即返回 false。
 // 仅在返回 true 时调用方才驳回“续调非阻塞调用”。
 bool round_step(native_ssh* h) {
@@ -112,32 +148,22 @@ void free_channel(native_ssh* h) {
     }
 }
 
-// 握手失败（含被 kill）：先回写失败原因到终端缓冲区，再释放 libssh 对象并
-// 关闭 fd，让 App 侧流读到 EOF，会话按“进程立即退出”结束。
+// 握手失败（含被 kill）：快照失败原因，再释放 libssh 对象并关闭 fd，让 App
+// 侧流读到 EOF，会话按"进程立即退出"结束；随后只能通过 dispose 回收线程。
 void connector_fail(native_ssh* h) {
     h->killed = true;
-    // 必须在关闭 fd 前写下原因，消息字节经 App 输入流渲染到终端。
-    if (h->native_fd >= 0) {
-        std::string reason = h->fail_reason;
-        if (reason.empty() && h->session != nullptr) {
-            const char* err = ssh_get_error(h->session);
-            if (err != nullptr && err[0] != '\0') {
-                reason = err;
-            }
-        }
-        if (reason.empty()) {
-            reason = "Connection cancelled";
-        }
-        char out[512];
-        int n = std::snprintf(out, sizeof(out), "\r\n[SSH failed: %.400s - press Enter]\r\n",
-                              reason.c_str());
-        if (n > 0) {
-            const size_t len = static_cast<size_t>(n) < sizeof(out)
-                                   ? static_cast<size_t>(n)
-                                   : sizeof(out);
-            (void)::send(h->native_fd, out, len, MSG_NOSIGNAL);
+    // 必须先于 ssh_disconnect 快照（ssh_get_error 依赖存活 session）。
+    std::string reason = h->fail_reason;
+    if (reason.empty() && h->session != nullptr) {
+        const char* err = ssh_get_error(h->session);
+        if (err != nullptr && err[0] != '\0') {
+            reason = err;
         }
     }
+    if (reason.empty()) {
+        reason = "Connection cancelled";
+    }
+    note_error(h, reason);
     // 0.12 的 ssh_disconnect 会 do_free session->channels 里的全部 channel，
     // 因此 ssh_channel_free 必须排在 ssh_disconnect 之前，否则构成二次释放。
     free_channel(h);
@@ -173,6 +199,14 @@ void* io_reader(void* arg) {
                 continue;
             }
             if (written < 0) {
+                std::string err;
+                if (h->session != nullptr) {
+                    const char* e = ssh_get_error(h->session);
+                    if (e != nullptr && e[0] != '\0') {
+                        err = e;
+                    }
+                }
+                note_error(h, err.empty() ? "SSH channel write failed" : err);
                 return nullptr;
             }
             off += static_cast<size_t>(written);
@@ -197,7 +231,18 @@ void* io_writer(void* arg) {
             usleep(10000);
             continue;
         }
-        if (n <= 0) {
+        if (n < 0) {
+            std::string err;
+            if (h->session != nullptr) {
+                const char* e = ssh_get_error(h->session);
+                if (e != nullptr && e[0] != '\0') {
+                    err = e;
+                }
+            }
+            note_error(h, err.empty() ? "SSH channel read failed" : err);
+            break;
+        }
+        if (n == 0) {
             break;
         }
         size_t off = 0;
@@ -215,7 +260,20 @@ void* io_writer(void* arg) {
         // 被 kill 时通道可能已被并发释放，只采集退出状态（正常路径）
         uint32_t exit_state = UINT32_MAX;
         ssh_channel_get_exit_state(h->channel, &exit_state, nullptr, nullptr);
-        h->exit_st = exit_state != UINT32_MAX ? static_cast<int>(exit_state) : -1;
+        if (exit_state != UINT32_MAX) {
+            h->exit_st = static_cast<int>(exit_state);
+        } else {
+            // 远端未给出明确退出状态（连接中断/对端关闭），给出可读原因。
+            h->exit_st = -1;
+            std::string err;
+            if (h->session != nullptr) {
+                const char* e = ssh_get_error(h->session);
+                if (e != nullptr && e[0] != '\0') {
+                    err = e;
+                }
+            }
+            fill_blank_error(h, err.empty() ? "SSH connection lost" : err);
+        }
     }
     return nullptr;
 }
@@ -389,6 +447,10 @@ void* connector_entry(void* arg) {
     // 构造时的默认 24x80 卡住（此前 channel==null 会被静默丢弃）。
     apply_pending_resize(h);
 
+    // 握手期（连接/断线告警/重试等）可能残留会话错误，成功收敛后清空，
+    // 避免 sshErrorText 返回与本次成功无关的陈旧描述。
+    note_error(h, {});
+
     h->connected = true;
     return nullptr;
 }
@@ -442,6 +504,7 @@ void dispose(native_ssh* h) {
     }
     teardown(h, true);
     pthread_mutex_destroy(&h->resize_mutex);
+    pthread_mutex_destroy(&h->error_mutex);
     delete h;
 }
 
@@ -542,6 +605,7 @@ Java_com_awkoo_libterminal_ssh_SshFactory_sshConnect(
         return 0;
     }
     pthread_mutex_init(&h->resize_mutex, nullptr);
+    pthread_mutex_init(&h->error_mutex, nullptr);
 
     if (pipe(h->abort_pipe) != 0) {
         ssh_free(session);
@@ -630,6 +694,13 @@ Java_com_awkoo_libterminal_ssh_SshFactory_sshWait(JNIEnv*, jclass, jlong handle)
         h->writer_joined = true;
     }
     return h->exit_st;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_awkoo_libterminal_ssh_SshFactory_sshErrorText(JNIEnv* env, jclass, jlong handle) {
+    // 必须在 waitFor 返回后、close（teardown 释放 session）之前调用。
+    std::string text = take_error(reinterpret_cast<native_ssh*>(handle));
+    return env->NewStringUTF(text.c_str());
 }
 
 extern "C" JNIEXPORT void JNICALL

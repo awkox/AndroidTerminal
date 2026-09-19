@@ -2,10 +2,9 @@ package com.awkoo.terminal.core
 
 import com.awkoo.libterminal.engine.TerminalSession
 import com.awkoo.libterminal.pty.CommandInfo
-import com.awkoo.libterminal.ssh.SshAuth
+import com.awkoo.libterminal.pty.PtyFactory
 import com.awkoo.libterminal.ssh.SshFactory
 import com.awkoo.libterminal.ssh.SshInfo
-import com.awkoo.terminal.Constants
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -59,25 +58,37 @@ class SessionManager @Inject constructor() {
     }
 
     fun addSession(commandInfo: CommandInfo, maxTranscriptRows: Int = 5000) {
-        val sessionId = idGenerator.incrementAndFetch()
-
-        // 测试阶段：临时把本地 PTY 替换为 SSH 连接，参数硬编码见 Constants.SSH_TEST_*
-        val sshInfo = SshInfo(
-            name = "ssh-test",
-            host = Constants.SSH_TEST_HOST,
-            port = Constants.SSH_TEST_PORT,
-            user = Constants.SSH_TEST_USER,
-            auth = SshAuth.Password(Constants.SSH_TEST_PASSWORD)
-        )
-
         val targetSession = TerminalSession(
-            id = sessionId,
+            id = idGenerator.incrementAndFetch(),
             sessionName = commandInfo.commandLabel,
+            maxTranscriptRows = maxTranscriptRows
+        ) { rows, cols, w, h ->
+            PtyFactory(commandInfo, rows, cols, w, h)
+        }
+
+        registerSession(targetSession)
+    }
+
+    /**
+     * 新建 SSH 会话：进程工厂为 [SshFactory]，凭据仅用密码认证。
+     *
+     * [name] 非空时作为会话显示名，否则回退为 "user@host"。
+     */
+    fun addSshSession(sshInfo: SshInfo, name: String?, maxTranscriptRows: Int = 5000) {
+        val displayName = name ?: "${sshInfo.user}@${sshInfo.host}"
+        val targetSession = TerminalSession(
+            id = idGenerator.incrementAndFetch(),
+            sessionName = MutableStateFlow(displayName),
             maxTranscriptRows = maxTranscriptRows
         ) { rows, cols, w, h ->
             SshFactory(sshInfo, rows, cols, w, h)
         }
 
+        registerSession(targetSession)
+    }
+
+    /** 入列、设为当前会话，并启动 isRemove/列表剔除兜底清理协程。 */
+    private fun registerSession(targetSession: TerminalSession) {
         targetSession.execute()
 
         _sessionList.update { it + targetSession }
@@ -90,7 +101,7 @@ class SessionManager @Inject constructor() {
             combine(targetSession.isRemove, _sessionList) { isRemove, list ->
                 isRemove || list.none { it.id == targetSession.id }
             }.first { it }
-            
+
             removeSession(targetSession.id)
         }
     }

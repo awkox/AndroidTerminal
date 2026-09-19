@@ -181,6 +181,12 @@ class TerminalSession(
                 terminalReadBufferPoolChannel.trySend(pendingChunk)
             }
 
+            // SSH 等进程的非正常退出原因（结构化来源，不走 socket，无竞态）。
+            p.failureReason?.takeIf { it.isNotEmpty() }?.let { reason ->
+                val reasonBytes = ("\r\n[SSH failed: $reason]\r\n").toByteArray()
+                emulator.append(reasonBytes, reasonBytes.size)
+            }
+
             var exitDescription = "\r\n[Process completed"
             if (exitCode > 0) {
                 // 非零退出码

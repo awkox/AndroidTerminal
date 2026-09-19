@@ -51,6 +51,9 @@ class SshFactory(
         private external fun sshWait(handle: Long): Int
 
         @JvmStatic
+        private external fun sshErrorText(handle: Long): String
+
+        @JvmStatic
         private external fun sshKill(handle: Long)
 
         @JvmStatic
@@ -97,8 +100,19 @@ class SshFactory(
             return -1
         }
         // native 阻塞等待握手收敛；失败（含被 kill）返回 -1，成功则等待 shell 退出。
-        return sshWait(h)
+        val code = sshWait(h)
+        // 非零退出时快照结构化原因，供行程处理在 close() 前读取。
+        if (_failureReason == null && code != 0) {
+            _failureReason = sshErrorText(h).takeIf { it.isNotEmpty() }
+        }
+        return code
     }
+
+    private var _failureReason: String? = null
+
+    /** 非正常退出原因（认证失败/连接中断等）；正常退出或本地进程为 null。 */
+    override val failureReason: String?
+        get() = _failureReason
 
     override fun kill() {
         // 句柄立即可用：握手进行中唤醒 native 立即折返，已连接则由 killed 轮询收尾。
