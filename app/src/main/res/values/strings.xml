@@ -19,6 +19,12 @@
     <string name="ssh_password">Password</string>
     <string name="ssh_connect">Connect</string>
     <string name="cancel">Cancel</string>
+    <string name="ssh_auth_password">Password</string>
+    <string name="ssh_auth_key">Private key</string>
+    <string name="ssh_select_key">Choose key file</string>
+    <string name="ssh_key_replaced">Choose another key file</string>
+    <string name="ssh_key_passphrase">Key passphrase (optional)</string>
+    <string name="ssh_key_import_failed">Failed to import key</string>
     <string name="ssh_host_required">Host is required</string>
     <string name="ssh_user_required">Username is required</string>
     <string name="ssh_port_required">Port must be 1–65535</string>

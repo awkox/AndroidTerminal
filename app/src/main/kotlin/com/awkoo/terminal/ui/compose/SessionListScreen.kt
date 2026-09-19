@@ -1,5 +1,7 @@
 package com.awkoo.terminal.ui.compose
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,27 +22,36 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.awkoo.libterminal.engine.TerminalSession
+import com.awkoo.libterminal.ssh.SshFactory
 import com.awkoo.terminal.R
+import com.awkoo.terminal.core.SshKeyImporter
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * 会话抽屉：会话列表 + 新建按钮。
  *
  * "New Session" 与本机本地 shell；并排的 "SSH" 弹出连接信息对话框，
- * 暂只处理密码认证（不处理私钥）。
+ * 支持密码与私钥（可带 passphrase）两种认证方式。
  */
 @Composable
 fun SessionListScreen(
@@ -48,7 +59,14 @@ fun SessionListScreen(
     currentSession: TerminalSession?,
     onSessionSelected: (sessionId: Int) -> Unit,
     onNewSession: () -> Unit,
-    onNewSshSession: (host: String, port: Int, user: String, password: String) -> Unit
+    onNewSshSession: (
+        host: String,
+        port: Int,
+        user: String,
+        password: String?,
+        keyPath: String?,
+        keyPassphrase: String?
+    ) -> Unit
 ) {
     val listState = rememberLazyListState()
     var showSshDialog by remember { mutableStateOf(false) }
@@ -113,24 +131,40 @@ fun SessionListScreen(
     if (showSshDialog) {
         SshConnectDialog(
             onDismiss = { showSshDialog = false },
-            onConnect = { host, port, user, password ->
+            onConnect = { host, port, user, password, keyPath, keyPassphrase ->
                 showSshDialog = false
-                onNewSshSession(host, port, user, password)
+                onNewSshSession(host, port, user, password, keyPath, keyPassphrase)
             }
         )
     }
 }
 
-/** SSH 连接信息对话框：主机/端口/用户名/密码，仅密码认证。 */
+private enum class SshAuthMode { Password, PrivateKey }
+
+/** SSH 连接信息对话框：主机/端口/用户名 + 认证方式（密码或私钥）。 */
 @Composable
 private fun SshConnectDialog(
     onDismiss: () -> Unit,
-    onConnect: (host: String, port: Int, user: String, password: String) -> Unit
+    onConnect: (
+        host: String,
+        port: Int,
+        user: String,
+        password: String?,
+        keyPath: String?,
+        keyPassphrase: String?
+    ) -> Unit
 ) {
+    val context = LocalContext.current
+
     var host by remember { mutableStateOf("") }
     var port by remember { mutableStateOf("22") }
     var user by remember { mutableStateOf("") }
+
+    var authMode by remember { mutableStateOf(SshAuthMode.Password) }
     var password by remember { mutableStateOf("") }
+    var keyPath by remember { mutableStateOf<String?>(null) }
+    var keyPassphrase by remember { mutableStateOf("") }
+    var keyError by remember { mutableStateOf<String?>(null) }
 
     val hostError = if (host.isBlank()) stringResource(R.string.ssh_host_required) else null
     val userError = if (user.isBlank()) stringResource(R.string.ssh_user_required) else null
@@ -140,7 +174,33 @@ private fun SshConnectDialog(
     } else {
         null
     }
-    val canSubmit = hostError == null && userError == null && portError == null
+
+    val keyPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        keyPath = SshKeyImporter.import(context, uri)
+        keyError = if (keyPath == null) {
+            context.getString(R.string.ssh_key_import_failed)
+        } else {
+            null
+        }
+    }
+
+    // 私钥选择/口令变化后立即校验格式与 passphrase，连接前给出就地反馈。
+    LaunchedEffect(keyPath, keyPassphrase) {
+        val path = keyPath
+        if (path == null) {
+            keyError = null
+            return@LaunchedEffect
+        }
+        keyError = withContext(Dispatchers.IO) {
+            SshFactory.checkPrivateKey(path, keyPassphrase.ifBlank { null })
+        }
+    }
+
+    val keyReady = keyPath != null && keyError == null
+    val canSubmit = hostError == null && userError == null && portError == null &&
+        (authMode == SshAuthMode.Password || keyReady)
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -172,21 +232,80 @@ private fun SshConnectDialog(
                     supportingText = userError?.let { { Text(it) } },
                     singleLine = true
                 )
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = { Text(stringResource(R.string.ssh_password)) },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
-                )
+
+                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    SegmentedButton(
+                        selected = authMode == SshAuthMode.Password,
+                        onClick = { authMode = SshAuthMode.Password },
+                        shape = SegmentedButtonDefaults.itemShape(0, 2)
+                    ) {
+                        Text(stringResource(R.string.ssh_auth_password))
+                    }
+                    SegmentedButton(
+                        selected = authMode == SshAuthMode.PrivateKey,
+                        onClick = { authMode = SshAuthMode.PrivateKey },
+                        shape = SegmentedButtonDefaults.itemShape(1, 2)
+                    ) {
+                        Text(stringResource(R.string.ssh_auth_key))
+                    }
+                }
+
+                if (authMode == SshAuthMode.Password) {
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text(stringResource(R.string.ssh_password)) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                    )
+                } else {
+                    OutlinedButton(
+                        onClick = {
+                            keyPicker.launch(arrayOf("*/*"))
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.Lock, null)
+                        Text(
+                            if (keyPath != null) {
+                                stringResource(R.string.ssh_key_replaced)
+                            } else {
+                                stringResource(R.string.ssh_select_key)
+                            }
+                        )
+                    }
+                    keyError?.let { error ->
+                        Text(
+                            error,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    OutlinedTextField(
+                        value = keyPassphrase,
+                        onValueChange = { keyPassphrase = it },
+                        label = { Text(stringResource(R.string.ssh_key_passphrase)) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password)
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(
                 enabled = canSubmit,
                 onClick = {
-                    onConnect(host.trim(), portValue!!, user.trim(), password)
+                    val isKey = authMode == SshAuthMode.PrivateKey
+                    onConnect(
+                        host.trim(),
+                        portValue!!,
+                        user.trim(),
+                        if (isKey) null else password,
+                        if (isKey) keyPath else null,
+                        if (isKey) keyPassphrase.ifBlank { null } else null
+                    )
                 }
             ) {
                 Text(stringResource(R.string.ssh_connect))

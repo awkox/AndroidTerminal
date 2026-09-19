@@ -58,6 +58,18 @@ class SshFactory(
 
         @JvmStatic
         private external fun sshClose(handle: Long)
+
+        @JvmStatic
+        private external fun sshTryLoadKey(path: String, passphrase: String?): String?
+
+        /**
+         * 连接前校验私钥：返回 null 表示可加载；否则为失败原因文本
+         * （找不到/不可读/passphrase 不匹配/格式不支持）。
+         */
+        @JvmStatic
+        fun checkPrivateKey(path: String, passphrase: String?): String? {
+            return sshTryLoadKey(path, passphrase)
+        }
     }
 
     /** 立即有效的会话句柄：0 表示构造期致命失败（native 已关 fd，App 侧到 EOF）。 */

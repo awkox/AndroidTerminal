@@ -50,14 +50,26 @@ class MainViewModel @Inject constructor(
         ensureTerminalService()
     }
 
-    /** 新建 SSH 会话，凭据仅密码认证。 */
-    fun addSshSession(host: String, port: Int, user: String, password: String) {
+    /** 新建 SSH 会话；私钥模式传 [keyPath]，否则用 [password]（可空=空认证）。 */
+    fun addSshSession(
+        host: String,
+        port: Int,
+        user: String,
+        password: String?,
+        keyPath: String? = null,
+        keyPassphrase: String? = null
+    ) {
+        val auth = if (keyPath != null) {
+            SshAuth.PrivateKey(keyPath, keyPassphrase)
+        } else {
+            SshAuth.Password(password ?: "")
+        }
         val sshInfo = SshInfo(
             name = "$user@$host",
             host = host,
             port = port,
             user = user,
-            auth = SshAuth.Password(password)
+            auth = auth
         )
         sessionManager.addSshSession(sshInfo, name = "$user@$host",
             maxTranscriptRows = transcriptRows.value)

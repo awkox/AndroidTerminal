@@ -741,6 +741,47 @@ Java_com_awkoo_libterminal_ssh_SshFactory_sshErrorText(JNIEnv* env, jclass, jlon
     return env->NewStringUTF(text.c_str());
 }
 
+// 私钥连通性校验（连接前的轻量体检）：成功返回 null，失败返回友好原因。
+// ssh_pki_import_privkey_file 不带 session，错误只能自行分类诊断。
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_awkoo_libterminal_ssh_SshFactory_sshTryLoadKey(JNIEnv* env, jclass,
+                                                        jstring path_j,
+                                                        jstring pass_j) {
+    std::string path = jstring_copy(env, path_j);
+    std::string pass = pass_j != nullptr ? jstring_copy(env, pass_j)
+                                         : std::string();
+    if (path.empty()) {
+        return env->NewStringUTF("No key file selected");
+    }
+    if (::access(path.c_str(), R_OK) != 0) {
+        return env->NewStringUTF("Cannot read key file");
+    }
+    ssh_key key = nullptr;
+    const char* pass_c = pass.empty() ? nullptr : pass.c_str();
+    int rc = ssh_pki_import_privkey_file(path.c_str(), pass_c, nullptr, nullptr,
+                                         &key);
+    if (rc == SSH_OK && key != nullptr) {
+        ssh_key_free(key);
+        return nullptr;
+    }
+    if (key != nullptr) {
+        ssh_key_free(key);
+    }
+    // 无口令再试一次，区分"口令不匹配"与"格式不支持"。
+    ssh_key key2 = nullptr;
+    int rc_plain = ssh_pki_import_privkey_file(path.c_str(), nullptr, nullptr,
+                                               nullptr, &key2);
+    if (key2 != nullptr) {
+        ssh_key_free(key2);
+    }
+    if (rc_plain == SSH_OK) {
+        return env->NewStringUTF(
+            "Wrong passphrase or key is not encrypted");
+    }
+    return env->NewStringUTF(
+        "Unsupported key format (try: ssh-keygen -p -m PEM -f <key>)");
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_com_awkoo_libterminal_ssh_SshFactory_sshKill(JNIEnv*, jclass, jlong handle) {
     native_ssh* h = reinterpret_cast<native_ssh*>(handle);

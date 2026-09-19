@@ -140,10 +140,12 @@ fun MainActivity.SessionListDrawer(colorScheme: TerminalColorScheme) {
                             viewModel.addSession(null)
                         }
                     },
-                    onNewSshSession = { host, port, user, password ->
+                    onNewSshSession = { host, port, user, password, keyPath, keyPassphrase ->
                         scope.launch {
                             drawerState.close()
-                            viewModel.addSshSession(host, port, user, password)
+                            viewModel.addSshSession(
+                                host, port, user, password, keyPath, keyPassphrase
+                            )
                         }
                     }
                 )
