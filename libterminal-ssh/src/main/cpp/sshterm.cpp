@@ -35,6 +35,12 @@ struct native_ssh {
     int abort_pipe[2] = {-1, -1};
     // 握手阶段预设的友好失败说明；为空时回退到 ssh_get_error。
     std::string fail_reason;
+    // 最近一次期望尺寸。握手未收敛（channel 尚为 null）时 sshResize 不丢消息，
+    // 先暂存此处，由连接线程在 PTY+shell 建立后应用；应用后清零。0 表示无待发。
+    volatile int resize_rows = 0;
+    volatile int resize_cols = 0;
+    // 尺寸暂存与应用互斥；libssh 单 session 非线程安全。
+    pthread_mutex_t resize_mutex = PTHREAD_MUTEX_INITIALIZER;
 };
 
 struct conn_params {
@@ -57,6 +63,24 @@ struct connector_args {
 };
 
 constexpr size_t kIoBuffer = 4096;
+
+// 应用暂存的期望尺寸到远端 PTY；change_pty_size 参数序为 (cols, rows)。
+// libssh 同一 session 非线程安全，change_pty_size 可能被 App 线程（sshResize）
+// 与握手线程（connector）并发调用，统一在锁内执行。
+void apply_pending_resize(native_ssh* h) {
+    if (h->resize_rows <= 0 || h->resize_cols <= 0) {
+        return;
+    }
+    pthread_mutex_lock(&h->resize_mutex);
+    const int rows = h->resize_rows;
+    const int cols = h->resize_cols;
+    h->resize_rows = 0;
+    h->resize_cols = 0;
+    pthread_mutex_unlock(&h->resize_mutex);
+    if (h->channel != nullptr) {
+        (void)ssh_channel_change_pty_size(h->channel, cols, rows);
+    }
+}
 
 void request_kill(native_ssh* h) {
     h->killed = true;
@@ -295,13 +319,17 @@ bool handshake_run(native_ssh* h, const conn_params& p) {
         }
     }
 
-    // 阶段 5：申请 PTY 与 shell。
+    // 阶段 5：申请 PTY 与 shell。若 App 已在握手期推过尺寸，首发直接用最新值。
+    pthread_mutex_lock(&h->resize_mutex);
+    const int pty_rows = h->resize_rows > 0 ? h->resize_rows : p.rows;
+    const int pty_cols = h->resize_cols > 0 ? h->resize_cols : p.cols;
+    pthread_mutex_unlock(&h->resize_mutex);
     for (;;) {
         if (h->killed) {
             return false;
         }
-        rc = ssh_channel_request_pty_size(channel, "xterm-256color", p.cols,
-                                          p.rows);
+        rc = ssh_channel_request_pty_size(channel, "xterm-256color", pty_cols,
+                                          pty_rows);
         if (rc == SSH_OK) {
             break;
         }
@@ -357,6 +385,10 @@ void* connector_entry(void* arg) {
     }
     h->writer_joined = false;
 
+    // 握手期间 App 侧发来的尺寸变更此刻一并下发，保证首发 PTY 尺寸不为
+    // 构造时的默认 24x80 卡住（此前 channel==null 会被静默丢弃）。
+    apply_pending_resize(h);
+
     h->connected = true;
     return nullptr;
 }
@@ -409,6 +441,7 @@ void dispose(native_ssh* h) {
         return;
     }
     teardown(h, true);
+    pthread_mutex_destroy(&h->resize_mutex);
     delete h;
 }
 
@@ -508,6 +541,7 @@ Java_com_awkoo_libterminal_ssh_SshFactory_sshConnect(
         ::close(native_fd);
         return 0;
     }
+    pthread_mutex_init(&h->resize_mutex, nullptr);
 
     if (pipe(h->abort_pipe) != 0) {
         ssh_free(session);
@@ -558,10 +592,18 @@ Java_com_awkoo_libterminal_ssh_SshFactory_sshConnect(
 extern "C" JNIEXPORT void JNICALL
 Java_com_awkoo_libterminal_ssh_SshFactory_sshResize(JNIEnv*, jclass, jlong handle, jint rows, jint cols) {
     native_ssh* h = reinterpret_cast<native_ssh*>(handle);
-    if (h == nullptr || h->channel == nullptr) {
+    if (h == nullptr || h->connect_failed) {
         return;
     }
-    ssh_channel_change_pty_size(h->channel, cols, rows);
+    // 信道未就绪时暂存，由连接线程收敛后应用；就绪时立即下发。
+    pthread_mutex_lock(&h->resize_mutex);
+    h->resize_rows = rows;
+    h->resize_cols = cols;
+    const bool apply = h->channel != nullptr;
+    pthread_mutex_unlock(&h->resize_mutex);
+    if (apply) {
+        apply_pending_resize(h);
+    }
 }
 
 extern "C" JNIEXPORT jint JNICALL
