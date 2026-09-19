@@ -1,0 +1,4 @@
+# JNI 入口类：保留 SshFactory 及其静态 external 方法，避免 R8 移除/改写 JNI 符号
+-keep class com.awkoo.libterminal.ssh.SshFactory {
+    public protected *;
+}

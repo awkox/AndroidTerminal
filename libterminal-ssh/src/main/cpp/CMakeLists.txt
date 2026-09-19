@@ -5,13 +5,31 @@ set(CMAKE_SKIP_INSTALL_RULES ON CACHE BOOL "" FORCE)
 
 project("ssh_deps")
 
+set(CMAKE_C_STANDARD 23)
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+set(TERMINAL_COMPILE_OPTIONS
+    -Wall -Wextra -Werror
+    -O3
+    -fno-stack-protector
+    -flto
+)
+
+set(TERMINAL_LINK_OPTIONS
+    -Wl,--gc-sections
+    -Wl,-s
+    -flto
+)
+
 set(THIRD_PARTY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party)
 
 set(MBEDTLS_USER_CONFIG_FILE
     "${THIRD_PARTY_DIR}/mbedtls_user_config.h"
     CACHE FILEPATH "" FORCE)
-set(USE_SHARED_MBEDTLS_LIBRARY ON  CACHE BOOL "" FORCE)
-set(USE_STATIC_MBEDTLS_LIBRARY  OFF CACHE BOOL "" FORCE)
+set(USE_SHARED_MBEDTLS_LIBRARY OFF  CACHE BOOL "" FORCE)
+set(USE_STATIC_MBEDTLS_LIBRARY  ON  CACHE BOOL "" FORCE)
 set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
 set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
 set(GEN_FILES       OFF CACHE BOOL "" FORCE)
@@ -19,18 +37,18 @@ set(CMAKE_POSITION_INDEPENDENT_CODE ON CACHE BOOL "" FORCE)
 
 add_subdirectory(${THIRD_PARTY_DIR}/mbedtls mbedtls)
 
-# libssh 的 FindMbedTLS 通过以下缓存变量定位 mbedTLS
+# mbedTLS 静态库并入 libssh.so，进包仅 libssh.so + libsshterm.so
 set(MBEDTLS_INCLUDE_DIR
     "${THIRD_PARTY_DIR}/mbedtls/include"
     CACHE PATH "" FORCE)
 set(MBEDTLS_SSL_LIBRARY
-    "${CMAKE_BINARY_DIR}/mbedtls/library/libmbedtls.so"
+    "${CMAKE_BINARY_DIR}/mbedtls/library/libmbedtls.a"
     CACHE FILEPATH "" FORCE)
 set(MBEDTLS_CRYPTO_LIBRARY
-    "${CMAKE_BINARY_DIR}/mbedtls/library/libmbedcrypto.so"
+    "${CMAKE_BINARY_DIR}/mbedtls/library/libmbedcrypto.a"
     CACHE FILEPATH "" FORCE)
 set(MBEDTLS_X509_LIBRARY
-    "${CMAKE_BINARY_DIR}/mbedtls/library/libmbedx509.so"
+    "${CMAKE_BINARY_DIR}/mbedtls/library/libmbedx509.a"
     CACHE FILEPATH "" FORCE)
 
 set(WITH_MBEDTLS   ON  CACHE BOOL "" FORCE)
@@ -45,4 +63,19 @@ add_subdirectory(${THIRD_PARTY_DIR}/libssh libssh)
 # libssh 的部分平台代码依赖 glibc/bionic 的 BSD 扩展宏
 target_compile_definitions(ssh PRIVATE _BSD_SOURCE=1)
 
-add_dependencies(ssh mbedcrypto mbedx509 mbedtls)
+add_library(sshterm SHARED
+    sshterm.cpp
+)
+
+target_compile_options(sshterm PRIVATE
+    ${TERMINAL_COMPILE_OPTIONS}
+)
+
+target_link_libraries(sshterm PRIVATE
+    ssh::ssh
+)
+
+target_link_options(sshterm PRIVATE
+    -Wl,--exclude-libs,ALL
+    ${TERMINAL_LINK_OPTIONS}
+)

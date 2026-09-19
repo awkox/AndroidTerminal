@@ -25,3 +25,8 @@ android {
 kotlin {
     jvmToolchain(21)
 }
+
+dependencies {
+    implementation(project(":libterminal"))
+    implementation(libs.kotlinx.coroutines.android)
+}
