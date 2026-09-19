@@ -186,7 +186,7 @@ class TerminalSession(
 
             // SSH 等进程的非正常退出原因（结构化来源，不走 socket，无竞态）。
             exitReason?.takeIf { it.isNotEmpty() }?.let { reason ->
-                val reasonBytes = ("\r\n[SSH failed: $reason]\r\n").toByteArray()
+                val reasonBytes = ("\r\n$reason\r\n").toByteArray()
                 emulator.append(reasonBytes, reasonBytes.size)
             }
 
