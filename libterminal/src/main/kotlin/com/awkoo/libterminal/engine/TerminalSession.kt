@@ -160,17 +160,20 @@ class TerminalSession(
         scope.launch {
             val exitCode = p.waitFor()
 
+            // waitFor 返回后快照，再 close（SSH close 会释放 native 会话）。
+            val exitReason = p.failureReason
+
             p.close()
 
             withContext(Dispatchers.Main.immediate) {
-                handleProcessExit(exitCode)
+                handleProcessExit(exitCode, exitReason)
             }
 
             scope.cancel()
         }
     }
 
-    private inline fun handleProcessExit(exitCode: Int) {
+    private inline fun handleProcessExit(exitCode: Int, exitReason: String?) {
         exitStatus = exitCode
         isRunning = false
 
@@ -182,7 +185,7 @@ class TerminalSession(
             }
 
             // SSH 等进程的非正常退出原因（结构化来源，不走 socket，无竞态）。
-            p.failureReason?.takeIf { it.isNotEmpty() }?.let { reason ->
+            exitReason?.takeIf { it.isNotEmpty() }?.let { reason ->
                 val reasonBytes = ("\r\n[SSH failed: $reason]\r\n").toByteArray()
                 emulator.append(reasonBytes, reasonBytes.size)
             }
