@@ -23,6 +23,10 @@ struct native_ssh {
     volatile bool killed = false;
     // 握手已成功且 reader/writer 线程就绪。
     volatile bool connected = false;
+    // PTY+shell 已建立，change_pty_size 在此之后才有效。此前 sshResize
+    // 只暂存、由连接线程在收敛后应用；否则 change_pty_size 在无窗口时会
+    // 失效并清掉暂存值，导致 PTY 退化为进程工厂传入的默认尺寸。
+    volatile bool pty_ready = false;
     // 握手失败或收到 kill：native 已释放 libssh 对象并关闭 fd（App 侧读到 EOF）。
     volatile bool connect_failed = false;
     int exit_st = -1;
@@ -444,6 +448,7 @@ bool handshake_run(native_ssh* h, const conn_params& p) {
             return false;
         }
     }
+    h->pty_ready = true;
 
     return true;
 }
@@ -702,7 +707,7 @@ Java_com_awkoo_libterminal_ssh_SshFactory_sshResize(JNIEnv*, jclass, jlong handl
     pthread_mutex_lock(&h->resize_mutex);
     h->resize_rows = rows;
     h->resize_cols = cols;
-    const bool apply = h->channel != nullptr;
+    const bool apply = h->pty_ready;
     pthread_mutex_unlock(&h->resize_mutex);
     if (apply) {
         apply_pending_resize(h);
