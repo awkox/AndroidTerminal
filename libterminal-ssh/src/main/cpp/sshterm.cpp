@@ -27,11 +27,6 @@ struct native_ssh {
 
 constexpr size_t kIoBuffer = 4096;
 
-std::string ssh_error_str(ssh_session session) {
-    const char* detail = session != nullptr ? ssh_get_error(session) : "null session";
-    return detail != nullptr ? detail : "unknown error";
-}
-
 void* io_reader(void* arg) {
     native_ssh* h = static_cast<native_ssh*>(arg);
     char buf[kIoBuffer];
