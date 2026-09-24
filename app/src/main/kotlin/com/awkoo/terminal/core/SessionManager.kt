@@ -8,7 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -27,30 +27,30 @@ class SessionManager @Inject constructor() {
 
     private val idGenerator = AtomicInt(0)
 
-    private val _sessionList = MutableStateFlow(emptyList<TerminalSession>())
-    val sessionList = _sessionList.asStateFlow()
+    val sessionList: StateFlow<List<TerminalSession>>
+        field = MutableStateFlow(emptyList())
 
     private val currentSessionId = MutableStateFlow(0)
 
     fun setCurrentSession(id: Int) {
         currentSessionId.update { current ->
-            if (_sessionList.value.any { it.id == id }) id
+            if (sessionList.value.any { it.id == id }) id
             else current
         }
     }
 
     val currentSession: Flow<TerminalSession?> =
-        combine(currentSessionId, _sessionList) { id, sessions ->
+        combine(currentSessionId, sessionList) { id, sessions ->
             sessions.find { it.id == id }
         }.distinctUntilChanged()
 
     fun removeSession(id: Int) {
         if (currentSessionId.value == id) {
             currentSessionId.update {
-                _sessionList.value.lastOrNull { it.id != id }?.id ?: 0
+                sessionList.value.lastOrNull { it.id != id }?.id ?: 0
             }
         }
-        _sessionList.update { list ->
+        sessionList.update { list ->
             list.filter { it.id != id }
         }
     }
@@ -73,14 +73,14 @@ class SessionManager @Inject constructor() {
 
         targetSession.execute()
 
-        _sessionList.update { it + targetSession }
+        sessionList.update { it + targetSession }
         currentSessionId.update { targetSession.id }
 
-        // 使用 combine 联合监听 Session 自身的 isRemove 状态与全局的 _sessionList
+        // 使用 combine 联合监听 Session 自身的 isRemove 状态与全局的 sessionList
         // 一旦会话要求移除，或者它已经被外部手段从列表中剔除，first { it } 都会立刻放行
         // 随后执行兜底的 removeSession 并自然结束协程，杜绝任何内存泄漏的可能。
         scope.launch {
-            combine(targetSession.isRemove, _sessionList) { isRemove, list ->
+            combine(targetSession.isRemove, sessionList) { isRemove, list ->
                 isRemove || list.none { it.id == targetSession.id }
             }.first { it }
             
@@ -89,16 +89,16 @@ class SessionManager @Inject constructor() {
     }
 
     val isSessionsListEmpty: Boolean
-        get() = _sessionList.value.isEmpty()
+        get() = sessionList.value.isEmpty()
 
     val sessionListSize: Int
-        get() = _sessionList.value.size
+        get() = sessionList.value.size
 
     @OptIn(ExperimentalAtomicApi::class)
     fun clear() {
-        _sessionList.value.forEach { it.finishIfRunning() }
+        sessionList.value.forEach { it.finishIfRunning() }
         currentSessionId.update { 0 }
-        _sessionList.update { emptyList() }
+        sessionList.update { emptyList() }
         idGenerator.store(0)
     }
 }
