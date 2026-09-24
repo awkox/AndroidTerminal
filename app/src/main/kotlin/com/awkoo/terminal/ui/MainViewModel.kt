@@ -8,8 +8,12 @@ import androidx.lifecycle.viewModelScope
 import com.awkoo.terminal.TerminalService
 import com.awkoo.terminal.AppPreferences
 import com.awkoo.terminal.Constants
+import com.awkoo.terminal.core.LastSshConnection
 import com.awkoo.terminal.core.SessionManager
 import com.awkoo.terminal.core.ShellInfo
+import com.awkoo.terminal.core.SshAuthMode
+import com.awkoo.libterminal.ssh.SshAuth
+import com.awkoo.libterminal.ssh.SshInfo
 import com.awkoo.terminal.extrakeys.ExtraKeysConfig
 import com.awkoo.terminal.ui.theme.ThemeMode
 import com.awkoo.libterminal.engine.TerminalCursorStyle
@@ -45,12 +49,90 @@ class MainViewModel @Inject constructor(
             shellInfo.commandLabel.update { name }
 
         sessionManager.addSession(shellInfo, maxTranscriptRows = transcriptRows.value)
+        ensureTerminalService()
+    }
 
-        // 启动前台服务用于增加生命周期稳定性
-        if (!TerminalService.isRunning) {
-            val serviceIntent = Intent(context, TerminalService::class.java)
-            startForegroundService(context, serviceIntent)
+    /** 新建 SSH 会话；私钥模式传 [keyPath]，否则用 [password]（可空=空认证）。
+     *  [authMode]/[rememberPassword]/[rememberKeyPassphrase] 用于回写"上一次连接"
+     *  快照：凭据仅在对应"记住"开关开启时落盘，否则只记身份信息。 */
+    fun addSshSession(
+        host: String,
+        port: Int,
+        user: String,
+        password: String?,
+        keyPath: String? = null,
+        keyPassphrase: String? = null,
+        hostKeyFingerprint: String? = null,
+        authMode: SshAuthMode = SshAuthMode.Password,
+        rememberPassword: Boolean = false,
+        rememberKeyPassphrase: Boolean = false
+    ) {
+        val auth = if (keyPath != null) {
+            SshAuth.PrivateKey(keyPath, keyPassphrase)
+        } else {
+            SshAuth.Password(password ?: "")
         }
+        val sshInfo = SshInfo(
+            name = "$user@$host",
+            host = host,
+            port = port,
+            user = user,
+            auth = auth,
+            hostKeyFingerprint = hostKeyFingerprint
+        )
+        sessionManager.addSshSession(sshInfo, name = "$user@$host",
+            maxTranscriptRows = transcriptRows.value)
+        ensureTerminalService()
+        persistLastSshConnection(
+            host, port, user, password, keyPath, keyPassphrase,
+            authMode, rememberPassword, rememberKeyPassphrase
+        )
+    }
+
+    /** 覆盖写"上一次 SSH 连接"；凭据只在对应记住开关开启且认证模式匹配时写入。 */
+    private fun persistLastSshConnection(
+        host: String,
+        port: Int,
+        user: String,
+        password: String?,
+        keyPath: String?,
+        keyPassphrase: String?,
+        authMode: SshAuthMode,
+        rememberPassword: Boolean,
+        rememberKeyPassphrase: Boolean
+    ) {
+        viewModelScope.launch {
+            preferences.setLastSshConnection(
+                LastSshConnection(
+                    host = host.trim(),
+                    port = port,
+                    user = user.trim(),
+                    authMode = authMode,
+                    rememberPassword = rememberPassword,
+                    password = if (authMode == SshAuthMode.Password && rememberPassword) {
+                        password
+                    } else {
+                        null
+                    },
+                    keyPath = if (authMode == SshAuthMode.PrivateKey) keyPath else null,
+                    rememberKeyPassphrase = rememberKeyPassphrase,
+                    keyPassphrase = if (authMode == SshAuthMode.PrivateKey &&
+                        rememberKeyPassphrase
+                    ) {
+                        keyPassphrase
+                    } else {
+                        null
+                    }
+                )
+            )
+        }
+    }
+
+    /** 首个会话创建后启动前台服务，增加 Activity 生命周期外终端稳定性。 */
+    private fun ensureTerminalService() {
+        if (TerminalService.isRunning) return
+        val serviceIntent = Intent(context, TerminalService::class.java)
+        startForegroundService(context, serviceIntent)
     }
 
     val currentSessionState = sessionManager.currentSession.stateIn(
@@ -61,6 +143,13 @@ class MainViewModel @Inject constructor(
     fun setCurrentSession(id: Int) {
         sessionManager.setCurrentSession(id)
     }
+
+    /** 上一次 SSH 连接参数（Post dialog 回填用）。 */
+    val lastSshConnection = preferences.lastSshConnection.stateIn(
+        viewModelScope,
+        SharingStarted.Lazily,
+        LastSshConnection()
+    )
 
     val terminalFontSize = preferences.terminalFontSize.stateIn(
         viewModelScope,

@@ -65,6 +65,7 @@ target_compile_definitions(ssh PRIVATE _BSD_SOURCE=1)
 
 add_library(sshterm SHARED
     sshterm.cpp
+    sshterm_probe.cpp
 )
 
 target_compile_options(sshterm PRIVATE

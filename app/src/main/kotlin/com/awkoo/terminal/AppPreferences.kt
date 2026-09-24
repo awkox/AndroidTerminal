@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.awkoo.libterminal.engine.TerminalCursorStyle
 import com.awkoo.terminal.Constants
+import com.awkoo.terminal.core.LastSshConnection
 import com.awkoo.terminal.extrakeys.ExtraKeysConfig
 import com.awkoo.terminal.ui.theme.ThemeMode
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -137,6 +138,29 @@ class AppPreferences @Inject constructor(
         }
     }
 
+    /** 上一次 SSH 连接参数，数据缺失或损坏（解码失败）时回退空记录。 */
+    @OptIn(ExperimentalSerializationApi::class)
+    val lastSshConnection: Flow<LastSshConnection> = datastore.data.map { prefs ->
+        val encoded = prefs[lastSshConnectionKey] ?: return@map LastSshConnection()
+        try {
+            ProtoBuf.decodeFromByteArray<LastSshConnection>(
+                Base64.decode(encoded, Base64.NO_WRAP)
+            )
+        } catch (e: Exception) {
+            LastSshConnection()
+        }
+    }
+
+    @OptIn(ExperimentalSerializationApi::class)
+    suspend fun setLastSshConnection(connection: LastSshConnection) {
+        datastore.edit {
+            it[lastSshConnectionKey] = Base64.encodeToString(
+                ProtoBuf.encodeToByteArray(connection),
+                Base64.NO_WRAP
+            )
+        }
+    }
+
     companion object {
         private val terminalFontSizeKey = intPreferencesKey("TerminalFontSize")
         private val themeModeKey = stringPreferencesKey("ThemeMode")
@@ -145,5 +169,6 @@ class AppPreferences @Inject constructor(
         private val textBlinkingKey = booleanPreferencesKey("TextBlinking")
         private val transcriptRowsKey = intPreferencesKey("TranscriptRows")
         private val extraKeysConfigKey = stringPreferencesKey("ExtraKeysConfig")
+        private val lastSshConnectionKey = stringPreferencesKey("LastSshConnection")
     }
 }

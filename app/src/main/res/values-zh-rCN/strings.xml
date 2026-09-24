@@ -29,4 +29,7 @@
     <string name="settings_cursor_blinking">光标闪烁</string>
     <string name="settings_text_blinking">文本闪烁</string>
     <string name="settings_scrollback_lines">回滚缓冲行数</string>
+
+    <string name="ssh_remember_password">在本机记住密码</string>
+    <string name="ssh_remember_key_passphrase">在本机记住私钥口令</string>
 </resources>
