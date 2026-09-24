@@ -9,6 +9,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -17,7 +18,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.window.PopupProperties
 import com.awkoo.terminal.R
 
@@ -25,13 +28,18 @@ import com.awkoo.terminal.R
 @Composable
 fun MainTopBar(
     title: String?,
+    running: Boolean,
     onNavigationClick: () -> Unit,
     onSettingsClick: () -> Unit
 ) {
     TopAppBar(
         title = {
             if (!title.isNullOrEmpty()) {
-                Text(title)
+                Text(
+                    title,
+                    color = if (running) Color.Unspecified else MaterialTheme.colorScheme.error,
+                    textDecoration = if (running) TextDecoration.None else TextDecoration.LineThrough
+                )
             }
         },
         modifier = Modifier,

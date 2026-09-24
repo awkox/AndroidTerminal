@@ -165,8 +165,12 @@ fun MainActivity.SessionListDrawer(colorScheme: TerminalColorScheme) {
                         val currentSessionName by remember(currentSession) {
                             currentSession?.sessionName ?: MutableStateFlow(null)
                         }.collectAsStateWithLifecycle()
+                        val currentSessionRunning by remember(currentSession) {
+                            currentSession?.isRunning ?: MutableStateFlow(false)
+                        }.collectAsStateWithLifecycle()
                         MainTopBar(
                             title = currentSessionTitle ?: currentSessionName,
+                            running = currentSessionRunning,
                             onNavigationClick = {
                                 scope.launch {
                                     if (drawerState.isClosed) {
