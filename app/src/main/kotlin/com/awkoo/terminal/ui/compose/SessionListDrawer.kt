@@ -28,6 +28,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import android.content.Context
 import android.graphics.Typeface
 import android.view.KeyEvent
 import com.awkoo.terminal.R
@@ -44,6 +45,24 @@ import com.awkoo.libterminal.engine.TerminalCursorStyle
 import com.awkoo.libterminal.color.TerminalColorScheme
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
+
+/** 终端字体按进程缓存：应用 resources 资产进程内不变，避免 TerminalView 重建时反复从 assets 加载。 */
+private object TerminalTypefaceCache {
+    private val FONT_ASSET = "font/maplemononl_nf_cn_regular.otf"
+
+    @Volatile
+    private var cached: Typeface? = null
+
+    fun get(context: Context): Typeface {
+        cached?.let { return it }
+        return synchronized(this) {
+            cached ?: Typeface.createFromAsset(
+                context.applicationContext.assets,
+                FONT_ASSET
+            ).also { cached = it }
+        }
+    }
+}
 
 @Composable
 fun MainActivity.SessionListDrawer(colorScheme: TerminalColorScheme) {
@@ -260,10 +279,7 @@ private fun MainActivity.SessionViewScreen(
                     )
                 }
 
-                it.typeface = Typeface.createFromAsset(
-                    context.assets,
-                    "font/maplemononl_nf_cn_regular.otf"
-                )
+                it.typeface = TerminalTypefaceCache.get(context)
 
                 terminalViewRef.value = it
             }

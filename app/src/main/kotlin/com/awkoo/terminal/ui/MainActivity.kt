@@ -63,9 +63,10 @@ class MainActivity : ComponentActivity() {
                 )
             }
 
-            MaterialTheme(
-                colorScheme = if (isDark) darkColorScheme() else lightColorScheme()
-            ) {
+            val colorScheme = remember(isDark) {
+                if (isDark) darkColorScheme() else lightColorScheme()
+            }
+            MaterialTheme(colorScheme = colorScheme) {
                 val material = MaterialTheme.colorScheme
                 // 终端前景/背景/光标色联动 Material 主题：
                 // 前景/背景取 onBackground/background，光标取主题强调色 primary，

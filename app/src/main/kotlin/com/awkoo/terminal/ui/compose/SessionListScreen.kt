@@ -29,6 +29,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,6 +57,7 @@ import com.awkoo.terminal.core.SshAuthMode
 import com.awkoo.terminal.core.SshKeyImporter
 import com.awkoo.terminal.core.SshTrustPolicy
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -92,6 +94,21 @@ fun SessionListScreen(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val hostKeyStore = remember { HostKeyStore(context) }
+
+    // 把不稳定的 TerminalSession（跨模块、非 Compose 编译）映射为 @Immutable 稳定壳，
+    // 让列表项可跳过重组；当选会话变化时随 currentSessionId 重建选中标记。
+    val currentSessionId = currentSession?.id
+    val rows = remember(sessionList, currentSessionId) {
+        sessionList.map { session ->
+            SessionRow(
+                id = session.id,
+                selected = session.id == currentSessionId,
+                title = session.titleState,
+                name = session.sessionName,
+                running = session.isRunning
+            )
+        }
+    }
 
     /** 主机指纹确认类的单槽状态：首连/变更/探测失败统一走这一个对话框槽。 */
     var pendingPrompt by remember { mutableStateOf<HostKeyPrompt?>(null) }
@@ -151,19 +168,20 @@ fun SessionListScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             items(
-                items = sessionList,
+                items = rows,
                 key = { it.id },
-            ) { session ->
+                contentType = { "session" }
+            ) { row ->
                 NavigationDrawerItem(
                     label = {
                         Column {
-                            val title by session.titleState.collectAsStateWithLifecycle()
-                            val sessionName by session.sessionName.collectAsStateWithLifecycle()
-                            val running by session.isRunning.collectAsStateWithLifecycle()
+                            val title by row.title.collectAsStateWithLifecycle()
+                            val sessionName by row.name.collectAsStateWithLifecycle()
+                            val running by row.running.collectAsStateWithLifecycle()
                             val currentTitle = title ?: sessionName
                             if (!currentTitle.isNullOrEmpty()) {
                                 Text(
-                                    "[${session.id}] $currentTitle",
+                                    "[${row.id}] $currentTitle",
                                     color = if (running) {
                                         Color.Unspecified
                                     } else {
@@ -178,8 +196,8 @@ fun SessionListScreen(
                             }
                         }
                     },
-                    selected = session == currentSession,
-                    onClick = { onSessionSelected(session.id) },
+                    selected = row.selected,
+                    onClick = { onSessionSelected(row.id) },
                     shape = MaterialTheme.shapes.medium
                 )
             }
@@ -630,3 +648,16 @@ private fun SshConnectDialog(
 
 /** SSH 私钥来源：文件选择（SAF）或直接粘贴文本。 */
 private enum class KeySource { File, Paste }
+
+/**
+ * 会话列表项稳定壳：仅承载稳定字段（StateFlow 为 Compose 已知稳定类型），
+ * 使 [SessionListScreen] 的 items 列表可被组合编译器判定为可跳过。
+ */
+@Immutable
+private data class SessionRow(
+    val id: Int,
+    val selected: Boolean,
+    val title: StateFlow<String?>,
+    val name: StateFlow<String>,
+    val running: StateFlow<Boolean>
+)
