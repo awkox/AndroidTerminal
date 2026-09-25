@@ -13,10 +13,8 @@ open class CommandInfo(
     val workingDirectory: String,
     arguments: Array<String>? = null,
     val extraEnvironment: MutableMap<String, String> = mutableMapOf(),
-    stdin: String? = null
+    val stdin: String? = null
 ) {
-    val stdin: String? = stdin?.let { it + '\r' }
-
     val arguments: Array<String> = arrayOf("$executable", *(arguments ?: emptyArray()))
 
     val commandLabel = MutableStateFlow(executable)

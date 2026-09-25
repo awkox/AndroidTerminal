@@ -82,5 +82,5 @@
     <string name="settings_remove_env">Remove variable</string>
     <string name="settings_stdin">stdin</string>
     <string name="settings_stdin_content">stdin content</string>
-    <string name="settings_stdin_hint">Text piped to the process on startup</string>
+    <string name="settings_stdin_hint">Sent to the process unchanged on startup. Newlines are not appended—include them yourself if needed</string>
 </resources>
