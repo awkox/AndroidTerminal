@@ -30,7 +30,8 @@ jobs:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
 
       - name: 解密KeyStore
-        if: github.event_name != 'pull_request'
+        # 无 secrets（如 fork 分支 push）跳过：release 不构建，只出 debug
+        if: github.event_name != 'pull_request' && secrets.KEYSTORE_GZ_B64 != ''
         run: |
           echo "${{ secrets.KEYSTORE_GZ_B64 }}" \
             | base64 --decode \
@@ -47,10 +48,9 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASS: ${{ secrets.KEY_PASS }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            ./gradlew --build-cache :app:assembleDebug
-          else
-            ./gradlew --build-cache :app:assembleDebug :app:assembleRelease
+          ./gradlew --build-cache :app:assembleDebug
+          if [ "${{ github.event_name }}" != "pull_request" ] && [ -n "${{ secrets.KEYSTORE_GZ_B64 }}" ]; then
+            ./gradlew --build-cache :app:assembleRelease
           fi
 
       - name: 上传 Debug APK
@@ -61,7 +61,8 @@ jobs:
           path: app/build/outputs/apk/debug/app-debug.apk
 
       - name: 上传 Release APK
-        if: github.event_name != 'pull_request'
+        # 仅在有 keystore 时才有产物
+        if: github.event_name != 'pull_request' && secrets.KEYSTORE_GZ_B64 != ''
         uses: actions/upload-artifact@v7
         with:
           archive: false
