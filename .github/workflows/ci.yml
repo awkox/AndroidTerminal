@@ -50,11 +50,10 @@ jobs:
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             ./gradlew --build-cache :app:assembleDebug
           else
-            ./gradlew --build-cache :app:assembleRelease
+            ./gradlew --build-cache :app:assembleDebug :app:assembleRelease
           fi
 
       - name: 上传 Debug APK
-        if: github.event_name == 'pull_request'
         uses: actions/upload-artifact@v7
         with:
           archive: false
