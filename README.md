@@ -1,5 +1,5 @@
 [![GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Kotlin](https://img.shields.io/badge/Kotlin-2.4.10-purple.svg)](https://kotlinlang.org)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.4.20-purple.svg)](https://kotlinlang.org)
 [![Platform: Android](https://img.shields.io/badge/Platform-Android-green.svg)](https://developer.android.com)
 [![minSdk](https://img.shields.io/badge/minSdk-28-orange.svg)](https://developer.android.com/studio)
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/awkox/AndroidTerminal/ci.yml?label=编译&logo=github)](.github/workflows/ci.yml)
@@ -42,17 +42,18 @@ release 版本需要环境变量 `KEYSTORE_PASS`、`KEY_ALIAS`、`KEY_PASS` 指�
 
 ```
 .
-├── app/          # Demo
-│   ├── cpp/       # 原生 PTY 实现（C23/C++23，JNI）
-│   ├── core/      # PTY 进程、会话管理
-│   ├── extrakeys/ # 扩展按键栏
-│   └── ui/        # Compose 界面（会话列表、终端视图）
-└── libterminal/   # 终端模拟核心库
-    ├── color/     # 颜色方案与稀疏调色板
-    ├── engine/    # VT100/xterm 模拟器、ANSI 解析、会话
-    ├── process/   # 终端进程抽象接口
-    ├── text/      # 文本宽度、UTF-8 解码
-    └── view/      # Canvas 渲染 View、文本选择、输入处理
+├── app/                # Demo 应用
+│   ├── core/           # 会话管理、SSH 信任策略、私钥导入与连接记录持久化
+│   ├── extrakeys/      # 扩展按键栏
+│   └── ui/             # Compose 界面（会话列表、终端视图、设置）
+├── libterminal/        # 终端模拟核心库
+│   ├── color/          # 颜色方案与稀疏调色板
+│   ├── engine/         # VT100/xterm 模拟器、ANSI 解析、会话
+│   ├── process/        # 终端进程抽象接口
+│   ├── text/           # 文本宽度、UTF-8 解码
+│   └── view/           # Canvas 渲染 View、文本选择、输入处理
+├── libterminal-pty/    # 本地 PTY 进程模块（C++/JNI 原生实现 + Kotlin 封装）
+└── libterminal-ssh/    # SSH 终端模块（libssh + mbedtls，指纹探测与信任策略）
 ```
 
 ## 贡献

@@ -34,10 +34,12 @@ interface ITerminalProcess {
     fun waitFor(): Int
     fun kill()
     fun close()
+    val failureReason: String?     // 非正常退出的可读原因（如 SSH 认证失败、连接中断）；
+                                   // 仅 waitFor() 返回非零后可读，本地进程恒为 null
 }
 ```
 
-demo（`app/.../core/PtyFactory.kt`）通过 JNI 的 `createSubprocess`/`setPtyWindowSize`
+demo（`libterminal-pty/.../pty/PtyFactory.kt`）通过 JNI 的 `createSubprocess`/`setPtyWindowSize`
 实现本地 pty：将 pty 文件描述符包装为 `FileInputStream` / `FileOutputStream` 暴露给上层，
 `kill()` 使用 `Os.kill(pid, SIGKILL)`。你可以用同样模式接入 SSH 或任意远程终端。
 
@@ -50,7 +52,7 @@ val session = TerminalSession(
     stdin = null,                              // 可选：启动时写入进程的初始输入
     maxTranscriptRows = 5000,                  // 可选：历史回滚缓冲区行数（默认 5000，仅作用于此会话）
 ) { rows, cols, cellWidth, cellHeight ->       // 工厂函数，参数依次为 (行, 列, 单元格宽, 单元格高)
-    PtyFactory(command, rows, cols, cellWidth, cellHeight)
+    PtyFactory(commandInfo, rows, cols, cellWidth, cellHeight)  // commandInfo: CommandInfo，见 §2.1
 }
 session.execute()   // 必须调用：拉起读/写/仿真协程
 ```
@@ -132,11 +134,11 @@ fun TerminalScreen(session: TerminalSession?) {
 
 | 成员 | 类型 | 说明 |
 |------|------|------|
-| `TerminalSession(id, sessionName, stdin, maxTranscriptRows)` | 构造 | `maxTranscriptRows`：历史回滚缓冲区行数 |
+| `TerminalSession(id, sessionName, stdin, maxTranscriptRows, processFactory)` | 构造 | `maxTranscriptRows`：历史回滚缓冲区行数；`processFactory: (rows, cols, cellWidth, cellHeight) -> ITerminalProcess` |
 | `id` | `Int` | 会话 ID |
 | `sessionName` | `MutableStateFlow<String>` | 会话名（顶栏显示用） |
 | `titleState` | `StateFlow<String?>` | OSC 0/1/2 设置的终端标题（如 vim 标签） |
-| `isRunning` | `Boolean` | `execute()` 后为 `true`，进程退出后置 `false` |
+| `isRunning` | `StateFlow<Boolean>` | `execute()` 后为 `true`，进程退出后置 `false` |
 | `exitStatus` | `Int` | 进程退出码（负数表示信号编号） |
 | `isRemove` | `MutableStateFlow<Boolean>` | 请求移除标记（回车退出场景） |
 | `execute()` | fun | 启动进程与 I/O 协程 |
