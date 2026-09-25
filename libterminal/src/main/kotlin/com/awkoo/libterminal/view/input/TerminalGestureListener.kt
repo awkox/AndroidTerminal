@@ -10,7 +10,7 @@ import com.awkoo.libterminal.view.TerminalView
 /**
  * 终端触摸手势处理器。
  *
- * 处理单击（显示 IME）、双击（保留用于缩放）、长按（文本选择）、
+ * 处理单击（显示 IME）、双击（唤起软键盘）、长按（文本选择）、
  * 滚动（历史导航或鼠标事件转发）、双指缩放（字号）和惯性滚动。
  */
 internal class TerminalGestureListener(
@@ -124,16 +124,11 @@ internal class TerminalGestureListener(
     }
 
     override fun onDoubleTap(e: MotionEvent): Boolean {
-        val emulator = view.mEmulator ?: return false
-
-        // 如果处于鼠标追踪模式（如 Vim），双击屏幕强制唤起软键盘
-        if (emulator.isMouseTrackingActive) {
-            view.requestFocus()
-            val imm = view.context.getSystemService(InputMethodManager::class.java)
-            imm.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)
-            return true
-        }
-        return false
+        // 双击屏幕无条件唤起软键盘（不必处于鼠标追踪模式）
+        view.requestFocus()
+        val imm = view.context.getSystemService(InputMethodManager::class.java)
+        imm.showSoftInput(view, InputMethodManager.SHOW_IMPLICIT)
+        return true
     }
 
     override fun onLongPress(e: MotionEvent) {
