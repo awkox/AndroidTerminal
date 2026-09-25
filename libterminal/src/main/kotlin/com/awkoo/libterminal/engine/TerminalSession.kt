@@ -24,6 +24,13 @@ import java.io.IOException
  * 子进程 I/O 和模拟器回调均在协程中运行，屏幕更新通过 [uiEvent] 通知 UI 层。
  *
  * 注意：会话可能比 UI 组件存活更久，回调中需谨慎处理生命周期。
+ *
+ * @param id 会话 ID，用于 UI 层标识与会话列表键控。
+ * @param sessionName 会话名（可更新的 StateFlow），顶栏与会话列表显示用。
+ * @param stdin 可选：启动时写入进程的初始输入，默认 null。
+ * @param maxTranscriptRows 历史回滚缓冲区行数，默认 5000；仅作用于本会话。
+ * @param processFactory (rows, cols, cellWidth, cellHeight) -> [ITerminalProcess] 的进程工厂，
+ *        在 [execute] 时被调用来创建子进程。
  */
 class TerminalSession(
     val id: Int,
