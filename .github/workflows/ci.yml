@@ -17,6 +17,9 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-26.04
+    env:
+      # secrets 不能出现在 if 条件中，先解析为 job 级环境变量布尔值
+      HAS_KEYSTORE: ${{ secrets.KEYSTORE_GZ_B64 != '' }}
     steps:
       - name: 检出代码
         uses: actions/checkout@v7
@@ -31,7 +34,7 @@ jobs:
 
       - name: 解密KeyStore
         # 无 secrets（如 fork 分支 push）跳过：release 不构建，只出 debug
-        if: github.event_name != 'pull_request' && secrets.KEYSTORE_GZ_B64 != ''
+        if: github.event_name != 'pull_request' && env.HAS_KEYSTORE == 'true'
         run: |
           echo "${{ secrets.KEYSTORE_GZ_B64 }}" \
             | base64 --decode \
@@ -49,7 +52,7 @@ jobs:
           KEY_PASS: ${{ secrets.KEY_PASS }}
         run: |
           ./gradlew --build-cache :app:assembleDebug
-          if [ "${{ github.event_name }}" != "pull_request" ] && [ -n "${{ secrets.KEYSTORE_GZ_B64 }}" ]; then
+          if [ "${{ github.event_name }}" != "pull_request" ] && [ "$HAS_KEYSTORE" = "true" ]; then
             ./gradlew --build-cache :app:assembleRelease
           fi
 
@@ -62,7 +65,7 @@ jobs:
 
       - name: 上传 Release APK
         # 仅在有 keystore 时才有产物
-        if: github.event_name != 'pull_request' && secrets.KEYSTORE_GZ_B64 != ''
+        if: github.event_name != 'pull_request' && env.HAS_KEYSTORE == 'true'
         uses: actions/upload-artifact@v7
         with:
           archive: false
