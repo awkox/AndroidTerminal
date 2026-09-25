@@ -10,6 +10,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.awkoo.libterminal.engine.TerminalCursorStyle
 import com.awkoo.terminal.Constants
 import com.awkoo.terminal.core.LastSshConnection
+import com.awkoo.terminal.core.PtyConfig
 import com.awkoo.terminal.extrakeys.ExtraKeysConfig
 import com.awkoo.terminal.ui.theme.ThemeMode
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -138,6 +139,29 @@ class AppPreferences @Inject constructor(
         }
     }
 
+    /** 本地 PTY 会话启动配置，数据缺失或损坏（解码失败）时回退默认配置。 */
+    @OptIn(ExperimentalSerializationApi::class)
+    val ptyConfig: Flow<PtyConfig> = datastore.data.map { prefs ->
+        val encoded = prefs[ptyConfigKey] ?: return@map PtyConfig()
+        try {
+            ProtoBuf.decodeFromByteArray<PtyConfig>(
+                Base64.decode(encoded, Base64.NO_WRAP)
+            )
+        } catch (e: Exception) {
+            PtyConfig()
+        }
+    }
+
+    @OptIn(ExperimentalSerializationApi::class)
+    suspend fun setPtyConfig(config: PtyConfig) {
+        datastore.edit {
+            it[ptyConfigKey] = Base64.encodeToString(
+                ProtoBuf.encodeToByteArray(config),
+                Base64.NO_WRAP
+            )
+        }
+    }
+
     /** 上一次 SSH 连接参数，数据缺失或损坏（解码失败）时回退空记录。 */
     @OptIn(ExperimentalSerializationApi::class)
     val lastSshConnection: Flow<LastSshConnection> = datastore.data.map { prefs ->
@@ -169,6 +193,7 @@ class AppPreferences @Inject constructor(
         private val textBlinkingKey = booleanPreferencesKey("TextBlinking")
         private val transcriptRowsKey = intPreferencesKey("TranscriptRows")
         private val extraKeysConfigKey = stringPreferencesKey("ExtraKeysConfig")
+        private val ptyConfigKey = stringPreferencesKey("PtyConfig")
         private val lastSshConnectionKey = stringPreferencesKey("LastSshConnection")
     }
 }

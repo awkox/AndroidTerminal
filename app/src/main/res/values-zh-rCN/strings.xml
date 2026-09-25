@@ -15,6 +15,11 @@
     <string name="action_paste">粘贴</string>
 
     <string name="settings_title">设置</string>
+    <string name="settings_group_modules">模块</string>
+    <string name="settings_module_libterminal">libterminal</string>
+    <string name="settings_module_libterminal_subtitle">终端模拟核心：主题、字体、光标、回滚</string>
+    <string name="settings_module_pty">libterminal-pty</string>
+    <string name="settings_module_pty_subtitle">本地进程：命令、参数、环境变量、stdin</string>
     <string name="settings_group_appearance">外观</string>
     <string name="settings_group_terminal">终端</string>
     <string name="settings_theme_mode">主题模式</string>
@@ -29,6 +34,21 @@
     <string name="settings_cursor_blinking">光标闪烁</string>
     <string name="settings_text_blinking">文本闪烁</string>
     <string name="settings_scrollback_lines">回滚缓冲行数</string>
+
+    <string name="settings_group_launch">启动</string>
+    <string name="settings_command">命令</string>
+    <string name="settings_command_hint">可执行文件路径（如 sh、/bin/bash、zsh）</string>
+    <string name="settings_args">参数</string>
+    <string name="settings_add_arg">添加参数</string>
+    <string name="settings_remove_arg">移除参数</string>
+    <string name="settings_group_env">环境变量</string>
+    <string name="settings_env_key">名称</string>
+    <string name="settings_env_value">值</string>
+    <string name="settings_add_env">添加变量</string>
+    <string name="settings_remove_env">移除变量</string>
+    <string name="settings_stdin">stdin</string>
+    <string name="settings_stdin_content">stdin 内容</string>
+    <string name="settings_stdin_hint">启动时通过标准输入写入进程的文本</string>
 
     <string name="ssh_remember_password">在本机记住密码</string>
     <string name="ssh_remember_key_passphrase">在本机记住私钥口令</string>

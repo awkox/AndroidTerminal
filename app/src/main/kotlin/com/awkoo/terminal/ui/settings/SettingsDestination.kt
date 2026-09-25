@@ -15,7 +15,15 @@ import kotlinx.serialization.Serializable
  * 注册对应的 [SettingsScreen]。
  */
 object SettingsDestination {
-    /** 设置根页面。 */
+    /** 设置根页面（模块菜单）。 */
     @Serializable
     object Root
+
+    /** libterminal：终端模拟核心设置。 */
+    @Serializable
+    object Libterminal
+
+    /** libterminal-pty：本地进程启动设置。 */
+    @Serializable
+    object Pty
 }

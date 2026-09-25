@@ -50,6 +50,11 @@
     <string name="action_paste">Paste</string>
 
     <string name="settings_title">Settings</string>
+    <string name="settings_group_modules">Modules</string>
+    <string name="settings_module_libterminal">libterminal</string>
+    <string name="settings_module_libterminal_subtitle">Terminal emulator core: theme, font, cursor, scrollback</string>
+    <string name="settings_module_pty">libterminal-pty</string>
+    <string name="settings_module_pty_subtitle">Local process: command, args, environment, stdin</string>
     <string name="settings_group_appearance">Appearance</string>
     <string name="settings_group_terminal">Terminal</string>
     <string name="settings_theme_mode">Theme</string>
@@ -64,4 +69,18 @@
     <string name="settings_cursor_blinking">Cursor blinking</string>
     <string name="settings_text_blinking">Text blinking</string>
     <string name="settings_scrollback_lines">Scrollback buffer</string>
+    <string name="settings_group_launch">Launch</string>
+    <string name="settings_command">Command</string>
+    <string name="settings_command_hint">Executable path (e.g. sh, /bin/bash, zsh)</string>
+    <string name="settings_args">Argument</string>
+    <string name="settings_add_arg">Add argument</string>
+    <string name="settings_remove_arg">Remove argument</string>
+    <string name="settings_group_env">Environment variables</string>
+    <string name="settings_env_key">Name</string>
+    <string name="settings_env_value">Value</string>
+    <string name="settings_add_env">Add variable</string>
+    <string name="settings_remove_env">Remove variable</string>
+    <string name="settings_stdin">stdin</string>
+    <string name="settings_stdin_content">stdin content</string>
+    <string name="settings_stdin_hint">Text piped to the process on startup</string>
 </resources>

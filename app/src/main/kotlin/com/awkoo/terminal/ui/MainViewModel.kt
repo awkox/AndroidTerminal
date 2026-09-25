@@ -9,6 +9,7 @@ import com.awkoo.terminal.TerminalService
 import com.awkoo.terminal.AppPreferences
 import com.awkoo.terminal.Constants
 import com.awkoo.terminal.core.LastSshConnection
+import com.awkoo.terminal.core.PtyConfig
 import com.awkoo.terminal.core.SessionManager
 import com.awkoo.terminal.core.ShellInfo
 import com.awkoo.terminal.core.SshAuthMode
@@ -38,12 +39,24 @@ class MainViewModel @Inject constructor(
 ): ViewModel() {
     // 数据流
     val sessionListState = sessionManager.sessionList
-    fun addSession(name: String?) {
+    /** 新建本地 shell 会话，启动参数取自 [ptyConfig]（命令/args/环境变量/stdin）。 */
+    fun addSession(name: String?, ptyConfig: PtyConfig) {
         val shellInfo = ShellInfo(
-            "sh",
-            context.filesDir.absolutePath,
-            context.filesDir.absolutePath,
-            context.cacheDir.absolutePath
+            executable = ptyConfig.command.ifBlank { "sh" },
+            workingDirectory = context.filesDir.absolutePath,
+            homeDirectory = context.filesDir.absolutePath,
+            tempDirectory = context.cacheDir.absolutePath,
+            arguments = ptyConfig.args
+                .filter { it.isNotBlank() }
+                .toTypedArray()
+                .takeIf { it.isNotEmpty() },
+            extraEnvironment = linkedMapOf<String, String>().apply {
+                for (env in ptyConfig.environment) {
+                    if (env.key.trim().isEmpty()) continue
+                    put(env.key, env.value)
+                }
+            },
+            stdin = ptyConfig.stdin.ifBlank { null }
         )
         if (name != null)
             shellInfo.commandLabel.update { name }
@@ -219,5 +232,15 @@ class MainViewModel @Inject constructor(
 
     fun setExtraKeysConfig(config: ExtraKeysConfig) {
         viewModelScope.launch { preferences.setExtraKeysConfig(config) }
+    }
+
+    val ptyConfig = preferences.ptyConfig.stateIn(
+        viewModelScope,
+        SharingStarted.Lazily,
+        PtyConfig()
+    )
+
+    fun setPtyConfig(config: PtyConfig) {
+        viewModelScope.launch { preferences.setPtyConfig(config) }
     }
 }

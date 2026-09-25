@@ -79,6 +79,7 @@ fun MainActivity.SessionListDrawer(colorScheme: TerminalColorScheme) {
     val cursorBlinking by viewModel.cursorBlinking.collectAsStateWithLifecycle()
     val textBlinking by viewModel.textBlinking.collectAsStateWithLifecycle()
     val extraKeysConfig by viewModel.extraKeysConfig.collectAsStateWithLifecycle()
+    val ptyConfig by viewModel.ptyConfig.collectAsStateWithLifecycle()
     val lastSshConnection by viewModel.lastSshConnection.collectAsStateWithLifecycle()
 
     LaunchedEffect(drawerState.targetValue) {
@@ -157,7 +158,7 @@ fun MainActivity.SessionListDrawer(colorScheme: TerminalColorScheme) {
                     onNewSession = {
                         scope.launch {
                             drawerState.close()
-                            viewModel.addSession(null)
+                            viewModel.addSession(null, ptyConfig)
                         }
                     },
                     onNewSshSession = {
