@@ -23,6 +23,12 @@ jobs:
         with:
           submodules: recursive
 
+      - name: 配置 Gradle（依赖/构建缓存）
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          # PR 只读缓存：避免未合并分支污染共享构建缓存
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
       - name: 解密KeyStore
         if: github.event_name != 'pull_request'
         run: |
@@ -42,9 +48,9 @@ jobs:
           KEY_PASS: ${{ secrets.KEY_PASS }}
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            ./gradlew :app:assembleDebug
+            ./gradlew --build-cache :app:assembleDebug
           else
-            ./gradlew :app:assembleRelease
+            ./gradlew --build-cache :app:assembleRelease
           fi
 
       - name: 上传 Debug APK
