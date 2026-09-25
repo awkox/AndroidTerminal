@@ -50,46 +50,46 @@ fun PtySettingsScreen(
     var environment by remember { mutableStateOf(config.environment) }
     var stdin by remember { mutableStateOf(config.stdin) }
 
-    /** 以 [command]/[args]/[environment]/[stdin] 构建完整配置并写回。 */
+    /** 以 [newCommand]/[newArgs]/[newEnvironment]/[newStdin] 构建完整配置并写回。 */
     fun sync(
-        command: String = command,
-        args: List<String> = args,
-        environment: List<PtyEnvVar> = environment,
-        stdin: String = stdin
+        newCommand: String = command,
+        newArgs: List<String> = args,
+        newEnvironment: List<PtyEnvVar> = environment,
+        newStdin: String = stdin
     ) {
-        viewModel.setPtyConfig(PtyConfig(command, args, environment, stdin))
+        viewModel.setPtyConfig(PtyConfig(newCommand, newArgs, newEnvironment, newStdin))
     }
 
     fun updateEnv(index: Int, key: String, value: String) {
         environment = environment.mapIndexed { i, env ->
             if (i == index) env.copy(key = key, value = value) else env
         }
-        sync(environment = environment)
+        sync(newEnvironment = environment)
     }
 
     fun removeEnv(index: Int) {
         environment = environment.filterIndexed { i, _ -> i != index }
-        sync(environment = environment)
+        sync(newEnvironment = environment)
     }
 
     fun addEnv() {
         environment = environment + PtyEnvVar()
-        sync(environment = environment)
+        sync(newEnvironment = environment)
     }
 
     fun updateArg(index: Int, value: String) {
         args = args.mapIndexed { i, arg -> if (i == index) value else arg }
-        sync(args = args)
+        sync(newArgs = args)
     }
 
     fun removeArg(index: Int) {
         args = args.filterIndexed { i, _ -> i != index }
-        sync(args = args)
+        sync(newArgs = args)
     }
 
     fun addArg() {
         args = args + ""
-        sync(args = args)
+        sync(newArgs = args)
     }
 
     SettingsScreen(
@@ -103,7 +103,7 @@ fun PtySettingsScreen(
                     value = command,
                     onValueChange = {
                         command = it
-                        sync(command = it)
+                        sync(newCommand = it)
                     },
                     label = { Text(stringResource(R.string.settings_command)) },
                     supportingText = {
@@ -186,7 +186,7 @@ fun PtySettingsScreen(
                     value = stdin,
                     onValueChange = {
                         stdin = it
-                        sync(stdin = it)
+                        sync(newStdin = it)
                     },
                     label = { Text(stringResource(R.string.settings_stdin_content)) },
                     supportingText = {
