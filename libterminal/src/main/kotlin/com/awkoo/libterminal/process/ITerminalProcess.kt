@@ -8,7 +8,9 @@ import java.io.OutputStream
  * 无论是本地 Linux 进程、还是远程 SSH 连接、亦或是用于测试的 Mock 进程，均实现此接口。
  */
 interface ITerminalProcess {
+    /** 进程标准输出：读取进程输出并喂给终端模拟器。 */
     val inputStream: InputStream
+    /** 进程标准输入：向进程写入终端输入。 */
     val outputStream: OutputStream
 
     /** 调整伪终端大小 */

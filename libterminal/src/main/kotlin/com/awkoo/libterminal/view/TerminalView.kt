@@ -40,9 +40,13 @@ import kotlin.math.roundToInt
 /** 外部修饰键状态快照，供 [TerminalView.onKeyDown] 消费。 */
 @JvmInline
 value class ExtraKeysModifierSnapshot(val mask: Int) {
+    /** Ctrl 是否粘性按下（mask 位 0）。 */
     val ctrl: Boolean get() = (mask and 1) != 0
+    /** Alt 是否粘性按下（mask 位 1）。 */
     val alt: Boolean get() = (mask and 2) != 0
+    /** Shift 是否粘性按下（mask 位 2）。 */
     val shift: Boolean get() = (mask and 4) != 0
+    /** Fn 是否粘性按下（mask 位 3）。 */
     val fn: Boolean get() = (mask and 8) != 0
 }
 
@@ -196,6 +200,7 @@ class TerminalView(
     internal val mEmulator: TerminalEmulator?
         get() = currentSession?.emulator
 
+    /** 终端字号（dp）。setter 自动约束在 4..100，修改后重建渲染器并更新尺寸。 */
     var textSize: Int = 12
         set(value) {
             field = value.coerceIn(4, 100)
@@ -203,6 +208,7 @@ class TerminalView(
             updateSize()
         }
 
+    /** 终端字体。修改后立即重建渲染器并更新尺寸。 */
     var typeface: Typeface = Typeface.MONOSPACE
         set(value) {
             field = value
@@ -277,6 +283,7 @@ class TerminalView(
         invalidate()
     }
 
+    /** 手动退出文本选择模式（隐藏选择手柄与浮动工具栏）。 */
     fun stopTextSelectionMode() {
         if (textSelectionCursorController.hide()) invalidate()
     }
@@ -315,6 +322,7 @@ class TerminalView(
         }
     }
 
+    /** 切换自动滚动的禁用状态（配合滚动锁定使用）。 */
     fun toggleAutoScrollDisabled() {
         mEmulator?.toggleAutoScrollDisabled()
     }
@@ -388,6 +396,7 @@ class TerminalView(
 
     internal fun copyTextToClipboard(text: String) = clipboard.copyText(text)
 
+    /** 将系统剪贴板文本粘贴到终端。 */
     fun pasteTextFromClipboard() = clipboard.pasteFromClipboard()
 
     internal fun awakenScrollbars(): Boolean = awakenScrollBars()
@@ -404,6 +413,7 @@ class TerminalView(
 
     override fun onCheckIsTextEditor() = true
 
+    /** 切换/强制软键盘显隐：true 显示、false 隐藏、null 取反。 */
     fun toggleIme(show: Boolean? = null) = imeController.toggleIme(show)
 
     /** 隐藏软键盘（不请求焦点），供覆盖层（如设置页）打开时收起键盘。 */
@@ -537,6 +547,7 @@ class TerminalView(
         scope.coroutineContext.cancelChildren()
     }
 
+    /** 释放协程与触摸模式监听，解绑当前会话；View 从窗口分离时必须调用。 */
     fun dispose() {
         currentSession = null
         viewTreeObserver.removeOnTouchModeChangeListener(textSelectionCursorController)

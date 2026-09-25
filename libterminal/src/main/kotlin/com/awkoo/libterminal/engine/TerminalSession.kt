@@ -20,7 +20,7 @@ import java.io.IOException
 /**
  * 终端会话，包含一个子进程及其对应的终端模拟器。
  *
- * 构造时即执行子进程，通过 [updateSize] 通知模拟器尺寸后开始终端仿真。
+ * 构造时仅预分配缓冲池并组装模拟器；调用 [execute] 后才创建并拉起子进程。
  * 子进程 I/O 和模拟器回调均在协程中运行，屏幕更新通过 [uiEvent] 通知 UI 层。
  *
  * 注意：会话可能比 UI 组件存活更久，回调中需谨慎处理生命周期。
@@ -58,6 +58,7 @@ class TerminalSession(
 
     private var process: ITerminalProcess? = null
 
+    /** OSC 0/1/2 设置的终端标题（如 vim 标签），未设置时为 null。 */
     val titleState = emulator.titleState
 
     /** OSC 52 剪贴板写入事件流，仅供模块内 view 层消费。 */
@@ -73,6 +74,7 @@ class TerminalSession(
         }
     }
 
+    /** 启动子进程（通过 processFactory）并拉起读/写/仿真/退出协程；会话须先调用一次。 */
     fun execute() {
         val p = processFactory(
             emulator.mRows,
@@ -204,6 +206,7 @@ class TerminalSession(
         notifyScreenUpdate()
     }
 
+    /** 请求移除标记：进程结束回显后回车置 true，供 UI 层移除会话。 */
     val isRemove = MutableStateFlow(false)
 
     /** 向 Shell 进程写入数据。 */
