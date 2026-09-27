@@ -129,6 +129,7 @@ internal class TerminalBuffer(
      */
     fun isCellBlank(column: Int, row: Int): Boolean {
         if (column < 0 || column >= mColumns) return true
+        if (row < -this.activeTranscriptRows || row >= mScreenRows) return true
         val lineObject = mLines[externalToInternalRow(row)] ?: return true
         var x1 = lineObject.findStartOfColumn(column)
         var x2 = lineObject.findStartOfColumn(column + 1)

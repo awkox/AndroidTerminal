@@ -123,10 +123,12 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
             val screen = emulator.screen
 
             val coord = terminalView.getColumnAndRow(event, true)
-            mSelX2 = coord.col
-            mSelY2 = coord.row
-            mSelX1 = coord.col
-            mSelY1 = coord.row
+            val safeCol = coord.col.coerceIn(0, emulator.mColumns - 1)
+            val safeRow = coord.row.coerceIn(-screen.activeTranscriptRows, screen.mScreenRows - 1)
+            mSelX2 = safeCol
+            mSelY2 = safeRow
+            mSelX1 = safeCol
+            mSelY1 = safeRow
 
             if (" " != screen.getSelectedText(mSelX1, mSelY1, mSelX1, mSelY1)) {
                 // 选中的不是空白字符，扩展为单词选择。
@@ -154,7 +156,7 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
                         if (!screen.isCellBlank(mSelX2 + 1, mSelY2)) {
                             mSelX2++
                         } else break
-                    } else if (mSelY2 < emulator.mRows - 1 &&
+                    } else if (mSelY2 < screen.mScreenRows - 1 &&
                         screen.getLineWrap(mSelY2) &&
                         // 下一行折行起始格非空白才跨行，避免把空白格兜进选区
                         !screen.isCellBlank(0, mSelY2 + 1)
