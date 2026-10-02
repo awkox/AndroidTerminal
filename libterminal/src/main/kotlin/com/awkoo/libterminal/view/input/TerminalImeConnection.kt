@@ -3,7 +3,6 @@ package com.awkoo.libterminal.view.input
 import android.R
 import android.view.KeyEvent
 import android.view.inputmethod.BaseInputConnection
-import com.awkoo.libterminal.text.Utf8Decoder
 import com.awkoo.libterminal.text.withCodePointAt
 import com.awkoo.libterminal.view.TerminalView
 
@@ -76,14 +75,7 @@ internal class TerminalImeConnection(
         var i = 0
         while (i < textLengthInChars) {
             text.withCodePointAt(i, textLengthInChars) { cp, charCount ->
-                // 特殊兜底：如果是孤立的高位代理项被发送过来，视为替换字符
-                val codePoint = if (charCount == 1 && text[i].isHighSurrogate()) {
-                    Utf8Decoder.UNICODE_REPLACEMENT_CHAR
-                } else {
-                    cp
-                }
-
-                terminalView.inputCodePoint(KEY_EVENT_SOURCE_SOFT_KEYBOARD, codePoint, false, false)
+                terminalView.inputCodePoint(KEY_EVENT_SOURCE_SOFT_KEYBOARD, cp, false, false)
                 i += charCount
             }
         }

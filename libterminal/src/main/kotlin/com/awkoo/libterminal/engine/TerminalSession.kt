@@ -2,6 +2,7 @@ package com.awkoo.libterminal.engine
 
 import androidx.annotation.Keep
 import com.awkoo.libterminal.process.ITerminalProcess
+import com.awkoo.libterminal.text.Utf8Decoder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -236,11 +237,17 @@ class TerminalSession(
     /** 将码点编码为 UTF-8 后写入进程输出的缓冲区。 */
     private val mUtf8InputBuffer = ByteArray(5)
 
-    /** 将 Unicode 码点以 UTF-8 编码写入终端。 */
-    internal fun writeCodePoint(prependEscape: Boolean, codePoint: Int) {
-        require(!(codePoint > 1114111 || (codePoint in 0xD800..0xDFFF))) {
-            "Invalid code point: $codePoint"
+    /** 非法码点（超出 Unicode 范围或落在代理区）统一降级为替换字符。 */
+    private fun sanitizeCodePoint(codePoint: Int): Int =
+        if (codePoint in 0..0x10FFFF && codePoint !in 0xD800..0xDFFF) {
+            codePoint
+        } else {
+            Utf8Decoder.UNICODE_REPLACEMENT_CHAR
         }
+
+    /** 将 Unicode 码点以 UTF-8 编码写入终端。 */
+    internal fun writeCodePoint(prependEscape: Boolean, rawCodePoint: Int) {
+        val codePoint = sanitizeCodePoint(rawCodePoint)
 
         var bufferPosition = 0
         if (prependEscape) mUtf8InputBuffer[bufferPosition++] = 27
@@ -259,7 +266,7 @@ class TerminalSession(
             mUtf8InputBuffer[bufferPosition++] = (128 or ((codePoint shr 6) and 63)).toByte()
             /* 10xxxxxx 后续字节，取低 6 位 */
             mUtf8InputBuffer[bufferPosition++] = (128 or (codePoint and 63)).toByte()
-        } else { /* 上方已校验 codePoint <= 1114111，最多 21 位 = 0b111111111111111111111 */
+        } else { /* sanitizeCodePoint 已保证 codePoint <= 1114111，最多 21 位 = 0b111111111111111111111 */
             /* 11110xxx 首字节，取高 3 位 */
             mUtf8InputBuffer[bufferPosition++] = (240 or (codePoint shr 18)).toByte()
             /* 10xxxxxx 后续字节，取第 12~17 位 */

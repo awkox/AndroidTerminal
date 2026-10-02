@@ -123,10 +123,8 @@ internal class KeyInputProcessor(
             isHardwareKeyboard = isHardwareKeyboard
         )
 
-        if (finalCodePoint > -1) {
-            pokeCursor()
-            currentSession.writeCodePoint(leftAltDown, finalCodePoint)
-        }
+        pokeCursor()
+        currentSession.writeCodePoint(leftAltDown, finalCodePoint)
     }
 
     fun handleKeyCode(keyCode: Int, keyMod: Int): Boolean {
