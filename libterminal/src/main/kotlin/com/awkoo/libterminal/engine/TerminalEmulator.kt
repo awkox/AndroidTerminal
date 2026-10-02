@@ -260,8 +260,8 @@ internal class TerminalEmulator(
     val isTextVisible: Boolean
         get() = if (isTextBlinkingEnabled) textBlinkState else true
 
-    var scrollCounter: Int = 0
-        private set
+    /** 自上次取走以来的滚动行数增量，仅通过 [takeScrollCounter] 消费。 */
+    private var scrollCounter: Int = 0
     var isAutoScrollDisabled: Boolean = false
         private set
 
@@ -1138,8 +1138,11 @@ internal class TerminalEmulator(
     private fun blockClear(sx: Int, sy: Int, w: Int, h: Int = 1) =
         screen.blockSet(sx, sy, w, h, ' '.code, rendition.eraseFillStyle)
 
-    fun clearScrollCounter() {
-        this.scrollCounter = 0
+    /** 取走并清零滚动增量；调用方须持有 synchronized(this)。 */
+    internal fun takeScrollCounter(): Int {
+        val delta = scrollCounter
+        scrollCounter = 0
+        return delta
     }
 
     fun toggleAutoScrollDisabled() {

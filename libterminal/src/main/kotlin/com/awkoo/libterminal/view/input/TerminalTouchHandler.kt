@@ -7,8 +7,6 @@ import android.widget.Scroller
 import com.awkoo.libterminal.engine.TerminalEmulator
 import com.awkoo.libterminal.view.TerminalView
 import kotlin.math.abs
-import kotlin.math.max
-import kotlin.math.min
 
 /**
  * 终端触摸、鼠标和滚动输入处理器。
@@ -118,13 +116,7 @@ internal class TerminalTouchHandler(
                 } else if (emulator.isAlternateBufferActive) {
                     view.handleKeyCode(if (up) KeyEvent.KEYCODE_DPAD_UP else KeyEvent.KEYCODE_DPAD_DOWN, 0)
                 } else {
-                    view.topRow = min(
-                        0,
-                        max(
-                            -emulator.screen.activeTranscriptRows,
-                            view.topRow + (if (up) -1 else 1)
-                        )
-                    )
+                    view.scrollbackBy(if (up) 1 else -1)
                     if (!view.awakenScrollbars()) view.invalidate()
                 }
             }

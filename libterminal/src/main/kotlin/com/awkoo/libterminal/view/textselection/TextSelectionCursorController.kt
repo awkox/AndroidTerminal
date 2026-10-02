@@ -14,7 +14,6 @@ import com.awkoo.libterminal.text.forEachColumn
 import com.awkoo.libterminal.view.interact.ActionModeItem
 import com.awkoo.libterminal.view.TerminalView
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.roundToInt
 
 internal class TextSelectionCursorController(private val terminalView: TerminalView) : CursorController {
@@ -287,13 +286,11 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
 
             // 3. 处理超出屏幕的滚动逻辑
             if (!emulator.isAlternateBufferActive) {
-                var topRow = terminalView.topRow
-                if (curY <= topRow) {
-                    topRow = max(-scrollRows, topRow - 1)
-                } else if (curY >= topRow + emulator.mRows) {
-                    topRow = min(0, topRow + 1)
+                if (curY <= terminalView.topRow) {
+                    terminalView.scrollbackBy(1)
+                } else if (curY >= terminalView.topRow + emulator.mRows) {
+                    terminalView.scrollbackBy(-1)
                 }
-                terminalView.topRow = topRow
             }
 
             // 4. 校准中文字符/宽字符对齐

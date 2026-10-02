@@ -162,7 +162,7 @@ class TerminalView(
             cursorBlinker.stop()
             textBlinker.stop()
             sessionBinder.bind(value)
-            topRow = 0
+            scrollbackOffset = 0
             keyProcessor.reset()
             field = value
 
@@ -327,8 +327,21 @@ class TerminalView(
         mEmulator?.toggleAutoScrollDisabled()
     }
 
-    /** 当前显示的顶行索引，范围从 -activeTranscriptRows 到 0。 */
-    internal var topRow: Int = 0
+    /** 距屏幕底部的回滚行数，0 表示跟随到底部。 */
+    private var scrollbackOffset: Int = 0
+
+    /** 当前可回滚的最大行数。 */
+    private val maxScrollback: Int
+        get() = mEmulator?.screen?.activeTranscriptRows ?: 0
+
+    /** 当前顶行的外部行号，恒 ≤ 0；读取时按当前历史行数夹取，始终落在合法域内。 */
+    internal val topRow: Int
+        get() = -scrollbackOffset.coerceIn(0, maxScrollback)
+
+    /** 按行数滚动回滚区：正数向历史（上），负数向底部（下）。 */
+    internal fun scrollbackBy(deltaRows: Int) {
+        scrollbackOffset = (scrollbackOffset + deltaRows).coerceIn(0, maxScrollback)
+    }
 
     override fun computeVerticalScrollRange() = mEmulator?.screen?.activeRows ?: 1
     override fun computeVerticalScrollExtent() = mEmulator?.mRows ?: 1
@@ -342,31 +355,30 @@ class TerminalView(
         var skipScrolling = skipScrolling
 
         synchronized(emulator) {
-            val rowsInHistory = emulator.screen.activeTranscriptRows
-            if (this.topRow < -rowsInHistory) this.topRow = -rowsInHistory
+            val rowsInHistory = maxScrollback
+            scrollbackOffset = scrollbackOffset.coerceAtMost(rowsInHistory)
 
+            val rowShift = emulator.takeScrollCounter()
             if (this.isSelectingText || emulator.isAutoScrollDisabled) {
-                val rowShift = emulator.scrollCounter
-                if (-this.topRow + rowShift > rowsInHistory) {
+                if (scrollbackOffset + rowShift > rowsInHistory) {
                     if (this.isSelectingText) stopTextSelectionMode()
                     if (emulator.isAutoScrollDisabled) {
-                        this.topRow = -rowsInHistory
+                        scrollbackOffset = rowsInHistory
                         skipScrolling = true
                     }
                 } else {
                     skipScrolling = true
-                    this.topRow -= rowShift
+                    scrollbackOffset += rowShift
                     decrementYTextSelectionCursors(rowShift)
                 }
             }
         }
 
-        if (!skipScrolling && this.topRow != 0) {
-            if (this.topRow < -3) awakenScrollBars()
-            this.topRow = 0
+        if (!skipScrolling && this.scrollbackOffset != 0) {
+            if (this.scrollbackOffset > 3) awakenScrollBars()
+            this.scrollbackOffset = 0
         }
 
-        emulator.clearScrollCounter()
         invalidate()
     }
 
@@ -507,7 +519,7 @@ class TerminalView(
 
         if (newColumns != emulator.mColumns || newRows != emulator.mRows) {
             currentSession.updateSize(newColumns, newRows, mRenderer.fontWidth.toInt(), mRenderer.fontLineSpacing)
-            this.topRow = 0
+            scrollbackOffset = 0
             scrollTo(0, 0)
             invalidate()
         }
