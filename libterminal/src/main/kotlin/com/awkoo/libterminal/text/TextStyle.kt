@@ -78,7 +78,7 @@ internal value class TextStyle(val value: Long) {
         const val UNDERLINE_STYLE_DASHED: Int = 5
 
         /** 扩展特效位布局常量。 */
-        private const val EXT_UNDERLINE_STYLE_MASK: Long = 0x7L
+        const val EXT_UNDERLINE_STYLE_MASK: Long = 0x7L
         private const val EXT_TRUECOLOR_UNDERLINE: Long = 1L shl 3
         private const val EXT_UNDERLINE_COLOR_SHIFT: Int = 16
 

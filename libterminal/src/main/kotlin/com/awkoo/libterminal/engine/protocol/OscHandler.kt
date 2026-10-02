@@ -133,6 +133,7 @@ internal class OscHandler(
                 if (i == textParameter.length || textParameter[i] == ';') {
                     textParameter.substring(lastIndex, i)
                         .toIntOrNull()
+                        ?.takeIf { it in 0 until TextStyle.NUM_INDEXED_COLORS }
                         ?.let { palette.reset(it) }
                     lastIndex = i + 1
                 }

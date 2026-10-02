@@ -370,7 +370,18 @@ internal class TerminalBuffer(
                     setOrClear -> effect or bits
                     else -> effect and bits.inv()
                 }
+
                 line.setRawStyle(x, (raw and effectMask.inv()) or (newEffect.toLong() and effectMask))
+
+                // 主下划线标志位如果发生由开到关的变化，
+                // 必须同步清空奇数槽的下划线样式
+                val wasUnderline = (effect and TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE) != 0
+                val isUnderline = (newEffect and TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE) != 0
+                if (wasUnderline && !isUnderline) {
+                    val ext = line.getExtendedEffect(x)
+                    // 仅抹除低 3 位的 style，保留真彩色扩展位，避免其他状态撕裂
+                    line.setExtendedEffect(x, ext and TextStyle.EXT_UNDERLINE_STYLE_MASK.inv())
+                }
             }
         }
     }
