@@ -122,6 +122,22 @@ internal class TerminalRow(
         return mSpaceUsed
     }
 
+    /**
+     * 把列号校准到字符边界：落在宽字符后半格内的列号推进到该字符之后。
+     *
+     * 扫描到 NUL 即视为无内容并返回原列号，返回值恒 ≥ [column]。
+     */
+    fun snapToColumn(column: Int): Int {
+        if (!mHasNonOneWidthOrSurrogateChars) return column
+
+        mText.forEachColumn(0, mSpaceUsed) { _, col, codePoint, width, _ ->
+            if (codePoint == 0) return@forEachColumn false
+            if (column in (col + 1)..<col + width) return col + width
+            true
+        }
+        return column
+    }
+
     private fun wideDisplayCharacterStartingAt(column: Int): Boolean {
         mText.forEachColumn(0, mSpaceUsed) { _, col, _, w, _ ->
             if (w > 0) {

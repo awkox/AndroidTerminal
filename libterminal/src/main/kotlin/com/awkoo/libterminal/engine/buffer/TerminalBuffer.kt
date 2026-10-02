@@ -54,29 +54,22 @@ internal class TerminalBuffer(
         joinBackLines: Boolean,
         joinFullLines: Boolean
     ): String {
-        var selY1 = selY1
-        var selY2 = selY2
+        val y1 = clampRow(selY1)
+        val y2 = clampRow(selY2)
+        val x1Start = clampColumn(selX1)
+        val x2End = clampColumn(selX2) + 1
 
-        val estimatedCapacity = (selY2 - selY1 + 1) * (mColumns + 1)
+        val estimatedCapacity = (y2 - y1 + 1).coerceAtLeast(0) * (mColumns + 1)
         val builder = StringBuilder(estimatedCapacity)
 
         val columns = mColumns
 
-        if (selY1 < -this.activeTranscriptRows) selY1 = -this.activeTranscriptRows
-        if (selY2 >= mScreenRows) selY2 = mScreenRows - 1
-
-        for (row in selY1..selY2) {
-            val x1 = if (row == selY1) selX1 else 0
-            var x2: Int
-            if (row == selY2) {
-                x2 = selX2 + 1
-                if (x2 > columns) x2 = columns
-            } else {
-                x2 = columns
-            }
+        for (row in y1..y2) {
+            val x1 = if (row == y1) x1Start else 0
+            val x2 = if (row == y2) x2End else columns
             val lineObject = mLines[externalToInternalRow(row)]
             if (lineObject == null) {
-                if ((!joinBackLines) && row < selY2 && row < mScreenRows - 1) {
+                if ((!joinBackLines) && row < y2 && row < mScreenRows - 1) {
                     builder.append('\n')
                 }
                 continue
@@ -84,7 +77,7 @@ internal class TerminalBuffer(
             val x1Index = lineObject.findStartOfColumn(x1)
             var x2Index =
                 if (x2 < mColumns) lineObject.findStartOfColumn(x2) else lineObject.mSpaceUsed
-            if (x2Index == x1Index) {
+            if (x2Index == x1Index && x2 < mColumns) {
                 x2Index = lineObject.findStartOfColumn(x2 + 1)
             }
             val line = lineObject.mText
@@ -111,7 +104,7 @@ internal class TerminalBuffer(
             if (
                 (!joinBackLines || !rowLineWrap) &&
                 (!joinFullLines || !lineFillsWidth) &&
-                row < selY2 &&
+                row < y2 &&
                 row < mScreenRows - 1
             ) {
                 builder.append('\n')
@@ -128,8 +121,7 @@ internal class TerminalBuffer(
      * 直接扫描 char 数组判断。
      */
     fun isCellBlank(column: Int, row: Int): Boolean {
-        if (column < 0 || column >= mColumns) return true
-        if (row < -this.activeTranscriptRows || row >= mScreenRows) return true
+        if (column !in 0 until mColumns || !rowInRange(row)) return true
         val lineObject = mLines[externalToInternalRow(row)] ?: return true
         var x1 = lineObject.findStartOfColumn(column)
         var x2 = lineObject.findStartOfColumn(column + 1)
@@ -147,8 +139,17 @@ internal class TerminalBuffer(
     val activeRows: Int
         get() = this.activeTranscriptRows + mScreenRows
 
+    /** 查询类接口允许的外行区间（含端点）。 */
+    fun rowInRange(row: Int): Boolean = row in -activeTranscriptRows until mScreenRows
+
+    /** 把外行号夹取到查询合法域内。 */
+    fun clampRow(row: Int): Int = row.coerceIn(-activeTranscriptRows, mScreenRows - 1)
+
+    /** 把列号夹取到查询合法域内。 */
+    fun clampColumn(column: Int): Int = column.coerceIn(0, mColumns - 1)
+
     fun externalToInternalRow(externalRow: Int): Int {
-        require(!(externalRow < -this.activeTranscriptRows || externalRow > mScreenRows)) {
+        require(externalRow in -this.activeTranscriptRows until mScreenRows) {
             "extRow=" + externalRow + ", mScreenRows=" + mScreenRows + ", mActiveTranscriptRows=" + this.activeTranscriptRows
         }
         return (mScreenFirstRow + externalRow).mod(mTotalRows)
@@ -159,6 +160,7 @@ internal class TerminalBuffer(
     }
 
     fun getLineWrap(row: Int): Boolean {
+        if (!rowInRange(row)) return false
         return mLines[externalToInternalRow(row)]?.mLineWrap ?: false
     }
 
@@ -292,7 +294,8 @@ internal class TerminalBuffer(
         }
 
         blockCopyLinesDown(mScreenFirstRow, topMargin)
-        blockCopyLinesDown(externalToInternalRow(bottomMargin), mScreenRows - bottomMargin)
+        val rowsBelowScreen = mScreenRows - bottomMargin
+        if (rowsBelowScreen > 0) blockCopyLinesDown(externalToInternalRow(bottomMargin), rowsBelowScreen)
 
         mScreenFirstRow = (mScreenFirstRow + 1) % mTotalRows
         if (this.activeTranscriptRows < mTotalRows - mScreenRows) this.activeTranscriptRows++
@@ -340,7 +343,20 @@ internal class TerminalBuffer(
     }
 
     fun getStyleAt(externalRow: Int, column: Int): TextStyle {
-        return allocateFullLineIfNecessary(externalToInternalRow(externalRow)).getStyle(column)
+        if (!rowInRange(externalRow) || column !in 0 until mColumns) return TextStyle.NORMAL
+        return mLines[externalToInternalRow(externalRow)]?.getStyle(column) ?: TextStyle.NORMAL
+    }
+
+    /**
+     * 把列号校准到字符边界：落在宽字符后半格内的列号推进到该字符之后。
+     *
+     * [column] 先夹取到 [0, mColumns)；[row] 越界或该行无内容时按无数据处理，
+     * 返回夹取后的列号。
+     */
+    fun snapToColumn(row: Int, column: Int): Int {
+        val clamped = clampColumn(column)
+        if (!rowInRange(row)) return clamped
+        return mLines[externalToInternalRow(row)]?.snapToColumn(clamped) ?: clamped
     }
 
     fun setOrClearEffect(

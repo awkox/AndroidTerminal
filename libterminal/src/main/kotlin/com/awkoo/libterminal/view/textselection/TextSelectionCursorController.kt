@@ -9,7 +9,6 @@ import android.view.MotionEvent
 import android.view.View
 import com.awkoo.libterminal.R
 import com.awkoo.libterminal.engine.buffer.TerminalBuffer
-import com.awkoo.libterminal.text.snapToColumnBoundary
 import com.awkoo.libterminal.view.interact.ActionModeItem
 import com.awkoo.libterminal.view.TerminalView
 import kotlin.math.max
@@ -136,8 +135,7 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
                         if (!screen.isCellBlank(mSelX1 - 1, mSelY1)) {
                             mSelX1--
                         } else break
-                    } else if (mSelY1 - 1 >= -screen.activeTranscriptRows &&
-                        screen.getLineWrap(mSelY1 - 1) &&
+                    } else if (screen.getLineWrap(mSelY1 - 1) &&
                         // 上一行折行且行尾格非空白才跨行，避免把空白格兜进选区
                         !screen.isCellBlank(emulator.mColumns - 1, mSelY1 - 1)
                     ) {
@@ -152,8 +150,7 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
                         if (!screen.isCellBlank(mSelX2 + 1, mSelY2)) {
                             mSelX2++
                         } else break
-                    } else if (mSelY2 < screen.mScreenRows - 1 &&
-                        screen.getLineWrap(mSelY2) &&
+                    } else if (screen.getLineWrap(mSelY2) &&
                         // 下一行折行起始格非空白才跨行，避免把空白格兜进选区
                         !screen.isCellBlank(0, mSelY2 + 1)
                     ) {
@@ -302,7 +299,7 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
 
     /** 落在宽字符后半格的列号推进到该字符之后，零宽字符不占列直接跳过。 */
     private fun getValidCurX(screen: TerminalBuffer, cy: Int, cx: Int): Int =
-        snapToColumnBoundary(screen.getSelectedText(0, cy, cx, cy), cx)
+        screen.snapToColumn(cy, cx)
 
     fun decrementYTextSelectionCursors(decrement: Int) {
         mSelY1 -= decrement

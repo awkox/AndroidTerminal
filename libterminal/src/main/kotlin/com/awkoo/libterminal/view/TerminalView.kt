@@ -396,9 +396,9 @@ class TerminalView(
     }
 
     /**
-     * 视口像素 → 缓冲区行列（含回滚历史），屏幕可用时夹取到合法范围。
+     * 视口像素 → 缓冲区行列（含回滚历史）。
      *
-     * 缓冲区查询 API 对区间做 require 校验，越界由产出方在此拦截。
+     * 选区与手柄坐标必须落在缓冲区合法域内，夹取以缓冲区为唯一真源统一收口。
      */
     internal fun bufferCellAt(x: Float, y: Float): CursorCoord {
         val renderer = mRenderer
@@ -406,10 +406,7 @@ class TerminalView(
         val row = CellPoint.yToRow(y, renderer.fontLineSpacing, renderer.mFontLineSpacingAndAscent) + topRow
         val emulator = mEmulator ?: return CursorCoord.pack(column, row)
         val screen = emulator.screen
-        return CursorCoord.pack(
-            column.coerceIn(0, emulator.mColumns - 1),
-            row.coerceIn(-screen.activeTranscriptRows, screen.mScreenRows - 1)
-        )
+        return CursorCoord.pack(screen.clampColumn(column), screen.clampRow(row))
     }
 
     /** 单元格列 → 像素边界；末列之后的右边界传 `mColumns`。 */
