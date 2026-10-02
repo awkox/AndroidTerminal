@@ -961,6 +961,11 @@ internal class TerminalEmulator(
         reset()
     }
 
+    /**
+     * 上报鼠标事件。
+     *
+     * [column]/[row] 为视口 0-based 单元格坐标，合法性由编码器按协议的 1-based 夹取。
+     */
     fun sendMouseEvent(mouseButton: Int, column: Int, row: Int, pressed: Boolean) {
         inputEncoder.encodeMouseEvent(
             button = mouseButton,

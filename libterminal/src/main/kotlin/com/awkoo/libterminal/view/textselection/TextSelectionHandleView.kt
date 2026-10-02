@@ -31,8 +31,6 @@ internal class TextSelectionHandleView(
     private var mTouchToWindowOffsetX = 0f
     private var mTouchToWindowOffsetY = 0f
     private var mHotspotX = 0f
-    private var mHotspotY = 0f
-    private var mTouchOffsetY = 0f
     private var mLastParentX = 0
     private var mLastParentY = 0
 
@@ -83,8 +81,6 @@ internal class TextSelectionHandleView(
 
         this.handleHeight = mHandleDrawable.intrinsicHeight
         this.handleWidth = handleWidth
-        mTouchOffsetY = -this.handleHeight * 0.3f
-        mHotspotY = 0f
         invalidate()
     }
 
@@ -183,7 +179,7 @@ internal class TextSelectionHandleView(
                 val rawX = event.rawX
                 val rawY = event.rawY
                 val newPosX = rawX - mTouchToWindowOffsetX + mHotspotX
-                val newPosY = rawY - mTouchToWindowOffsetY + mHotspotY + mTouchOffsetY
+                val newPosY = rawY - mTouchToWindowOffsetY
 
                 mCursorController.updatePosition(this, newPosX.roundToInt(), newPosY.roundToInt())
             }

@@ -95,10 +95,10 @@ internal class TerminalTouchHandler(
         val up = rowsDown < 0
         val amount = abs(rowsDown)
 
-        // 在锁外计算鼠标坐标和去重状态（均为本类私有字段，无并发竞争）
-        val coord = view.getColumnAndRow(event, false)
-        var scrollX = coord.col + 1
-        var scrollY = coord.row + 1
+        // 在锁外计算鼠标坐标：视口空间只读渲染器字体度量，不触碰模拟器尺寸，无并发竞争
+        val coord = view.viewportCellAt(event.x, event.y)
+        var scrollX = coord.col
+        var scrollY = coord.row
 
         synchronized(emulator) {
             for (i in 0..<amount) {
@@ -126,9 +126,9 @@ internal class TerminalTouchHandler(
     /** 向终端发送单个鼠标事件代码。 */
     fun sendMouseEventCode(e: MotionEvent, button: Int, pressed: Boolean) {
         val emulator = view.mEmulator ?: return
-        val coord = view.getColumnAndRow(e, false)
-        var x = coord.col + 1
-        var y = coord.row + 1
+        val coord = view.viewportCellAt(e.x, e.y)
+        var x = coord.col
+        var y = coord.row
 
         synchronized(emulator) {
             if (pressed && (button == TerminalEmulator.MOUSE_WHEELDOWN_BUTTON || button == TerminalEmulator.MOUSE_WHEELUP_BUTTON)) {

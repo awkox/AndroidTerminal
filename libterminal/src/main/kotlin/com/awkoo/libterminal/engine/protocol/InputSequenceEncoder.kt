@@ -19,6 +19,7 @@ internal class InputSequenceEncoder(
     /**
      * 编码鼠标事件。
      *
+     * [column]/[row] 为视口 0-based 单元格坐标，此处统一转为协议的 1-based 并夹取到屏幕范围。
      * SGR 协议启用时输出 `\e[<b;c;rM/m`，否则输出传统 X10 协议的 6 字节序列；
      * 仅移动事件（[button] 为 MOUSE_LEFT_BUTTON_MOVED）在按钮事件（1002）或
      * 任意事件（1003）追踪模式下才上报。
@@ -35,8 +36,8 @@ internal class InputSequenceEncoder(
         rows: Int
     ) {
         var button = button
-        val c = min(max(column, 1), columns)
-        val r = min(max(row, 1), rows)
+        val c = min(max(column + 1, 1), columns)
+        val r = min(max(row + 1, 1), rows)
         if (button == TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED && !buttonEventTracking && !anyEventTracking) {
             return
         } else if (sgrProtocol) {

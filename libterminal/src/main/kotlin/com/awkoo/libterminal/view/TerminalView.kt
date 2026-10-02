@@ -382,25 +382,44 @@ class TerminalView(
         invalidate()
     }
 
-    /** 获取 MotionEvent 位置对应的 (列, 行) 坐标。 */
-    internal fun getColumnAndRow(event: MotionEvent, relativeToScroll: Boolean): CursorCoord {
+    /**
+     * 视口像素 → 视口行列，不夹取。
+     *
+     * 合法范围由鼠标协议编码器在上报前裁决，避免在锁外读取模拟器尺寸。
+     */
+    internal fun viewportCellAt(x: Float, y: Float): CursorCoord {
         val renderer = mRenderer
-        val column = (event.x / renderer.fontWidth).toInt()
-        var row = ((event.y - renderer.mFontLineSpacingAndAscent) / renderer.fontLineSpacing).toInt()
-        if (relativeToScroll) row += this.topRow
-        return CursorCoord.pack(column, row)
+        return CursorCoord.pack(
+            CellPoint.xToColumn(x, renderer.fontWidth),
+            CellPoint.yToRow(y, renderer.fontLineSpacing, renderer.mFontLineSpacingAndAscent)
+        )
     }
 
-    internal fun getCursorX(x: Float) = (x / mRenderer.fontWidth).toInt()
-    internal fun getCursorY(y: Float) = (((y - 40) / mRenderer.fontLineSpacing) + this.topRow).toInt()
+    /**
+     * 视口像素 → 缓冲区行列（含回滚历史），屏幕可用时夹取到合法范围。
+     *
+     * 缓冲区查询 API 对区间做 require 校验，越界由产出方在此拦截。
+     */
+    internal fun bufferCellAt(x: Float, y: Float): CursorCoord {
+        val renderer = mRenderer
+        val column = CellPoint.xToColumn(x, renderer.fontWidth)
+        val row = CellPoint.yToRow(y, renderer.fontLineSpacing, renderer.mFontLineSpacingAndAscent) + topRow
+        val emulator = mEmulator ?: return CursorCoord.pack(column, row)
+        val screen = emulator.screen
+        return CursorCoord.pack(
+            column.coerceIn(0, emulator.mColumns - 1),
+            row.coerceIn(-screen.activeTranscriptRows, screen.mScreenRows - 1)
+        )
+    }
 
+    /** 单元格列 → 像素边界；末列之后的右边界传 `mColumns`。 */
     internal fun getPointX(cx: Int): Int {
         val emulator = mEmulator!!
         val clamped = if (cx > emulator.mColumns) emulator.mColumns else cx
-        return (clamped * mRenderer.fontWidth).roundToInt()
+        return CellPoint.columnToX(clamped, mRenderer.fontWidth)
     }
 
-    internal fun getPointY(cy: Int) = ((cy - this.topRow) * mRenderer.fontLineSpacing).toFloat().roundToInt()
+    internal fun getPointY(cy: Int) = CellPoint.rowToY(cy - topRow, mRenderer.fontLineSpacing)
 
     internal fun copyTextToClipboard() {
         copyTextToClipboard(textSelectionCursorController.selectedText)

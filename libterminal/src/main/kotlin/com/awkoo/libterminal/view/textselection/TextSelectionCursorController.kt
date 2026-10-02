@@ -2,7 +2,6 @@ package com.awkoo.libterminal.view.textselection
 
 import android.content.ClipboardManager
 import android.graphics.Rect
-import android.text.TextUtils
 import android.view.ActionMode
 import android.view.Menu
 import android.view.MenuItem
@@ -10,11 +9,10 @@ import android.view.MotionEvent
 import android.view.View
 import com.awkoo.libterminal.R
 import com.awkoo.libterminal.engine.buffer.TerminalBuffer
-import com.awkoo.libterminal.text.forEachColumn
+import com.awkoo.libterminal.text.snapToColumnBoundary
 import com.awkoo.libterminal.view.interact.ActionModeItem
 import com.awkoo.libterminal.view.TerminalView
 import kotlin.math.max
-import kotlin.math.roundToInt
 
 internal class TextSelectionCursorController(private val terminalView: TerminalView) : CursorController {
     private val mStartHandle: TextSelectionHandleView =
@@ -24,7 +22,8 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
     private var mIsSelectingText = false
     private var mShowStartTime = System.currentTimeMillis()
 
-    private val mHandleHeight: Int = max(mStartHandle.handleHeight, mEndHandle.handleWidth)
+    private val mHandleHeight: Int
+        get() = max(mStartHandle.handleHeight, mEndHandle.handleHeight)
     private var mSelX1 = -1
     private var mSelX2 = -1
     private var mSelY1 = -1
@@ -121,13 +120,11 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
         synchronized(emulator) {
             val screen = emulator.screen
 
-            val coord = terminalView.getColumnAndRow(event, true)
-            val safeCol = coord.col.coerceIn(0, emulator.mColumns - 1)
-            val safeRow = coord.row.coerceIn(-screen.activeTranscriptRows, screen.mScreenRows - 1)
-            mSelX2 = safeCol
-            mSelY2 = safeRow
-            mSelX1 = safeCol
-            mSelY1 = safeRow
+            val coord = terminalView.bufferCellAt(event.x, event.y)
+            mSelX1 = coord.col
+            mSelY1 = coord.row
+            mSelX2 = coord.col
+            mSelY2 = coord.row
 
             if (" " != screen.getSelectedText(mSelX1, mSelY1, mSelX1, mSelY1)) {
                 // 选中的不是空白字符，扩展为单词选择。
@@ -236,10 +233,10 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
             override fun onDestroyActionMode(mode: ActionMode?) = callback.onDestroyActionMode(mode)
 
             override fun onGetContentRect(mode: ActionMode?, view: View?, outRect: Rect) {
-                var x1 = (mSelX1 * terminalView.mRenderer.fontWidth).roundToInt()
-                var x2 = ((mSelX2 + 1) * terminalView.mRenderer.fontWidth).roundToInt()
-                val top = ((mSelY1 - terminalView.topRow) * terminalView.mRenderer.fontLineSpacing).toFloat().roundToInt()
-                var bottom = ((mSelY2 + 1 - terminalView.topRow) * terminalView.mRenderer.fontLineSpacing).toFloat().roundToInt()
+                var x1 = terminalView.getPointX(mSelX1)
+                var x2 = terminalView.getPointX(mSelX2 + 1)
+                val top = terminalView.getPointY(mSelY1)
+                var bottom = terminalView.getPointY(mSelY2 + 1)
 
                 if (x1 > x2) {
                     x1 = x2.also { x2 = x1 }
@@ -259,13 +256,12 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
         
         synchronized(emulator) {
             val screen = emulator.screen
-            val scrollRows = screen.activeRows - emulator.mRows
             val isStart = handle === mStartHandle
 
-            // 1. 获取光标基础坐标并进行边界约束
-            var curX = max(0, terminalView.getCursorX(x.toFloat()))
-            var curY = terminalView.getCursorY(y.toFloat())
-                .coerceIn(-scrollRows, emulator.mRows - 1)
+            // 1. 获取光标基础坐标（产出方已夹取到缓冲区合法范围）
+            val coord = terminalView.bufferCellAt(x.toFloat(), y.toFloat())
+            var curX = coord.col
+            var curY = coord.row
 
             // 2. 互斥检查与值更新 (将 mSelX1/mSelY1 和 mSelX2/mSelY2 的交叉修改进行精简)
             if (isStart) {
@@ -304,19 +300,9 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
         terminalView.invalidate()
     }
 
-    private fun getValidCurX(screen: TerminalBuffer, cy: Int, cx: Int): Int {
-        val line = screen.getSelectedText(0, cy, cx, cy)
-        if (!TextUtils.isEmpty(line)) {
-            line.forEachColumn { _, col, cp, wc, _ ->
-                if (cp == 0) return@forEachColumn false
-                val cend = col + wc
-                if (cx in (col + 1)..<cend) return cend
-                if (cend == col) return col
-                true
-            }
-        }
-        return cx
-    }
+    /** 落在宽字符后半格的列号推进到该字符之后，零宽字符不占列直接跳过。 */
+    private fun getValidCurX(screen: TerminalBuffer, cy: Int, cx: Int): Int =
+        snapToColumnBoundary(screen.getSelectedText(0, cy, cx, cy), cx)
 
     fun decrementYTextSelectionCursors(decrement: Int) {
         mSelY1 -= decrement
