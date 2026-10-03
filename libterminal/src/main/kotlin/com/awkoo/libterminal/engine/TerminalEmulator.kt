@@ -579,8 +579,16 @@ internal class TerminalEmulator(
             }
 
             's' -> if (isDecsetInternalBitSet(DECSET_BIT_LEFTRIGHT_MARGIN_MODE)) {
-                mLeftMargin = (AnsiEscapeParser.getArg(args, 0, 1, true) - 1).coerceAtMost(mColumns - 2)
-                mRightMargin = AnsiEscapeParser.getArg(args, 1, mColumns, true).coerceIn(mLeftMargin + 1, mColumns)
+                val pl = AnsiEscapeParser.getArg(args, 0, 1, true)
+                val pr = AnsiEscapeParser.getArg(args, 1, mColumns, true)
+                val leftMax = (mColumns - 2).coerceAtLeast(0)
+                val lmCandidate = (pl - 1).coerceIn(0, leftMax)
+                var rmCandidate = pr.coerceIn(lmCandidate + 1, mColumns)
+                if (rmCandidate <= lmCandidate) {
+                    rmCandidate = (lmCandidate + 1).coerceAtMost(mColumns)
+                }
+                mLeftMargin = lmCandidate
+                mRightMargin = rmCandidate
                 setCursorPosition(0, 0)
             } else saveCursor()
 
