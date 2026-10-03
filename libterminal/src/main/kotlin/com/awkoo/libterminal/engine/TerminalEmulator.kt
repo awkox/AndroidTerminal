@@ -39,14 +39,14 @@ internal class TerminalEmulator(
     var cursorRow: Int
         get() = mCursorRow
         private set(row) {
-            mCursorRow = row
+            mCursorRow = row.coerceIn(0, mRows - 1)
             mAboutToAutoWrap = false
         }
 
     var cursorCol: Int
         get() = mCursorCol
         private set(col) {
-            mCursorCol = col
+            mCursorCol = col.coerceIn(0, mColumns - 1)
             mAboutToAutoWrap = false
         }
 
@@ -60,9 +60,8 @@ internal class TerminalEmulator(
         setCursorPosition(col, mCursorRow)
 
     private fun setCursorRowCol(row: Int, col: Int) {
-        mCursorRow = row.coerceIn(0, mRows - 1)
-        mCursorCol = col.coerceIn(0, mColumns - 1)
-        mAboutToAutoWrap = false
+        this.cursorRow = row
+        this.cursorCol = col
     }
 
     private val mMainBuffer = TerminalBuffer(mColumns, maxTranscriptRows, mRows)
@@ -226,8 +225,8 @@ internal class TerminalEmulator(
                 TextStyle.NORMAL,
                 this.isAlternateBufferActive
             )
-            mCursorCol = newCursor.col
-            mCursorRow = newCursor.row
+            this.cursorCol = newCursor.col
+            this.cursorRow = newCursor.row
         }
     }
 
@@ -531,7 +530,7 @@ internal class TerminalEmulator(
                         }
                     }
                 }
-                mCursorCol = newCol
+                this.cursorCol = newCol
             }
 
             '`' -> setCursorColRespectingOriginMode(AnsiEscapeParser.getArg(args, 0, 1, true) - 1)
@@ -988,8 +987,8 @@ internal class TerminalEmulator(
         if (autoWrap) {
             if (cursorInLastColumn && ((mAboutToAutoWrap && displayWidth == 1) || displayWidth == 2)) {
                 screen.setLineWrap(mCursorRow)
-                mCursorCol = mLeftMargin
-                if (mCursorRow + 1 < mBottomMargin) mCursorRow++ else scrollDownOneLine()
+                this.cursorCol = mLeftMargin
+                if (mCursorRow + 1 < mBottomMargin) this.cursorRow++ else scrollDownOneLine()
             }
         } else if (cursorInLastColumn && displayWidth == 2) {
             return
@@ -1019,7 +1018,7 @@ internal class TerminalEmulator(
 
         if (autoWrap && displayWidth > 0) mAboutToAutoWrap =
             (mCursorCol == mRightMargin - displayWidth)
-        mCursorCol = min(mCursorCol + displayWidth, mRightMargin - 1)
+        this.cursorCol = min(mCursorCol + displayWidth, mRightMargin - 1)
     }
 
     private fun doLinefeed() {
@@ -1090,8 +1089,8 @@ internal class TerminalEmulator(
                         val row = mSavedStateMain.mSavedCursorRow
                         restoreCursor()
                         if (resized) {
-                            mCursorCol = col
-                            mCursorRow = row
+                            this.cursorCol = col
+                            this.cursorRow = row
                         }
                     }
                     if (resized) resize(mColumns, mRows, mCellWidthPixels, mCellHeightPixels)
