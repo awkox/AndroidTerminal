@@ -316,15 +316,7 @@ internal class TerminalEmulator(
     }
 
     override fun onBackspace() {
-        if (mLeftMargin == mCursorCol) {
-            val previousRow = mCursorRow - 1
-            if (previousRow >= mTopMargin && screen.getLineWrap(previousRow)) {
-                screen.clearLineWrap(previousRow)
-                setCursorRowCol(previousRow, mRightMargin - 1)
-            }
-        } else {
-            this.cursorCol = mCursorCol - 1
-        }
+        if (mCursorCol > 0) this.cursorCol = mCursorCol - 1
     }
 
     override fun onHorizontalTab() {
@@ -607,17 +599,12 @@ internal class TerminalEmulator(
         mAboutToAutoWrap = false
         when (AnsiEscapeParser.getArg(args, 0, 0, true)) {
             0 -> {
-                blockClear(mCursorCol, mCursorRow, mRightMargin - mCursorCol)
-                blockClear(
-                    mLeftMargin,
-                    mCursorRow + 1,
-                    mRightMargin - mLeftMargin,
-                    mBottomMargin - (mCursorRow + 1)
-                )
+                blockClear(mCursorCol, mCursorRow, mColumns - mCursorCol)
+                blockClear(0, mCursorRow + 1, mColumns, mRows - (mCursorRow + 1))
             }
 
             1 -> {
-                blockClear(0, mTopMargin, mColumns, mCursorRow - mTopMargin)
+                blockClear(0, 0, mColumns, mCursorRow)
                 blockClear(0, mCursorRow, mCursorCol + 1)
             }
 
@@ -1014,9 +1001,10 @@ internal class TerminalEmulator(
             rendition.currentExtendedEffect
         )
 
-        if (autoWrap && displayWidth > 0) mAboutToAutoWrap =
-            (mCursorCol == mRightMargin - displayWidth)
+        val pendingAutoWrap =
+            if (autoWrap && displayWidth > 0) mCursorCol == mRightMargin - displayWidth else mAboutToAutoWrap
         this.cursorCol = min(mCursorCol + displayWidth, mRightMargin - 1)
+        mAboutToAutoWrap = pendingAutoWrap
     }
 
     private fun doLinefeed() {
