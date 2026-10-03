@@ -286,7 +286,17 @@ internal class TerminalBuffer(
         mLines[blankRow]?.clear(style) ?: run { mLines[blankRow] = TerminalRow(mColumns, style) }
     }
 
+    /**
+     * 把源矩形 [sx, sy, w, h] 的内容按行复制到目标矩形 [dx, dy, w, h]。
+     *
+     * 源与目标都必须是屏幕内的合法矩形：列区间落在 `[0, mColumns)`，行区间落在
+     * `[0, mScreenRows)`。滚动历史行（负行号）不参与搬运，与 [blockSet] 的取值域一致。
+     */
     fun blockCopy(sx: Int, sy: Int, w: Int, h: Int, dx: Int, dy: Int) {
+        require(!(w < 0 || h < 0 || sx < 0 || sx + w > mColumns || dx < 0 || dx + w > mColumns ||
+                sy < 0 || sy + h > mScreenRows || dy < 0 || dy + h > mScreenRows)) {
+            "Illegal arguments! blockCopy($sx, $sy, $w, $h, $dx, $dy, $mColumns, $mScreenRows)"
+        }
         if (w == 0) return
         val copyingUp = sy > dy
         for (y in 0..<h) {
