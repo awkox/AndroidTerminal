@@ -401,7 +401,8 @@ class TerminalView(
 
     /** 单元格列 → 像素边界；末列之后的右边界传 `mColumns`。 */
     internal fun getPointX(cx: Int): Int {
-        val clamped = cx.coerceAtMost(mEmulator?.mColumns ?: Int.MAX_VALUE)
+        val columns = mEmulator?.mColumns ?: 0
+        val clamped = if (columns == 0) cx else cx.coerceAtMost(columns)
         return CellPoint.columnToX(clamped, mRenderer.fontWidth)
     }
 

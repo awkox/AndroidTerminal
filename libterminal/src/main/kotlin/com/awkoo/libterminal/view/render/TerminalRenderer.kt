@@ -166,7 +166,7 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
             selx2 = if (row == selectionY2) selectionX2 else mEmulator.mColumns
         }
 
-        val lineObject = screen.allocateFullLineIfNecessary(screen.externalToInternalRow(row))
+        val lineObject = screen.getRowForRead(row)
         val line = lineObject.mText
         val charsUsedInLine = lineObject.mSpaceUsed
         // 行内仅含 BMP 单宽字符时，可整体跳过 wcwidth 计算与零宽字符扫描。

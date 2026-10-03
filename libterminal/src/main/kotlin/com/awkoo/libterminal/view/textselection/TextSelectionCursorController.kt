@@ -306,7 +306,6 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
         get() = mIsSelectingText
 
     fun getSelectors(sel: IntArray) {
-        if (sel.size != 4) return
         sel[0] = mSelY1
         sel[1] = mSelY2
         sel[2] = mSelX1

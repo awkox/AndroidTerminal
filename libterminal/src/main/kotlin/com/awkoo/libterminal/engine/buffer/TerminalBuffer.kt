@@ -17,6 +17,14 @@ internal class TerminalBuffer(
     @JvmField
     var mLines: Array<TerminalRow?> = arrayOfNulls(mTotalRows)
 
+    /**
+     * 只读路径用的共享空白行：列宽与当前 mColumns 一致，不写入 mLines。
+     *
+     * 同一实例会被 [getRowForRead] 返回给多个调用方，调用方只允许读取；
+     * 任何写入都会污染全部只读路径。仅在构造时与列宽变化时重建。
+     */
+    private var mSharedBlankRow: TerminalRow = TerminalRow(mColumns, TextStyle.NORMAL)
+
     var activeTranscriptRows: Int = 0
         private set
 
@@ -235,6 +243,7 @@ internal class TerminalBuffer(
         mScreenFirstRow = 0
         this.activeTranscriptRows = 0
         mColumns = newColumns
+        mSharedBlankRow = TerminalRow(newColumns, TextStyle.NORMAL)
 
         // 执行委托排版（Reflow）操作
         return TerminalReflower.reflow(
@@ -297,10 +306,27 @@ internal class TerminalBuffer(
     }
 
     fun blockSet(sx: Int, sy: Int, w: Int, h: Int, value: Int, style: TextStyle, extendedEffect: Long = 0L) {
-        require(!(sx < 0 || sx + w > mColumns || sy < 0 || sy + h > mScreenRows)) {
+        require(!(w < 0 || h < 0 || sx < 0 || sx + w > mColumns || sy < 0 || sy + h > mScreenRows)) {
             "Illegal arguments! blockSet($sx, $sy, $w, $h, $value, $mColumns, $mScreenRows)"
         }
         for (y in 0..<h) for (x in 0..<w) setChar(sx + x, sy + y, value, style, extendedEffect)
+    }
+
+    /**
+     * 获取指定外部行的只读行对象。
+     *
+     * - 若行不在查询合法域内（越界），返回共享空白行。
+     * - 若对应槽位为 null（尚未分配），返回共享空白行。
+     * - 否则返回已有的 TerminalRow。
+     *
+     * 注意：此方法**永不**向 mLines 写入任何内容，用于纯读路径以消除读时写副作用。
+     */
+    fun getRowForRead(externalRow: Int): TerminalRow {
+        if (!rowInRange(externalRow)) {
+            return mSharedBlankRow
+        }
+        val internal = externalToInternalRow(externalRow)
+        return mLines[internal] ?: mSharedBlankRow
     }
 
     fun allocateFullLineIfNecessary(row: Int): TerminalRow {
