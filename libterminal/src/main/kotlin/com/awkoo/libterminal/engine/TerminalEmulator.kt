@@ -861,8 +861,8 @@ internal class TerminalEmulator(
     }
 
     private fun handleCsiSingleQuote(b: Int, args: IntArray) {
-        val columnsAfterCursor = mRightMargin - mCursorCol
-        val columnsToChange = min(AnsiEscapeParser.getArg(args, 1, 1, true), columnsAfterCursor)
+        val columnsAfterCursor = (mRightMargin - mCursorCol).coerceAtLeast(0)
+        val columnsToChange = min(AnsiEscapeParser.getArg(args, 0, 1, true), columnsAfterCursor)
         val columnsToMove = columnsAfterCursor - columnsToChange
         when (b) {
             '}'.code -> {
