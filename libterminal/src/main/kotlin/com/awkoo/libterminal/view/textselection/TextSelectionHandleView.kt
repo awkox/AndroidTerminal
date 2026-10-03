@@ -64,23 +64,18 @@ internal class TextSelectionHandleView(
     }
 
     fun setOrientation(orientation: Int) {
-        mOrientation = orientation
-        var handleWidth = 0
-        when (orientation) {
-            LEFT -> {
-                mHandleDrawable = getDrawable(context, R.drawable.text_select_handle_left_material)!!
-                handleWidth = mHandleDrawable.intrinsicWidth
-                mHotspotX = (handleWidth * 3) / 4f
-            }
-            RIGHT -> {
-                mHandleDrawable = getDrawable(context, R.drawable.text_select_handle_right_material)!!
-                handleWidth = mHandleDrawable.intrinsicWidth
-                mHotspotX = handleWidth / 4f
-            }
+        val drawableId = when (orientation) {
+            LEFT -> R.drawable.text_select_handle_left_material
+            RIGHT -> R.drawable.text_select_handle_right_material
+            else -> return
         }
-
-        this.handleHeight = mHandleDrawable.intrinsicHeight
-        this.handleWidth = handleWidth
+        mOrientation = orientation
+        val handleDrawable = requireNotNull(getDrawable(context, drawableId))
+        mHandleDrawable = handleDrawable
+        this.handleHeight = handleDrawable.intrinsicHeight
+        this.handleWidth = handleDrawable.intrinsicWidth
+        mHotspotX =
+            if (orientation == LEFT) (handleWidth * 3) / 4f else handleWidth / 4f
         invalidate()
     }
 
@@ -89,8 +84,7 @@ internal class TextSelectionHandleView(
         initHandle()
         invalidate()
 
-        val coords = mTempCoords
-        terminalView.getLocationInWindow(coords)
+        val coords = windowCoords()
         coords[0] += mPointX
         coords[1] += mPointY
 
@@ -108,9 +102,7 @@ internal class TextSelectionHandleView(
     }
 
     fun removeFromParent() {
-        if (this.parent != null) {
-            (this.parent as ViewGroup).removeView(this)
-        }
+        (parent as? ViewGroup)?.removeView(this)
     }
 
     // [新增] 统一更新布局的方法，剥离计算逻辑，由外部直接控制
@@ -123,35 +115,31 @@ internal class TextSelectionHandleView(
         mPointX = (x - (if (this.isShowing) oldHotspotX else mHotspotX)).toInt()
         mPointY = y
 
-        if (isVisible || isDragging) {
-            var coords: IntArray? = null
-
-            if (this.isShowing) {
-                coords = mTempCoords
-                terminalView.getLocationInWindow(coords)
-                val x1 = coords[0] + mPointX
-                val y1 = coords[1] + mPointY
-                mHandle?.update(x1, y1, width, height)
-            } else {
-                show()
-            }
-
-            if (this.isDragging) {
-                if (coords == null) {
-                    coords = mTempCoords
-                    terminalView.getLocationInWindow(coords)
-                }
-                if (coords[0] != mLastParentX || coords[1] != mLastParentY) {
-                    mTouchToWindowOffsetX += (coords[0] - mLastParentX).toFloat()
-                    mTouchToWindowOffsetY += (coords[1] - mLastParentY).toFloat()
-                    mLastParentX = coords[0]
-                    mLastParentY = coords[1]
-                }
-            }
-        } else {
+        if (!isVisible && !isDragging) {
             hide()
+            return
+        }
+
+        if (this.isShowing) {
+            val coords = windowCoords()
+            mHandle?.update(coords[0] + mPointX, coords[1] + mPointY, width, height)
+        } else {
+            show()
+        }
+
+        if (this.isDragging) {
+            val coords = windowCoords()
+            if (coords[0] != mLastParentX || coords[1] != mLastParentY) {
+                mTouchToWindowOffsetX += (coords[0] - mLastParentX).toFloat()
+                mTouchToWindowOffsetY += (coords[1] - mLastParentY).toFloat()
+                mLastParentX = coords[0]
+                mLastParentY = coords[1]
+            }
         }
     }
+
+    private fun windowCoords(): IntArray =
+        mTempCoords.also { terminalView.getLocationInWindow(it) }
 
     public override fun onDraw(c: Canvas) {
         val width = mHandleDrawable.intrinsicWidth
@@ -168,8 +156,7 @@ internal class TextSelectionHandleView(
                 val rawY = event.rawY
                 mTouchToWindowOffsetX = rawX - mPointX
                 mTouchToWindowOffsetY = rawY - mPointY
-                val coords = mTempCoords
-                terminalView.getLocationInWindow(coords)
+                val coords = windowCoords()
                 mLastParentX = coords[0]
                 mLastParentY = coords[1]
                 this.isDragging = true

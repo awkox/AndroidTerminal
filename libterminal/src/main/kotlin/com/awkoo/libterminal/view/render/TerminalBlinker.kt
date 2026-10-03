@@ -14,7 +14,6 @@ import kotlinx.coroutines.withTimeoutOrNull
  * 结合 [poke] 方法，可以在用户输入文字时打断闪烁周期，保持常亮并重新计时。
  */
 internal class TerminalBlinker(
-    private val blinkerName: String,
     private val scope: CoroutineScope,
     private val onInvalidate: () -> Unit,
     private val shouldStart: (TerminalEmulator) -> Boolean = { true },
@@ -29,10 +28,7 @@ internal class TerminalBlinker(
 
     var blinkRate: Long = blinkRate
         set(value) {
-            field = when(value) {
-                0L -> 0L
-                else -> value.coerceIn(100L, 2000L)
-            }
+            field = if (value == 0L) 0L else value.coerceIn(100L, 2000L)
         }
 
     fun start(emulator: TerminalEmulator) {
@@ -58,13 +54,8 @@ internal class TerminalBlinker(
                         resetChannel.receive()
                     }
 
-                    if (interrupted != null) {
-                        // 被打断（即用户正在输入）：强制光标进入可见状态，并立刻进入下一轮 while 循环重新计时
-                        isVisible = true
-                    } else {
-                        // 正常超时：闪烁状态翻转
-                        isVisible = !isVisible
-                    }
+                    // 被打断（即用户正在输入）：强制光标进入可见状态并重新计时；正常超时则翻转闪烁状态
+                    isVisible = interrupted != null || !isVisible
                 }
             } finally {
                 // 确保协程被取消时关闭闪烁状态
@@ -74,10 +65,8 @@ internal class TerminalBlinker(
     }
 
     fun stop() {
-        job?.let {
-            it.cancel()
-            job = null
-        }
+        job?.cancel()
+        job = null
     }
 
     /**

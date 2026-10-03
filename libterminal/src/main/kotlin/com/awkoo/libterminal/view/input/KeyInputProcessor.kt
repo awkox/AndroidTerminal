@@ -39,14 +39,12 @@ internal class KeyInputProcessor(
         val currentSession = sessionProvider() ?: return KeyDownResult.NOT_HANDLED
         if (isSelectingText()) stopTextSelection()
 
-        if (event.isSystem) {
-            return KeyDownResult.PASS_TO_SUPER
-        } else if (event.action == KeyEvent.ACTION_MULTIPLE && keyCode == KeyEvent.KEYCODE_UNKNOWN) {
+        if (event.isSystem) return KeyDownResult.PASS_TO_SUPER
+        if (event.action == KeyEvent.ACTION_MULTIPLE && keyCode == KeyEvent.KEYCODE_UNKNOWN) {
             currentSession.write(event.characters)
             return KeyDownResult.HANDLED
-        } else if (keyCode == KeyEvent.KEYCODE_LANGUAGE_SWITCH) {
-            return KeyDownResult.PASS_TO_SUPER
         }
+        if (keyCode == KeyEvent.KEYCODE_LANGUAGE_SWITCH) return KeyDownResult.PASS_TO_SUPER
 
         val metaState = event.metaState
         val extraMods = modifierReader()
@@ -66,9 +64,8 @@ internal class KeyInputProcessor(
         }
 
         var bitsToClear = KeyEvent.META_CTRL_MASK
-        if (rightAltDownFromEvent) {
-            // 允许右 Alt / Alt Gr 用于字符组合
-        } else {
+        // 右 Alt / Alt Gr 按下时不清除 ALT 位，交由 getUnicodeChar 组合出字符
+        if (!rightAltDownFromEvent) {
             bitsToClear = bitsToClear or (KeyEvent.META_ALT_ON or KeyEvent.META_ALT_LEFT_ON)
         }
         var effectiveMetaState = event.metaState and bitsToClear.inv()
@@ -128,26 +125,26 @@ internal class KeyInputProcessor(
     }
 
     fun handleKeyCode(keyCode: Int, keyMod: Int): Boolean {
-        if (handleKeyCodeAction(keyCode, keyMod)) return true
-        val emulator = emulatorProvider()!!
-        val code = KeySequenceEncoder.getCode(keyCode, keyMod, emulator.isCursorKeysApplicationMode, emulator.isKeypadApplicationMode)
-            ?: return false
+        val emulator = emulatorProvider() ?: return false
+        if (handleKeyCodeAction(emulator, keyCode, keyMod)) return true
+        val code = KeySequenceEncoder.getCode(
+            keyCode,
+            keyMod,
+            emulator.isCursorKeysApplicationMode,
+            emulator.isKeypadApplicationMode
+        ) ?: return false
+        val currentSession = sessionProvider() ?: return false
         pokeCursor()
-        sessionProvider()!!.write(code)
+        currentSession.write(code)
         return true
     }
 
-    private fun handleKeyCodeAction(keyCode: Int, keyMod: Int): Boolean {
+    private fun handleKeyCodeAction(emulator: TerminalEmulator, keyCode: Int, keyMod: Int): Boolean {
         val shiftDown = (keyMod and KeySequenceEncoder.KEYMOD_SHIFT) != 0
-        val emulator = emulatorProvider()!!
-
-        when (keyCode) {
-            KeyEvent.KEYCODE_PAGE_UP,
-            KeyEvent.KEYCODE_PAGE_DOWN ->
-                if (shiftDown) {
-                    scrollPages(if (keyCode == KeyEvent.KEYCODE_PAGE_UP) -emulator.mRows else emulator.mRows)
-                    return true
-                }
+        val pageKey = keyCode == KeyEvent.KEYCODE_PAGE_UP || keyCode == KeyEvent.KEYCODE_PAGE_DOWN
+        if (shiftDown && pageKey) {
+            scrollPages(if (keyCode == KeyEvent.KEYCODE_PAGE_UP) -emulator.mRows else emulator.mRows)
+            return true
         }
         return false
     }

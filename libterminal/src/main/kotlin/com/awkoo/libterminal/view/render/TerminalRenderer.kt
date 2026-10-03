@@ -59,10 +59,10 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
         mFontLineSpacingAndAscent = this.fontLineSpacing + mFontAscent
         this.fontWidth = mTextPaint.measureText("X")
 
-        val sb = StringBuilder(" ")
+        val oneChar = CharArray(1)
         for (i in asciiMeasures.indices) {
-            sb.setCharAt(0, i.toChar())
-            asciiMeasures[i] = mTextPaint.measureText(sb, 0, 1)
+            oneChar[0] = i.toChar()
+            asciiMeasures[i] = mTextPaint.measureText(oneChar, 0, 1)
         }
 
         // 下划线几何参数随字号缩放，保证不同字号下视觉比例一致
@@ -362,12 +362,9 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
 
         if (!invisible && textIsVisible) {
             if (dim) {
-                var red = (0xFF and (foreColor shr 16))
-                var green = (0xFF and (foreColor shr 8))
-                var blue = (0xFF and foreColor)
-                red = red * 2 / 3
-                green = green * 2 / 3
-                blue = blue * 2 / 3
+                val red = (0xFF and (foreColor shr 16)) * 2 / 3
+                val green = (0xFF and (foreColor shr 8)) * 2 / 3
+                val blue = (0xFF and foreColor) * 2 / 3
                 foreColor = -0x1000000 + (red shl 16) + (green shl 8) + blue
             }
 

@@ -14,6 +14,8 @@ internal object KeySequenceEncoder {
     const val KEYMOD_SHIFT: Int = 0x20000000
     const val KEYMOD_NUM_LOCK: Int = 0x10000000
 
+    private val KEY_MOD_MASK = KEYMOD_ALT or KEYMOD_CTRL or KEYMOD_SHIFT or KEYMOD_NUM_LOCK
+
     // terminfo/termcap 键名到 Android KeyCode 的映射
     private val TERMCAP_TO_KEYCODE = mapOf(
         // terminfo: http://pubs.opengroup.org/onlinepubs/7990989799/xcurses/terminfo.html
@@ -87,11 +89,18 @@ internal object KeySequenceEncoder {
         keypadApplication: Boolean
     ): String? {
         val keyCodeAndMod = TERMCAP_TO_KEYCODE[termcap] ?: return null
-        val KEY_MOD_MASK = KEYMOD_ALT or KEYMOD_CTRL or KEYMOD_SHIFT or KEYMOD_NUM_LOCK
         val keyCode = keyCodeAndMod and KEY_MOD_MASK.inv()
         val keyMod = keyCodeAndMod and KEY_MOD_MASK
 
         return getCode(keyCode, keyMod, cursorKeysApplication, keypadApplication)
+    }
+
+    private fun buildCursor(keyMode: Int, cursorApp: Boolean, cursorC: Char, appModeC: Char): String {
+        return if (keyMode == 0) {
+            if (cursorApp) "\u001bO$appModeC" else "\u001b[$cursorC"
+        } else {
+            transformForModifiers("\u001b[1", keyMode, cursorC)
+        }
     }
 
     @JvmStatic
@@ -102,114 +111,106 @@ internal object KeySequenceEncoder {
         keypadApplication: Boolean
     ): String? {
         val numLockOn = (keyMode and KEYMOD_NUM_LOCK) != 0
-        val keyMode = keyMode and KEYMOD_NUM_LOCK.inv()
-
-        fun buildCursor(cursorC: Char, appModeC: Char): String {
-            return if (keyMode == 0) {
-                if (cursorApp) "\u001bO$appModeC" else "\u001b[$cursorC"
-            } else {
-                transformForModifiers("\u001b[1", keyMode, cursorC)
-            }
-        }
+        val mods = keyMode and KEYMOD_NUM_LOCK.inv()
 
         return when (keyCode) {
             KeyEvent.KEYCODE_DPAD_CENTER -> "\u000d"
 
-            KeyEvent.KEYCODE_DPAD_UP -> buildCursor('A', 'A')
-            KeyEvent.KEYCODE_DPAD_DOWN -> buildCursor('B', 'B')
-            KeyEvent.KEYCODE_DPAD_RIGHT -> buildCursor('C', 'C')
-            KeyEvent.KEYCODE_DPAD_LEFT -> buildCursor('D', 'D')
-            KeyEvent.KEYCODE_MOVE_HOME -> buildCursor('H', 'H')
-            KeyEvent.KEYCODE_MOVE_END -> buildCursor('F', 'F')
+            KeyEvent.KEYCODE_DPAD_UP -> buildCursor(mods, cursorApp, 'A', 'A')
+            KeyEvent.KEYCODE_DPAD_DOWN -> buildCursor(mods, cursorApp, 'B', 'B')
+            KeyEvent.KEYCODE_DPAD_RIGHT -> buildCursor(mods, cursorApp, 'C', 'C')
+            KeyEvent.KEYCODE_DPAD_LEFT -> buildCursor(mods, cursorApp, 'D', 'D')
+            KeyEvent.KEYCODE_MOVE_HOME -> buildCursor(mods, cursorApp, 'H', 'H')
+            KeyEvent.KEYCODE_MOVE_END -> buildCursor(mods, cursorApp, 'F', 'F')
 
-            KeyEvent.KEYCODE_F1 -> if (keyMode == 0) "\u001bOP" else transformForModifiers("\u001b[1", keyMode, 'P')
-            KeyEvent.KEYCODE_F2 -> if (keyMode == 0) "\u001bOQ" else transformForModifiers("\u001b[1", keyMode, 'Q')
-            KeyEvent.KEYCODE_F3 -> if (keyMode == 0) "\u001bOR" else transformForModifiers("\u001b[1", keyMode, 'R')
-            KeyEvent.KEYCODE_F4 -> if (keyMode == 0) "\u001bOS" else transformForModifiers("\u001b[1", keyMode, 'S')
+            KeyEvent.KEYCODE_F1 -> if (mods == 0) "\u001bOP" else transformForModifiers("\u001b[1", mods, 'P')
+            KeyEvent.KEYCODE_F2 -> if (mods == 0) "\u001bOQ" else transformForModifiers("\u001b[1", mods, 'Q')
+            KeyEvent.KEYCODE_F3 -> if (mods == 0) "\u001bOR" else transformForModifiers("\u001b[1", mods, 'R')
+            KeyEvent.KEYCODE_F4 -> if (mods == 0) "\u001bOS" else transformForModifiers("\u001b[1", mods, 'S')
 
-            KeyEvent.KEYCODE_F5 -> transformForModifiers("\u001b[15", keyMode, '~')
-            KeyEvent.KEYCODE_F6 -> transformForModifiers("\u001b[17", keyMode, '~')
-            KeyEvent.KEYCODE_F7 -> transformForModifiers("\u001b[18", keyMode, '~')
-            KeyEvent.KEYCODE_F8 -> transformForModifiers("\u001b[19", keyMode, '~')
-            KeyEvent.KEYCODE_F9 -> transformForModifiers("\u001b[20", keyMode, '~')
-            KeyEvent.KEYCODE_F10 -> transformForModifiers("\u001b[21", keyMode, '~')
-            KeyEvent.KEYCODE_F11 -> transformForModifiers("\u001b[23", keyMode, '~')
-            KeyEvent.KEYCODE_F12 -> transformForModifiers("\u001b[24", keyMode, '~')
+            KeyEvent.KEYCODE_F5 -> transformForModifiers("\u001b[15", mods, '~')
+            KeyEvent.KEYCODE_F6 -> transformForModifiers("\u001b[17", mods, '~')
+            KeyEvent.KEYCODE_F7 -> transformForModifiers("\u001b[18", mods, '~')
+            KeyEvent.KEYCODE_F8 -> transformForModifiers("\u001b[19", mods, '~')
+            KeyEvent.KEYCODE_F9 -> transformForModifiers("\u001b[20", mods, '~')
+            KeyEvent.KEYCODE_F10 -> transformForModifiers("\u001b[21", mods, '~')
+            KeyEvent.KEYCODE_F11 -> transformForModifiers("\u001b[23", mods, '~')
+            KeyEvent.KEYCODE_F12 -> transformForModifiers("\u001b[24", mods, '~')
 
             KeyEvent.KEYCODE_SYSRQ -> "\u001b[32~" // 系统请求 / 打印
             KeyEvent.KEYCODE_BREAK -> "\u001b[34~" // 暂停 / 中断
 
             KeyEvent.KEYCODE_ESCAPE, KeyEvent.KEYCODE_BACK -> "\u001b"
 
-            KeyEvent.KEYCODE_INSERT -> transformForModifiers("\u001b[2", keyMode, '~')
-            KeyEvent.KEYCODE_FORWARD_DEL -> transformForModifiers("\u001b[3", keyMode, '~')
-            KeyEvent.KEYCODE_PAGE_UP -> transformForModifiers("\u001b[5", keyMode, '~')
-            KeyEvent.KEYCODE_PAGE_DOWN -> transformForModifiers("\u001b[6", keyMode, '~')
+            KeyEvent.KEYCODE_INSERT -> transformForModifiers("\u001b[2", mods, '~')
+            KeyEvent.KEYCODE_FORWARD_DEL -> transformForModifiers("\u001b[3", mods, '~')
+            KeyEvent.KEYCODE_PAGE_UP -> transformForModifiers("\u001b[5", mods, '~')
+            KeyEvent.KEYCODE_PAGE_DOWN -> transformForModifiers("\u001b[6", mods, '~')
 
             KeyEvent.KEYCODE_DEL -> {
                 // 与 xterm / gnome-terminal 行为一致：
-                (if ((keyMode and KEYMOD_ALT) == 0) "" else "\u001b") +
-                (if ((keyMode and KEYMOD_CTRL) == 0) "\u007F" else "\u0008")
+                (if ((mods and KEYMOD_ALT) == 0) "" else "\u001b") +
+                (if ((mods and KEYMOD_CTRL) == 0) "\u007F" else "\u0008")
             }
 
             KeyEvent.KEYCODE_NUM_LOCK -> if (keypadApplication) "\u001bOP" else null
 
             // 未按 Ctrl 时返回 null，走普通输入处理流程（可能写入组合重音符）：
-            KeyEvent.KEYCODE_SPACE -> if ((keyMode and KEYMOD_CTRL) == 0) null else "\u0000"
+            KeyEvent.KEYCODE_SPACE -> if ((mods and KEYMOD_CTRL) == 0) null else "\u0000"
 
             // Shift+Tab 发送反向制表：
-            KeyEvent.KEYCODE_TAB -> if ((keyMode and KEYMOD_SHIFT) == 0) "\u0009" else "\u001b[Z"
+            KeyEvent.KEYCODE_TAB -> if ((mods and KEYMOD_SHIFT) == 0) "\u0009" else "\u001b[Z"
 
-            KeyEvent.KEYCODE_ENTER -> if ((keyMode and KEYMOD_ALT) == 0) "\r" else "\u001b\r"
+            KeyEvent.KEYCODE_ENTER -> if ((mods and KEYMOD_ALT) == 0) "\r" else "\u001b\r"
 
-            else -> handleNumpadKey(keyCode, keyMode, numLockOn, keypadApplication, ::buildCursor)
+            else -> handleNumpadKey(keyCode, mods, numLockOn, keypadApplication, cursorApp)
         }
     }
 
     private fun handleNumpadKey(
         keyCode: Int,
-        keyMode: Int,
+        mods: Int,
         numLockOn: Boolean,
         keypadApplication: Boolean,
-        buildCursor: (Char, Char) -> String
+        cursorApp: Boolean
     ): String? {
         fun buildNumpad(numLockKey: String, baseModCode: Char, alternativeC: Char): String {
             return if (numLockOn) {
-                if (keypadApplication) transformForModifiers("\u001bO", keyMode, alternativeC) else numLockKey
+                if (keypadApplication) transformForModifiers("\u001bO", mods, alternativeC) else numLockKey
             } else {
-                buildCursor(baseModCode, baseModCode)
+                buildCursor(mods, cursorApp, baseModCode, baseModCode)
             }
         }
 
         return when (keyCode) {
-            KeyEvent.KEYCODE_NUMPAD_ENTER -> if (keypadApplication) transformForModifiers("\u001bO", keyMode, 'M') else "\n"
-            KeyEvent.KEYCODE_NUMPAD_MULTIPLY -> if (keypadApplication) transformForModifiers("\u001bO", keyMode, 'j') else "*"
-            KeyEvent.KEYCODE_NUMPAD_ADD -> if (keypadApplication) transformForModifiers("\u001bO", keyMode, 'k') else "+"
+            KeyEvent.KEYCODE_NUMPAD_ENTER -> if (keypadApplication) transformForModifiers("\u001bO", mods, 'M') else "\n"
+            KeyEvent.KEYCODE_NUMPAD_MULTIPLY -> if (keypadApplication) transformForModifiers("\u001bO", mods, 'j') else "*"
+            KeyEvent.KEYCODE_NUMPAD_ADD -> if (keypadApplication) transformForModifiers("\u001bO", mods, 'k') else "+"
 
             KeyEvent.KEYCODE_NUMPAD_COMMA -> ","
             KeyEvent.KEYCODE_NUMPAD_DOT -> if (numLockOn) {
                 if (keypadApplication) "\u001bOn" else "."
             } else {
                 // 删除
-                transformForModifiers("\u001b[3", keyMode, '~')
+                transformForModifiers("\u001b[3", mods, '~')
             }
 
-            KeyEvent.KEYCODE_NUMPAD_SUBTRACT -> if (keypadApplication) transformForModifiers("\u001bO", keyMode, 'm') else "-"
+            KeyEvent.KEYCODE_NUMPAD_SUBTRACT -> if (keypadApplication) transformForModifiers("\u001bO", mods, 'm') else "-"
 
-            KeyEvent.KEYCODE_NUMPAD_DIVIDE -> if (keypadApplication) transformForModifiers("\u001bO", keyMode, 'o') else "/"
+            KeyEvent.KEYCODE_NUMPAD_DIVIDE -> if (keypadApplication) transformForModifiers("\u001bO", mods, 'o') else "/"
 
             KeyEvent.KEYCODE_NUMPAD_0 -> if (numLockOn) {
-                if (keypadApplication) transformForModifiers("\u001bO", keyMode, 'p') else "0"
+                if (keypadApplication) transformForModifiers("\u001bO", mods, 'p') else "0"
             } else {
                 // 插入
-                transformForModifiers("\u001b[2", keyMode, '~')
+                transformForModifiers("\u001b[2", mods, '~')
             }
 
             KeyEvent.KEYCODE_NUMPAD_1 -> buildNumpad("1", 'F', 'q')
             KeyEvent.KEYCODE_NUMPAD_2 -> buildNumpad("2", 'B', 'r')
 
             KeyEvent.KEYCODE_NUMPAD_3 -> if (numLockOn) {
-                if (keypadApplication) transformForModifiers("\u001bO", keyMode, 's') else "3"
+                if (keypadApplication) transformForModifiers("\u001bO", mods, 's') else "3"
             } else {
                 // 向下翻页
                 "\u001b[6~"
@@ -217,20 +218,20 @@ internal object KeySequenceEncoder {
 
             KeyEvent.KEYCODE_NUMPAD_4 -> buildNumpad("4", 'D', 't')
 
-            KeyEvent.KEYCODE_NUMPAD_5 -> if (keypadApplication) transformForModifiers("\u001bO", keyMode, 'u') else "5"
+            KeyEvent.KEYCODE_NUMPAD_5 -> if (keypadApplication) transformForModifiers("\u001bO", mods, 'u') else "5"
 
             KeyEvent.KEYCODE_NUMPAD_6 -> buildNumpad("6", 'C', 'v')
             KeyEvent.KEYCODE_NUMPAD_7 -> buildNumpad("7", 'H', 'w')
             KeyEvent.KEYCODE_NUMPAD_8 -> buildNumpad("8", 'A', 'x')
 
             KeyEvent.KEYCODE_NUMPAD_9 -> if (numLockOn) {
-                if (keypadApplication) transformForModifiers("\u001bO", keyMode, 'y') else "9"
+                if (keypadApplication) transformForModifiers("\u001bO", mods, 'y') else "9"
             } else {
                 // 向上翻页
                 "\u001b[5~"
             }
 
-            KeyEvent.KEYCODE_NUMPAD_EQUALS -> if (keypadApplication) transformForModifiers("\u001bO", keyMode, 'X') else "="
+            KeyEvent.KEYCODE_NUMPAD_EQUALS -> if (keypadApplication) transformForModifiers("\u001bO", mods, 'X') else "="
 
             else -> null
         }

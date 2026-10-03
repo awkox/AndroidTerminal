@@ -38,17 +38,13 @@ internal object TerminalReflower {
         var skippedBlankLines = 0
         for (externalOldRow in -oldActiveTranscriptRows..<oldScreenRows) {
             // 将外部行号转换为环形缓冲区的内部索引
-            var internalOldRow = oldScreenFirstRow + externalOldRow
-            internalOldRow = if (internalOldRow < 0) {
-                internalOldRow + oldTotalRows
-            } else {
-                internalOldRow % oldTotalRows
-            }
+            val internalOldRow = (oldScreenFirstRow + externalOldRow).mod(oldTotalRows)
 
             val oldLine: TerminalRow? = oldLines[internalOldRow]
             val cursorAtThisRow = externalOldRow == oldCursorRow
+            val preserveCursorRow = !newCursorPlaced && cursorAtThisRow
             // 跳过空行（但光标所在行即使为空也不跳过，除非光标已放置）
-            if (oldLine == null || (!(!newCursorPlaced && cursorAtThisRow)) && oldLine.isBlank) {
+            if (oldLine == null || (oldLine.isBlank && !preserveCursorRow)) {
                 skippedBlankLines++
                 continue
             } else if (skippedBlankLines > 0) {

@@ -114,7 +114,7 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
     }
 
     fun setInitialTextSelectionPosition(event: MotionEvent) {
-        val emulator = terminalView.mEmulator!!
+        val emulator = terminalView.mEmulator ?: return
 
         synchronized(emulator) {
             val screen = emulator.screen
@@ -164,7 +164,7 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
     }
 
     fun setActionModeCallBacks() {
-        val callback: ActionMode.Callback = object : ActionMode.Callback {
+        this.actionMode = terminalView.startActionMode(object : ActionMode.Callback2() {
             override fun onCreateActionMode(mode: ActionMode?, menu: Menu): Boolean {
                 val show = MenuItem.SHOW_AS_ACTION_IF_ROOM or MenuItem.SHOW_AS_ACTION_WITH_TEXT
                 val clipboard = terminalView.context.getSystemService(ClipboardManager::class.java)
@@ -205,8 +205,7 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
                     else -> {
                         val customIndex = item.itemId - ACTION_CUSTOM_BASE
                         if (customIndex in customItems.indices) {
-                            val selected = selectedText
-                            customItems[customIndex].onClick(selected)
+                            customItems[customIndex].onClick(selectedText)
                             terminalView.stopTextSelectionMode()
                         }
                     }
@@ -221,13 +220,6 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
                     terminalView.stopTextSelectionMode()
                 }
             }
-        }
-
-        this.actionMode = terminalView.startActionMode(object : ActionMode.Callback2() {
-            override fun onCreateActionMode(mode: ActionMode?, menu: Menu?) = callback.onCreateActionMode(mode, menu)
-            override fun onPrepareActionMode(mode: ActionMode?, menu: Menu?) = false
-            override fun onActionItemClicked(mode: ActionMode?, item: MenuItem?) = callback.onActionItemClicked(mode, item)
-            override fun onDestroyActionMode(mode: ActionMode?) = callback.onDestroyActionMode(mode)
 
             override fun onGetContentRect(mode: ActionMode?, view: View?, outRect: Rect) {
                 var x1 = terminalView.getPointX(mSelX1)
@@ -249,8 +241,8 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
     }
 
     override fun updatePosition(handle: TextSelectionHandleView, x: Int, y: Int) {
-        val emulator = terminalView.mEmulator!!
-        
+        val emulator = terminalView.mEmulator ?: return
+
         synchronized(emulator) {
             val screen = emulator.screen
             val isStart = handle === mStartHandle
@@ -306,8 +298,6 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
         mSelY2 -= decrement
     }
 
-    override fun onTouchEvent(event: MotionEvent) = false
-
     override fun onTouchModeChanged(isInTouchMode: Boolean) {
         if (!isInTouchMode) terminalView.stopTextSelectionMode()
     }
@@ -315,8 +305,8 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
     override val isActive: Boolean
         get() = mIsSelectingText
 
-    fun getSelectors(sel: IntArray?) {
-        if (sel == null || sel.size != 4) return
+    fun getSelectors(sel: IntArray) {
+        if (sel.size != 4) return
         sel[0] = mSelY1
         sel[1] = mSelY2
         sel[2] = mSelX1

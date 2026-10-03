@@ -28,13 +28,6 @@ internal interface CursorController : OnTouchModeChangeListener {
     /** 更新光标手柄位置。 */
     fun updatePosition(handle: TextSelectionHandleView, x: Int, y: Int)
 
-    /**
-     * 由 [TerminalView.onTouchEvent] 调用，给予光标激活和显示的机会。
-     *
-     * @param event 触摸事件
-     */
-    fun onTouchEvent(event: MotionEvent): Boolean
-
     /** 光标是否处于激活状态。 */
     val isActive: Boolean
 }

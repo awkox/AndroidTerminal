@@ -3,7 +3,7 @@ package com.awkoo.libterminal.view.input
 import android.R
 import android.view.KeyEvent
 import android.view.inputmethod.BaseInputConnection
-import com.awkoo.libterminal.text.withCodePointAt
+import com.awkoo.libterminal.text.forEachColumn
 import com.awkoo.libterminal.view.TerminalView
 
 /**
@@ -32,32 +32,31 @@ internal class TerminalImeConnection(
     override fun deleteSurroundingText(leftLength: Int, rightLength: Int): Boolean {
         // 三星原生键盘开启「自动拼写检查」时会发送 leftLength > 1
         val deleteKey = KeyEvent(KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_DEL)
-        for (i in 0..<leftLength) sendKeyEvent(deleteKey)
+        repeat(leftLength) { sendKeyEvent(deleteKey) }
         return super.deleteSurroundingText(leftLength, rightLength)
     }
 
     override fun sendKeyEvent(event: KeyEvent): Boolean {
         // 绕过 Compose 的 AndroidComposeView 拦截，直接路由到 TerminalView
-        if (event.action == KeyEvent.ACTION_DOWN) {
-            terminalView.onKeyDown(event.keyCode, event)
-        } else if (event.action == KeyEvent.ACTION_UP) {
-            terminalView.onKeyUp(event.keyCode, event)
+        when (event.action) {
+            KeyEvent.ACTION_DOWN -> terminalView.onKeyDown(event.keyCode, event)
+            KeyEvent.ACTION_UP -> terminalView.onKeyUp(event.keyCode, event)
         }
         return true
     }
 
     override fun performContextMenuAction(id: Int): Boolean {
-        when (id) {
+        return when (id) {
             R.id.paste -> {
                 terminalView.pasteTextFromClipboard()
-                return true
+                true
             }
             R.id.copy -> {
                 terminalView.copyTextToClipboard()
-                return true
+                true
             }
+            else -> super.performContextMenuAction(id)
         }
-        return super.performContextMenuAction(id)
     }
 
     private fun flushAndClearEditable() {
@@ -71,13 +70,9 @@ internal class TerminalImeConnection(
 
     private fun sendTextToTerminal(text: CharSequence) {
         terminalView.stopTextSelectionMode()
-        val textLengthInChars = text.length
-        var i = 0
-        while (i < textLengthInChars) {
-            text.withCodePointAt(i, textLengthInChars) { cp, charCount ->
-                terminalView.inputCodePoint(KEY_EVENT_SOURCE_SOFT_KEYBOARD, cp, false, false)
-                i += charCount
-            }
+        text.forEachColumn { _, _, codePoint, _, _ ->
+            terminalView.inputCodePoint(KEY_EVENT_SOURCE_SOFT_KEYBOARD, codePoint, false, false)
+            true
         }
     }
 

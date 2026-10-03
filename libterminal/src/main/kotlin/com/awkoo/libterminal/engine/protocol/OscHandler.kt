@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlin.io.encoding.Base64
+import kotlin.math.pow
 
 /**
  * OSC（Operating System Command）序列处理器。
@@ -34,7 +35,7 @@ internal class OscHandler(
     /** CSI 22：将当前标题压入栈中，栈深上限 20。 */
     fun pushTitle() {
         titleStack.addLast(titleState.value)
-        if (titleStack.size > 20) titleStack.removeAt(0)
+        if (titleStack.size > 20) titleStack.removeFirst()
     }
 
     /** CSI 23：从栈中弹出标题恢复，栈空时忽略。 */
@@ -118,7 +119,7 @@ internal class OscHandler(
     }
 
     private fun handleOscClipboard(textParameter: String) {
-        val startIndex = textParameter.indexOf(";") + 1
+        val startIndex = textParameter.indexOf(';') + 1
         try {
             val data = Base64.decode(textParameter.substring(startIndex))
             copiedText.tryEmit(data.toString(Charsets.UTF_8))
@@ -126,18 +127,14 @@ internal class OscHandler(
     }
 
     private fun handleOscResetColor(textParameter: String) {
-        if (textParameter.isEmpty()) palette.resetAll()
-        else {
-            var lastIndex = 0
-            for (i in 0..textParameter.length) {
-                if (i == textParameter.length || textParameter[i] == ';') {
-                    textParameter.substring(lastIndex, i)
-                        .toIntOrNull()
-                        ?.takeIf { it in 0 until TextStyle.NUM_INDEXED_COLORS }
-                        ?.let { palette.reset(it) }
-                    lastIndex = i + 1
-                }
-            }
+        if (textParameter.isEmpty()) {
+            palette.resetAll()
+            return
+        }
+        textParameter.split(';').forEach { slot ->
+            slot.toIntOrNull()
+                ?.takeIf { it in 0 until TextStyle.NUM_INDEXED_COLORS }
+                ?.let { palette.reset(it) }
         }
     }
 
@@ -157,7 +154,7 @@ internal class OscHandler(
     private fun parse(c: String): Int {
         val skipInitial: Int
         val skipBetween: Int
-        if (c.startsWith("#")) {
+        if (c.startsWith('#')) {
             skipInitial = 1
             skipBetween = 0
         } else if (c.startsWith("rgb:")) {
@@ -171,7 +168,7 @@ internal class OscHandler(
         if (charsForColors % 3 != 0) return 0
 
         val componentLength = charsForColors / 3
-        val mult = 255 / (Math.pow(2.0, (componentLength * 4).toDouble()) - 1)
+        val mult = 255 / (2.0.pow(componentLength * 4) - 1)
 
         var currentPosition = skipInitial
         val rString = c.substring(currentPosition, currentPosition + componentLength)
@@ -191,5 +188,5 @@ internal class OscHandler(
         return 0xFF shl 24 or (r shl 16) or (g shl 8) or b
     }
 
-    private val Int.hex4: String get() = "%04x".format(this)
+    private val Int.hex4: String get() = toString(16).padStart(4, '0')
 }

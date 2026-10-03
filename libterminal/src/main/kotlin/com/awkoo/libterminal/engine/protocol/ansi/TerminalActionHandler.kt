@@ -31,10 +31,10 @@ internal interface TerminalActionHandler {
     fun onShiftOut()
 
     /** ESC 序列命令完成。 */
-    fun onEscCommand(state: Int, command: Int)
+    fun onEscCommand(state: EscapeState, command: Int)
 
     /** CSI 序列命令完成。 */
-    fun onCsiCommand(state: Int, command: Int, args: IntArray, argCount: Int, subParams: Int)
+    fun onCsiCommand(state: EscapeState, command: Int, args: IntArray, argCount: Int, subParams: Int)
 
     /** OSC 序列命令完成。 */
     fun onOscCommand(value: Int, textParameter: String, bellOrStringTerminator: String)

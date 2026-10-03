@@ -5,6 +5,7 @@ import android.view.KeyEvent
 import android.view.MotionEvent
 import android.widget.Scroller
 import com.awkoo.libterminal.engine.TerminalEmulator
+import com.awkoo.libterminal.engine.buffer.CursorCoord
 import com.awkoo.libterminal.view.TerminalView
 import kotlin.math.abs
 
@@ -63,14 +64,10 @@ internal class TerminalTouchHandler(
                 doScroll(event, if (up) -3 else 3)
                 true
             }
-            MotionEvent.ACTION_HOVER_MOVE -> {
-                // 1003 任意事件模式：无按钮的悬停移动也上报（悬停事件仅经此通道投递）
-                if (emulator.isMouseAnyEventTrackingActive) {
-                    sendMouseEventCode(event, TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED, true)
-                    true
-                } else {
-                    false
-                }
+            // 1003 任意事件模式：无按钮的悬停移动也上报（悬停事件仅经此通道投递）
+            MotionEvent.ACTION_HOVER_MOVE if emulator.isMouseAnyEventTrackingActive -> {
+                sendMouseEventCode(event, TerminalEmulator.MOUSE_LEFT_BUTTON_MOVED, true)
+                true
             }
             else -> false
         }
@@ -101,17 +98,12 @@ internal class TerminalTouchHandler(
         var scrollY = coord.row
 
         synchronized(emulator) {
-            for (i in 0..<amount) {
+            repeat(amount) {
                 if (emulator.isMouseTrackingActive) {
                     val button = if (up) TerminalEmulator.MOUSE_WHEELUP_BUTTON else TerminalEmulator.MOUSE_WHEELDOWN_BUTTON
-                    if (mouseStartDownTime == event.downTime) {
-                        scrollX = mouseScrollStartX
-                        scrollY = mouseScrollStartY
-                    } else {
-                        mouseStartDownTime = event.downTime
-                        mouseScrollStartX = scrollX
-                        mouseScrollStartY = scrollY
-                    }
+                    val anchor = anchorScroll(event.downTime, scrollX, scrollY)
+                    scrollX = anchor.col
+                    scrollY = anchor.row
                     emulator.sendMouseEvent(button, scrollX, scrollY, true)
                 } else if (emulator.isAlternateBufferActive) {
                     view.handleKeyCode(if (up) KeyEvent.KEYCODE_DPAD_UP else KeyEvent.KEYCODE_DPAD_DOWN, 0)
@@ -132,17 +124,21 @@ internal class TerminalTouchHandler(
 
         synchronized(emulator) {
             if (pressed && (button == TerminalEmulator.MOUSE_WHEELDOWN_BUTTON || button == TerminalEmulator.MOUSE_WHEELUP_BUTTON)) {
-                if (mouseStartDownTime == e.downTime) {
-                    x = mouseScrollStartX
-                    y = mouseScrollStartY
-                } else {
-                    mouseStartDownTime = e.downTime
-                    mouseScrollStartX = x
-                    mouseScrollStartY = y
-                }
+                val anchor = anchorScroll(e.downTime, x, y)
+                x = anchor.col
+                y = anchor.row
             }
             emulator.sendMouseEvent(button, x, y, pressed)
         }
+    }
+
+    /** 滚动序列锚点：同一 downTime 内复用首触坐标，新序列则以当前坐标重新锚定。 */
+    private fun anchorScroll(downTime: Long, x: Int, y: Int): CursorCoord {
+        if (mouseStartDownTime == downTime) return CursorCoord.pack(mouseScrollStartX, mouseScrollStartY)
+        mouseStartDownTime = downTime
+        mouseScrollStartX = x
+        mouseScrollStartY = y
+        return CursorCoord.pack(x, y)
     }
 
     private fun handleMouseEvent(emulator: TerminalEmulator, event: MotionEvent): Boolean {
@@ -174,7 +170,6 @@ internal class TerminalTouchHandler(
                     }
                 }
             }
-            return false
         }
         return false
     }

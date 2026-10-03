@@ -26,20 +26,6 @@ internal class TerminalBuffer(
         blockSet(0, 0, mColumns, mScreenRows, ' '.code, TextStyle.NORMAL)
     }
 
-    fun getSelectedText(selX1: Int, selY1: Int, selX2: Int, selY2: Int): String {
-        return getSelectedText(selX1, selY1, selX2, selY2, true)
-    }
-
-    fun getSelectedText(
-        selX1: Int,
-        selY1: Int,
-        selX2: Int,
-        selY2: Int,
-        joinBackLines: Boolean
-    ): String {
-        return getSelectedText(selX1, selY1, selX2, selY2, joinBackLines, false)
-    }
-
     /**
      * 提取指定矩形区域的选中文本。
      *
@@ -51,8 +37,8 @@ internal class TerminalBuffer(
         selY1: Int,
         selX2: Int,
         selY2: Int,
-        joinBackLines: Boolean,
-        joinFullLines: Boolean
+        joinBackLines: Boolean = true,
+        joinFullLines: Boolean = false
     ): String {
         val y1 = clampRow(selY1)
         val y2 = clampRow(selY2)
@@ -81,18 +67,11 @@ internal class TerminalBuffer(
                 x2Index = lineObject.findStartOfColumn(x2 + 1)
             }
             val line = lineObject.mText
-            var lastPrintingCharIndex = -1
-            var i: Int
             val rowLineWrap = getLineWrap(row)
-            if (rowLineWrap && x2 == columns) {
-                lastPrintingCharIndex = x2Index - 1
+            val lastPrintingCharIndex = if (rowLineWrap && x2 == columns) {
+                x2Index - 1
             } else {
-                i = x1Index
-                while (i < x2Index) {
-                    val c = line[i]
-                    if (c != ' ') lastPrintingCharIndex = i
-                    ++i
-                }
+                (x2Index - 1 downTo x1Index).firstOrNull { line[it] != ' ' } ?: -1
             }
 
             val len = lastPrintingCharIndex - x1Index + 1
@@ -181,20 +160,14 @@ internal class TerminalBuffer(
         currentStyle: TextStyle,
         altScreen: Boolean
     ): CursorCoord {
-        var newCursor = if (newColumns == mColumns && newRows <= mTotalRows) {
+        val newCursor = if (newColumns == mColumns && newRows <= mTotalRows) {
             handleSimpleVerticalResize(newRows, newTotalRows, cursor, currentStyle, altScreen)
         } else {
             handleHorizontalResize(newColumns, newRows, newTotalRows, cursor, currentStyle)
         }
 
         // 统一处理越界光标防护
-        var cX = newCursor.col
-        var cY = newCursor.row
-        if (cX < 0 || cY < 0) {
-            cY = 0
-            cX = 0
-        }
-        return CursorCoord.pack(cX, cY)
+        return CursorCoord.pack(max(0, newCursor.col), max(0, newCursor.row))
     }
 
     /**
@@ -301,7 +274,7 @@ internal class TerminalBuffer(
         if (this.activeTranscriptRows < mTotalRows - mScreenRows) this.activeTranscriptRows++
 
         val blankRow = externalToInternalRow(bottomMargin - 1)
-        mLines[blankRow]?.clear(style) ?: { mLines[blankRow] = TerminalRow(mColumns, style) }()
+        mLines[blankRow]?.clear(style) ?: run { mLines[blankRow] = TerminalRow(mColumns, style) }
     }
 
     fun blockCopy(sx: Int, sy: Int, w: Int, h: Int, dx: Int, dy: Int) {

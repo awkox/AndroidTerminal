@@ -28,8 +28,7 @@ internal class TerminalClipboard(
         val emulator = emulatorProvider() ?: return
         val clipboardManager = context.getSystemService(ClipboardManager::class.java)
         val clipData = clipboardManager.primaryClip ?: return
-        val clipItem = clipData.getItemAt(0) ?: return
-        val text = clipItem.coerceToText(context)?.toString() ?: return
+        val text = clipData.getItemAt(0).coerceToText(context).toString()
         if (text.isNotEmpty()) {
             pokeCursor()
             emulator.paste(text)

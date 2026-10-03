@@ -70,8 +70,9 @@ internal class RenditionState {
                     continue
                 } else code = 0
             }
-            when (code) {
-                0 -> {
+            val effectAttr = effectAttrOf(code)
+            when {
+                code == 0 -> {
                     foreColor = TextStyle.COLOR_INDEX_FOREGROUND
                     backColor = TextStyle.COLOR_INDEX_BACKGROUND
                     effect = 0
@@ -79,7 +80,7 @@ internal class RenditionState {
                     underlineColor = TextStyle.COLOR_INDEX_FOREGROUND
                 }
 
-                4 -> {
+                code == 4 -> {
                     if (i + 1 < argCount && ((argsSubParamsBitSet and (1 shl (i + 1))) != 0)) {
                         i++
                         val style = args[i]
@@ -98,18 +99,17 @@ internal class RenditionState {
                     }
                 }
                 // SGR 24：关闭下划线时同步重置下划线样式，避免残留样式在后续开启下划线时误生效
-                24 -> {
+                code == 24 -> {
                     effect = effect and TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE.inv()
                     underlineStyle = TextStyle.UNDERLINE_STYLE_NONE
                 }
 
-                in sgrEffectMap -> {
-                    val attr = sgrEffectMap[code]!!
-                    effect = if (code < 20) effect or attr else effect and attr.inv()
+                effectAttr != null -> {
+                    effect = if (code < 20) effect or effectAttr else effect and effectAttr.inv()
                 }
 
                 // 38/48/58: 前景色/背景色/下划线色的扩展格式（256色和24-bit RGB）
-                38, 48, 58 -> if (i + 2 < argCount) {
+                code == 38 || code == 48 || code == 58 -> if (i + 2 < argCount) {
                     when (args[i + 1]) {
                         2 -> {
                             // 兼容 38:2:R:G:B 与标准双冒号形式 38:2::R:G:B
@@ -153,33 +153,34 @@ internal class RenditionState {
                     i++
                 }
 
-                39 -> foreColor = TextStyle.COLOR_INDEX_FOREGROUND
-                49 -> backColor = TextStyle.COLOR_INDEX_BACKGROUND
-                59 -> underlineColor = TextStyle.COLOR_INDEX_FOREGROUND
-                in 30..37 -> foreColor = code - 30
-                in 40..47 -> backColor = code - 40
-                in 90..97 -> foreColor = code - 90 + 8
-                in 100..107 -> backColor = code - 100 + 8
+                code == 39 -> foreColor = TextStyle.COLOR_INDEX_FOREGROUND
+                code == 49 -> backColor = TextStyle.COLOR_INDEX_BACKGROUND
+                code == 59 -> underlineColor = TextStyle.COLOR_INDEX_FOREGROUND
+                code in 30..37 -> foreColor = code - 30
+                code in 40..47 -> backColor = code - 40
+                code in 90..97 -> foreColor = code - 90 + 8
+                code in 100..107 -> backColor = code - 100 + 8
             }
             i++
         }
     }
 
     companion object {
-        private val sgrEffectMap = mapOf(
-            1 to TextStyle.CHARACTER_ATTRIBUTE_BOLD,
-            2 to TextStyle.CHARACTER_ATTRIBUTE_DIM,
-            3 to TextStyle.CHARACTER_ATTRIBUTE_ITALIC,
-            5 to TextStyle.CHARACTER_ATTRIBUTE_BLINK,
-            7 to TextStyle.CHARACTER_ATTRIBUTE_INVERSE,
-            8 to TextStyle.CHARACTER_ATTRIBUTE_INVISIBLE,
-            9 to TextStyle.CHARACTER_ATTRIBUTE_STRIKETHROUGH,
-            22 to (TextStyle.CHARACTER_ATTRIBUTE_BOLD or TextStyle.CHARACTER_ATTRIBUTE_DIM),
-            23 to TextStyle.CHARACTER_ATTRIBUTE_ITALIC,
-            25 to TextStyle.CHARACTER_ATTRIBUTE_BLINK,
-            27 to TextStyle.CHARACTER_ATTRIBUTE_INVERSE,
-            28 to TextStyle.CHARACTER_ATTRIBUTE_INVISIBLE,
-            29 to TextStyle.CHARACTER_ATTRIBUTE_STRIKETHROUGH,
-        )
+        private fun effectAttrOf(code: Int): Int? = when (code) {
+            1 -> TextStyle.CHARACTER_ATTRIBUTE_BOLD
+            2 -> TextStyle.CHARACTER_ATTRIBUTE_DIM
+            3 -> TextStyle.CHARACTER_ATTRIBUTE_ITALIC
+            5 -> TextStyle.CHARACTER_ATTRIBUTE_BLINK
+            7 -> TextStyle.CHARACTER_ATTRIBUTE_INVERSE
+            8 -> TextStyle.CHARACTER_ATTRIBUTE_INVISIBLE
+            9 -> TextStyle.CHARACTER_ATTRIBUTE_STRIKETHROUGH
+            22 -> (TextStyle.CHARACTER_ATTRIBUTE_BOLD or TextStyle.CHARACTER_ATTRIBUTE_DIM)
+            23 -> TextStyle.CHARACTER_ATTRIBUTE_ITALIC
+            25 -> TextStyle.CHARACTER_ATTRIBUTE_BLINK
+            27 -> TextStyle.CHARACTER_ATTRIBUTE_INVERSE
+            28 -> TextStyle.CHARACTER_ATTRIBUTE_INVISIBLE
+            29 -> TextStyle.CHARACTER_ATTRIBUTE_STRIKETHROUGH
+            else -> null
+        }
     }
 }

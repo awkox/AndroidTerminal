@@ -16,6 +16,12 @@ internal const val DECSET_BIT_BRACKETED_PASTE_MODE = 1 shl 10
 internal const val DECSET_BIT_LEFTRIGHT_MARGIN_MODE = 1 shl 11
 internal const val DECSET_BIT_RECTANGULAR_CHANGEATTRIBUTE = 1 shl 12
 
+/** 鼠标追踪三模式（1000/1002/1003）互斥所需的位集合。 */
+private val MOUSE_TRACKING_MASK =
+    DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE or
+        DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT or
+        DECSET_BIT_MOUSE_TRACKING_ANY_EVENT
+
 /**
  * DEC 私有模式位状态注册表。
  *
@@ -37,22 +43,8 @@ internal class DecModeRegistry {
      * 鼠标追踪模式（1000/1002/1003）互斥：开启任一模式时清除其余两个。
      */
     fun set(bit: Int, value: Boolean) {
-        if (value) {
-            when (bit) {
-                DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE,
-                DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT,
-                DECSET_BIT_MOUSE_TRACKING_ANY_EVENT -> {
-                    if (bit != DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE) {
-                        set(DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE, false)
-                    }
-                    if (bit != DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT) {
-                        set(DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT, false)
-                    }
-                    if (bit != DECSET_BIT_MOUSE_TRACKING_ANY_EVENT) {
-                        set(DECSET_BIT_MOUSE_TRACKING_ANY_EVENT, false)
-                    }
-                }
-            }
+        if (value && (bit and MOUSE_TRACKING_MASK) != 0) {
+            currentFlags = currentFlags and MOUSE_TRACKING_MASK.inv()
         }
         currentFlags = if (value) currentFlags or bit else currentFlags and bit.inv()
     }

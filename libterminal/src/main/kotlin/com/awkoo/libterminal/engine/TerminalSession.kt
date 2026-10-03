@@ -44,12 +44,12 @@ class TerminalSession(
 
     private class DataChunk(val buffer: ByteArray, var length: Int)
     private val terminalReadChannel: Channel<DataChunk> = Channel(Channel.UNLIMITED)
-    private val terminalReadBufferPoolChannel = Channel<DataChunk>(64)
+    private val terminalReadBufferPoolChannel = Channel<DataChunk>(POOL_SIZE)
     private val terminalWriteChannel: Channel<ByteArray> = Channel(Channel.BUFFERED)
 
     init {
-        for (i in 0..<64) {
-            terminalReadBufferPoolChannel.trySend(DataChunk(ByteArray(4096), 0))
+        repeat(POOL_SIZE) {
+            terminalReadBufferPoolChannel.trySend(DataChunk(ByteArray(CHUNK_SIZE), 0))
         }
     }
 
@@ -99,7 +99,7 @@ class TerminalSession(
         launchExitHandler(p)
     }
 
-    private inline fun launchInputReader(p: ITerminalProcess) {
+    private fun launchInputReader(p: ITerminalProcess) {
         scope.launch {
             try {
                 p.inputStream.use { termIn ->
@@ -124,7 +124,7 @@ class TerminalSession(
         }
     }
 
-    private inline fun launchOutputWriter(p: ITerminalProcess) {
+    private fun launchOutputWriter(p: ITerminalProcess) {
         scope.launch {
             try {
                 p.outputStream.use { termOut ->
@@ -141,7 +141,7 @@ class TerminalSession(
         }
     }
 
-    private inline fun launchEmulatorProcessor() {
+    private fun launchEmulatorProcessor() {
         scope.launch(Dispatchers.Default) {
             for (chunk in terminalReadChannel) {
                 var bytesProcessed = chunk.length
@@ -164,7 +164,7 @@ class TerminalSession(
         }
     }
 
-    private inline fun launchExitHandler(p: ITerminalProcess) {
+    private fun launchExitHandler(p: ITerminalProcess) {
         scope.launch {
             val exitCode = p.waitFor()
 
@@ -181,7 +181,7 @@ class TerminalSession(
         }
     }
 
-    private inline fun handleProcessExit(exitCode: Int, exitReason: String?) {
+    private fun handleProcessExit(exitCode: Int, exitReason: String?) {
         exitStatus = exitCode
         isRunning.value = false
 
@@ -193,21 +193,19 @@ class TerminalSession(
             }
 
             // SSH 等进程的非正常退出原因（结构化来源，不走 socket，无竞态）。
-            exitReason?.takeIf { it.isNotEmpty() }?.let { reason ->
-                val reasonBytes = ("\r\n$reason\r\n").toByteArray()
+            if (!exitReason.isNullOrEmpty()) {
+                val reasonBytes = ("\r\n$exitReason\r\n").toByteArray()
                 emulator.append(reasonBytes, reasonBytes.size)
             }
 
-            var exitDescription = "\r\n[Process completed"
-            if (exitCode > 0) {
+            val status = when {
                 // 非零退出码
-                exitDescription += " (code $exitCode)"
-            } else if (exitCode < 0) {
+                exitCode > 0 -> " (code $exitCode)"
                 // 负数表示信号编号
-                exitDescription += " (signal ${-exitCode})"
+                exitCode < 0 -> " (signal ${-exitCode})"
+                else -> ""
             }
-            exitDescription += " - press Enter]"
-            val buffer = exitDescription.toByteArray()
+            val buffer = "\r\n[Process completed$status - press Enter]".toByteArray()
             emulator.append(buffer, buffer.size)
         }
 
@@ -230,7 +228,7 @@ class TerminalSession(
         }
     }
 
-    inline fun write(data: String) {
+    fun write(data: String) {
         write(data.toByteArray())
     }
 
@@ -287,7 +285,7 @@ class TerminalSession(
     )
 
     /** 通过 uiEvent 通知 UI 层屏幕已更新。 */
-    private inline fun notifyScreenUpdate() {
+    private fun notifyScreenUpdate() {
         uiEvent.tryEmit(Unit)
     }
 
@@ -302,5 +300,10 @@ class TerminalSession(
     /** 向 Shell 发送 SIGKILL 终止会话。 */
     fun finishIfRunning() {
         process?.kill()
+    }
+
+    companion object {
+        private const val POOL_SIZE = 64
+        private const val CHUNK_SIZE = 4096
     }
 }

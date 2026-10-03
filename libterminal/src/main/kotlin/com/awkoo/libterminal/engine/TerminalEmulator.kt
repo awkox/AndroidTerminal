@@ -1,6 +1,7 @@
 package com.awkoo.libterminal.engine
 
 import com.awkoo.libterminal.engine.protocol.ansi.AnsiEscapeParser
+import com.awkoo.libterminal.engine.protocol.ansi.EscapeState
 import com.awkoo.libterminal.engine.protocol.ansi.TerminalActionHandler
 import com.awkoo.libterminal.engine.protocol.OscHandler
 import com.awkoo.libterminal.engine.protocol.InputSequenceEncoder
@@ -175,30 +176,16 @@ internal class TerminalEmulator(
         mBottomMargin = mRows
         mRightMargin = mColumns
         mAboutToAutoWrap = false
-        mSavedStateAlt.mSavedForeColor = TextStyle.COLOR_INDEX_FOREGROUND
-        mSavedStateMain.mSavedForeColor = TextStyle.COLOR_INDEX_FOREGROUND
         rendition.reset()
-        mSavedStateAlt.mSavedBackColor = TextStyle.COLOR_INDEX_BACKGROUND
-        mSavedStateMain.mSavedBackColor = TextStyle.COLOR_INDEX_BACKGROUND
-        mSavedStateAlt.mSavedUnderlineStyle = TextStyle.UNDERLINE_STYLE_NONE
-        mSavedStateMain.mSavedUnderlineStyle = TextStyle.UNDERLINE_STYLE_NONE
-        mSavedStateAlt.mSavedUnderlineColor = TextStyle.COLOR_INDEX_FOREGROUND
-        mSavedStateMain.mSavedUnderlineColor = TextStyle.COLOR_INDEX_FOREGROUND
         setDefaultTabStops()
         mUseLineDrawingG1 = false
         mUseLineDrawingG0 = false
         mUseLineDrawingUsesG0 = true
-        mSavedStateMain.mSavedDecFlags = 0
-        mSavedStateMain.mSavedEffect = 0
-        mSavedStateMain.mSavedCursorCol = 0
-        mSavedStateMain.mSavedCursorRow = 0
-        mSavedStateAlt.mSavedDecFlags = 0
-        mSavedStateAlt.mSavedEffect = 0
-        mSavedStateAlt.mSavedCursorCol = 0
-        mSavedStateAlt.mSavedCursorRow = 0
+        mSavedStateMain.resetDefaults()
+        mSavedStateAlt.resetDefaults()
         decModes.resetDefault()
-        mSavedStateAlt.mSavedDecFlags = decModes.current
         mSavedStateMain.mSavedDecFlags = decModes.current
+        mSavedStateAlt.mSavedDecFlags = decModes.current
         mPalette.resetAll()
         utf8Decoder.reset()
         ansiParser.reset()
@@ -258,7 +245,7 @@ internal class TerminalEmulator(
     val copiedText get() = osc.copiedText
 
     val isTextVisible: Boolean
-        get() = if (isTextBlinkingEnabled) textBlinkState else true
+        get() = !isTextBlinkingEnabled || textBlinkState
 
     /** 自上次取走以来的滚动行数增量，仅通过 [takeScrollCounter] 消费。 */
     private var scrollCounter: Int = 0
@@ -273,10 +260,7 @@ internal class TerminalEmulator(
     val isReverseVideo: Boolean get() = isDecsetInternalBitSet(DECSET_BIT_REVERSE_VIDEO)
     val isCursorEnabled: Boolean get() = isDecsetInternalBitSet(DECSET_BIT_CURSOR_ENABLED)
     val isCursorVisible: Boolean
-        get() {
-            if (!isCursorEnabled) return false
-            return if (isCursorBlinkingEnabled) cursorBlinkState else true
-        }
+        get() = isCursorEnabled && (!isCursorBlinkingEnabled || cursorBlinkState)
     val isKeypadApplicationMode: Boolean
         get() = isDecsetInternalBitSet(
             DECSET_BIT_APPLICATION_KEYPAD
@@ -364,16 +348,17 @@ internal class TerminalEmulator(
         mUseLineDrawingUsesG0 = false
     }
 
-    override fun onEscCommand(state: Int, command: Int) {
+    override fun onEscCommand(state: EscapeState, command: Int) {
         when (state) {
-            AnsiEscapeParser.ESC -> handleEscStandard(command)
-            AnsiEscapeParser.ESC_POUND -> {
+            EscapeState.ESC -> handleEscStandard(command)
+            EscapeState.POUND -> {
                 if (command == '8'.code) screen.blockSet(0, 0, mColumns, mRows, 'E'.code, rendition.style)
             }
 
-            AnsiEscapeParser.ESC_SELECT_LEFT_PAREN -> mUseLineDrawingG0 = (command == '0'.code)
-            AnsiEscapeParser.ESC_SELECT_RIGHT_PAREN -> mUseLineDrawingG1 = (command == '0'.code)
-            AnsiEscapeParser.ESC_PERCENT -> {} // 字符集选择，当前忽略
+            EscapeState.SELECT_LEFT_PAREN -> mUseLineDrawingG0 = (command == '0'.code)
+            EscapeState.SELECT_RIGHT_PAREN -> mUseLineDrawingG1 = (command == '0'.code)
+            EscapeState.PERCENT -> {} // 字符集选择，当前忽略
+            else -> {}
         }
     }
 
@@ -432,23 +417,24 @@ internal class TerminalEmulator(
     }
 
     override fun onCsiCommand(
-        state: Int,
+        state: EscapeState,
         command: Int,
         args: IntArray,
         argCount: Int,
         subParams: Int
     ) {
         when (state) {
-            AnsiEscapeParser.ESC_CSI -> handleCsiStandard(command, args, argCount, subParams)
-            AnsiEscapeParser.ESC_CSI_QUESTIONMARK -> handleCsiQuestionMark(command, args, argCount)
-            AnsiEscapeParser.ESC_CSI_BIGGERTHAN -> handleCsiBiggerThan(command)
-            AnsiEscapeParser.ESC_CSI_DOLLAR -> handleCsiDollar(command, args, argCount)
-            AnsiEscapeParser.ESC_CSI_DOUBLE_QUOTE -> handleCsiDoubleQuote(command, args)
-            AnsiEscapeParser.ESC_CSI_SINGLE_QUOTE -> handleCsiSingleQuote(command, args)
-            AnsiEscapeParser.ESC_CSI_QUESTIONMARK_ARG_DOLLAR -> handleCsiQuestionMarkArgDollar(command, args)
-            AnsiEscapeParser.ESC_CSI_ARGS_SPACE -> handleCsiArgsSpace(command, args)
-            AnsiEscapeParser.ESC_CSI_ARGS_ASTERIX -> handleCsiArgsAsterix(command, args)
-            AnsiEscapeParser.ESC_CSI_EXCLAMATION -> onSoftReset()
+            EscapeState.CSI -> handleCsiStandard(command, args, argCount, subParams)
+            EscapeState.CSI_QUESTIONMARK -> handleCsiQuestionMark(command, args, argCount)
+            EscapeState.CSI_BIGGERTHAN -> handleCsiBiggerThan(command)
+            EscapeState.CSI_DOLLAR -> handleCsiDollar(command, args, argCount)
+            EscapeState.CSI_DOUBLE_QUOTE -> handleCsiDoubleQuote(command, args)
+            EscapeState.CSI_SINGLE_QUOTE -> handleCsiSingleQuote(command, args)
+            EscapeState.CSI_QUESTIONMARK_ARG_DOLLAR -> handleCsiQuestionMarkArgDollar(command, args)
+            EscapeState.CSI_ARGS_SPACE -> handleCsiArgsSpace(command, args)
+            EscapeState.CSI_ARGS_ASTERIX -> handleCsiArgsAsterix(command, args)
+            EscapeState.CSI_EXCLAMATION -> onSoftReset()
+            else -> {}
         }
     }
 
@@ -574,23 +560,14 @@ internal class TerminalEmulator(
 
             'g' -> when (AnsiEscapeParser.getArg(args, 0, 0, true)) {
                 0 -> mTabStop[mCursorCol] = false
-                3 -> {
-                    for (i in 0 until mColumns) mTabStop[i] = false
-                }
+                3 -> mTabStop.fill(false)
             }
 
             'h' -> doSetMode(true, AnsiEscapeParser.getArg(args, 0, 0, true))
             'l' -> doSetMode(false, AnsiEscapeParser.getArg(args, 0, 0, true))
             'm' -> rendition.selectGraphicRendition(args, argCount, subParams)
             'n' -> when (AnsiEscapeParser.getArg(args, 0, 0, true)) {
-                5 -> writeByteArray(
-                    byteArrayOf(
-                        27,
-                        '['.code.toByte(),
-                        '0'.code.toByte(),
-                        'n'.code.toByte()
-                    )
-                )
+                5 -> writeByteArray(DSR_STATUS_RESPONSE)
 
                 6 -> writeString("\u001b[${mCursorRow + 1};${mCursorCol + 1}R")
             }
@@ -762,9 +739,7 @@ internal class TerminalEmulator(
     }
 
     private fun handleCsiBiggerThan(b: Int) {
-        when (b.toChar()) {
-            'c' -> writeString("\u001b[>41;320;0c")
-        }
+        if (b == 'c'.code) writeString("\u001b[>41;320;0c")
     }
 
     private fun handleCsiDollar(b: Int, args: IntArray, argCount: Int) {
@@ -837,20 +812,20 @@ internal class TerminalEmulator(
         val bottom = (AnsiEscapeParser.getArg(args, 2, mRows, true) + 1 + originTop).coerceAtMost(originBottom)
         val right = (AnsiEscapeParser.getArg(args, 3, mColumns, true) + 1 + originLeft).coerceAtMost(originRight)
         for (i in 4 until argCount) {
-            val COMBINED_ATTRS =
-                TextStyle.CHARACTER_ATTRIBUTE_BOLD or TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE or
-                        TextStyle.CHARACTER_ATTRIBUTE_BLINK or TextStyle.CHARACTER_ATTRIBUTE_INVERSE
-            val (bits, setOrClear) = when (AnsiEscapeParser.getArg(args, i, 0, false)) {
-                0 -> COMBINED_ATTRS to reverse
-                1 -> TextStyle.CHARACTER_ATTRIBUTE_BOLD to true
-                4 -> TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE to true
-                5 -> TextStyle.CHARACTER_ATTRIBUTE_BLINK to true
-                7 -> TextStyle.CHARACTER_ATTRIBUTE_INVERSE to true
-                22 -> TextStyle.CHARACTER_ATTRIBUTE_BOLD to false
-                24 -> TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE to false
-                25 -> TextStyle.CHARACTER_ATTRIBUTE_BLINK to false
-                27 -> TextStyle.CHARACTER_ATTRIBUTE_INVERSE to false
-                else -> 0 to true
+            val argCode = AnsiEscapeParser.getArg(args, i, 0, false)
+            val bits = when (argCode) {
+                0 -> COMBINED_ATTRS
+                1, 22 -> TextStyle.CHARACTER_ATTRIBUTE_BOLD
+                4, 24 -> TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE
+                5, 25 -> TextStyle.CHARACTER_ATTRIBUTE_BLINK
+                7, 27 -> TextStyle.CHARACTER_ATTRIBUTE_INVERSE
+                else -> 0
+            }
+            val setOrClear = when (argCode) {
+                0 -> reverse
+                1, 4, 5, 7 -> true
+                22, 24, 25, 27 -> false
+                else -> true
             }
             if (!(reverse && !setOrClear)) {
                 screen.setOrClearEffect(
@@ -1126,9 +1101,7 @@ internal class TerminalEmulator(
     }
 
     private fun doSetMode(newValue: Boolean, modeBit: Int) {
-        when (modeBit) {
-            4 -> mInsertMode = newValue
-        }
+        if (modeBit == 4) mInsertMode = newValue
     }
 
     private fun nextTabStop(numTabs: Int): Int {
@@ -1191,11 +1164,27 @@ internal class TerminalEmulator(
         var mUseLineDrawingG1: Boolean = false
         @JvmField
         var mUseLineDrawingUsesG0: Boolean = true
+
+        fun resetDefaults() {
+            mSavedCursorRow = 0
+            mSavedCursorCol = 0
+            mSavedEffect = 0
+            mSavedForeColor = TextStyle.COLOR_INDEX_FOREGROUND
+            mSavedBackColor = TextStyle.COLOR_INDEX_BACKGROUND
+            mSavedUnderlineStyle = TextStyle.UNDERLINE_STYLE_NONE
+            mSavedUnderlineColor = TextStyle.COLOR_INDEX_FOREGROUND
+            mSavedDecFlags = 0
+        }
     }
 
 
     companion object {
         private const val defaultRows = 24
+        private val COMBINED_ATTRS =
+            TextStyle.CHARACTER_ATTRIBUTE_BOLD or TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE or
+                TextStyle.CHARACTER_ATTRIBUTE_BLINK or TextStyle.CHARACTER_ATTRIBUTE_INVERSE
+        private val DSR_STATUS_RESPONSE =
+            byteArrayOf(27, '['.code.toByte(), '0'.code.toByte(), 'n'.code.toByte())
         private const val defaultColumns = 80
         private const val defaultCellWidthPixels = 10
         private const val defaultCellHeightPixels = 20

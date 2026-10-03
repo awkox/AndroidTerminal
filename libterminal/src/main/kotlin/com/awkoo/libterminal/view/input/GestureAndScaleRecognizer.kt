@@ -61,18 +61,12 @@ internal class GestureAndScaleRecognizer(context: Context, val mListener: Listen
             }, null, true /* ignoreMultitouch */)
 
         mGestureDetector.setOnDoubleTapListener(object : GestureDetector.OnDoubleTapListener {
-            override fun onSingleTapConfirmed(p0: MotionEvent): Boolean {
-                if (isAfterLongPress) return true
-                return mListener.onSingleTapUp(p0)
-            }
+            override fun onSingleTapConfirmed(p0: MotionEvent): Boolean =
+                isAfterLongPress || mListener.onSingleTapUp(p0)
 
-            override fun onDoubleTap(p0: MotionEvent): Boolean {
-                return mListener.onDoubleTap(p0)
-            }
+            override fun onDoubleTap(p0: MotionEvent): Boolean = mListener.onDoubleTap(p0)
 
-            override fun onDoubleTapEvent(p0: MotionEvent): Boolean {
-                return true
-            }
+            override fun onDoubleTapEvent(p0: MotionEvent): Boolean = true
         })
 
         mScaleDetector = ScaleGestureDetector(
@@ -98,10 +92,9 @@ internal class GestureAndScaleRecognizer(context: Context, val mListener: Listen
         mScaleDetector.onTouchEvent(event)
         when (event.action) {
             MotionEvent.ACTION_DOWN -> isAfterLongPress = false
-            MotionEvent.ACTION_UP -> if (!isAfterLongPress) {
-                // 在 vim 等支持鼠标事件的场景中，长按后抬起不应移动光标
-                mListener.onUp(event)
-            }
+
+            // 在 vim 等支持鼠标事件的场景中，长按后抬起不应移动光标
+            MotionEvent.ACTION_UP if !isAfterLongPress -> mListener.onUp(event)
         }
     }
 

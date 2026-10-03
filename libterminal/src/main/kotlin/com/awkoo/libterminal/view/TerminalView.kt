@@ -138,7 +138,6 @@ class TerminalView(
     )
 
     private val cursorBlinker = TerminalBlinker(
-        blinkerName = "cursor",
         scope = scope,
         onInvalidate = { invalidate() },
         shouldStart = { it.isCursorEnabled },
@@ -147,7 +146,6 @@ class TerminalView(
     )
 
     private val textBlinker = TerminalBlinker(
-        blinkerName = "text",
         scope = scope,
         onInvalidate = { invalidate() },
         setBlinkingEnabled = { emulator, enabled -> emulator.isTextBlinkingEnabled = enabled },
@@ -171,8 +169,8 @@ class TerminalView(
                 value.emulator.cursorStyle = cursorStyle
                 updateSize()
                 onScreenUpdated()
-                if (cursorBlinking) cursorBlinker.start(value.emulator) else cursorBlinker.stop()
-                if (textBlinking) textBlinker.start(value.emulator) else textBlinker.stop()
+                applyBlinker(cursorBlinker, value.emulator, cursorBlinking)
+                applyBlinker(textBlinker, value.emulator, textBlinking)
             } else {
                 currentPalette = null
                 invalidate()
@@ -245,12 +243,7 @@ class TerminalView(
         set(value) {
             if (field == value) return
             field = value
-            val emulator = mEmulator
-            if (value) {
-                emulator?.let { cursorBlinker.start(it) }
-            } else {
-                cursorBlinker.stop()
-            }
+            applyBlinker(cursorBlinker, mEmulator, value)
         }
 
     /**
@@ -262,20 +255,19 @@ class TerminalView(
         set(value) {
             if (field == value) return
             field = value
-            val emulator = mEmulator
-            if (value) {
-                emulator?.let { textBlinker.start(it) }
-            } else {
-                textBlinker.stop()
-            }
+            applyBlinker(textBlinker, mEmulator, value)
         }
+
+    private fun applyBlinker(blinker: TerminalBlinker, emulator: TerminalEmulator?, enabled: Boolean) {
+        if (enabled) emulator?.let { blinker.start(it) } else blinker.stop()
+    }
 
     private val textSelectionCursorController = TextSelectionCursorController(this)
 
     internal val isSelectingText: Boolean
         get() = textSelectionCursorController.isActive
 
-    private var mDefaultSelectors: IntArray = intArrayOf(-1, -1, -1, -1)
+    private val mDefaultSelectors: IntArray = intArrayOf(-1, -1, -1, -1)
 
     internal fun startTextSelectionMode(event: MotionEvent) {
         if (!requestFocus()) return
@@ -300,11 +292,9 @@ class TerminalView(
     }
 
     internal fun updateFloatingToolbarVisibility(event: MotionEvent) {
-        if (this.textSelectionActionMode != null) {
-            when (event.actionMasked) {
-                MotionEvent.ACTION_MOVE -> hideFloatingToolbar()
-                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> showFloatingToolbar()
-            }
+        when (event.actionMasked) {
+            MotionEvent.ACTION_MOVE -> hideFloatingToolbar()
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> showFloatingToolbar()
         }
     }
 
@@ -411,8 +401,7 @@ class TerminalView(
 
     /** 单元格列 → 像素边界；末列之后的右边界传 `mColumns`。 */
     internal fun getPointX(cx: Int): Int {
-        val emulator = mEmulator!!
-        val clamped = if (cx > emulator.mColumns) emulator.mColumns else cx
+        val clamped = cx.coerceAtMost(mEmulator?.mColumns ?: Int.MAX_VALUE)
         return CellPoint.columnToX(clamped, mRenderer.fontWidth)
     }
 
@@ -455,11 +444,9 @@ class TerminalView(
     var extraKeysModifierReader: (() -> ExtraKeysModifierSnapshot)? = null
 
     override fun onKeyPreIme(keyCode: Int, event: KeyEvent): Boolean {
-        if (keyCode == KeyEvent.KEYCODE_BACK) {
-            if (this.isSelectingText) {
-                stopTextSelectionMode()
-                return true
-            }
+        if (keyCode == KeyEvent.KEYCODE_BACK && this.isSelectingText) {
+            stopTextSelectionMode()
+            return true
         }
         return super.onKeyPreIme(keyCode, event)
     }

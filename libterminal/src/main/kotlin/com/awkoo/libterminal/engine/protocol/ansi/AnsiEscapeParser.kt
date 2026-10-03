@@ -3,7 +3,7 @@ package com.awkoo.libterminal.engine.protocol.ansi
 import kotlin.math.min
 
 internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
-    private var mEscapeState = ESC_NONE
+    private var mEscapeState = EscapeState.NONE
     private val mArgs = IntArray(MAX_ESCAPE_PARAMETERS)
     private var mArgIndex = 0
     private var mArgsSubParamsBitSet = 0
@@ -12,55 +12,56 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
 
     fun processCodePoint(b: Int) {
         when (mEscapeState) {
-            ESC_APC -> { doApc(b); return }
-            ESC_APC_ESCAPE -> { doApcEscape(b); return }
-            ESC_P -> { doDeviceControl(b); return }
-            ESC_P_ESCAPE -> { doDeviceControlEscape(b); return }
+            EscapeState.APC -> { doApc(b); return }
+            EscapeState.APC_ESCAPE -> { doApcEscape(b); return }
+            EscapeState.P -> { doDeviceControl(b); return }
+            EscapeState.P_ESCAPE -> { doDeviceControlEscape(b); return }
+            else -> {}
         }
 
         when (b) {
             0 -> return
-            7 -> if (mEscapeState == ESC_OSC) doOsc(b) else handler.onBell()
+            7 -> if (mEscapeState == EscapeState.OSC) doOsc(b) else handler.onBell()
             8 -> handler.onBackspace()
             9 -> handler.onHorizontalTab()
             10, 11, 12 -> handler.onLinefeed()
             13 -> handler.onCarriageReturn()
             14 -> handler.onShiftOut()
             15 -> handler.onShiftIn()
-            24, 26 -> if (mEscapeState != ESC_NONE) {
-                mEscapeState = ESC_NONE
+            24, 26 -> if (mEscapeState != EscapeState.NONE) {
+                mEscapeState = EscapeState.NONE
                 handler.onCodePoint(127)
             }
             27 -> {
-                if (mEscapeState == ESC_OSC) doOsc(b) else startEscapeSequence()
+                if (mEscapeState == EscapeState.OSC) doOsc(b) else startEscapeSequence()
             }
             else -> {
                 mContinueSequence = false
                 when (mEscapeState) {
-                    ESC_NONE -> if (b >= 32) handler.onCodePoint(b)
-                    ESC -> doEsc(b)
-                    ESC_POUND -> { handler.onEscCommand(ESC_POUND, b); finishSequence() }
-                    ESC_SELECT_LEFT_PAREN -> { handler.onEscCommand(ESC_SELECT_LEFT_PAREN, b); finishSequence() }
-                    ESC_SELECT_RIGHT_PAREN -> { handler.onEscCommand(ESC_SELECT_RIGHT_PAREN, b); finishSequence() }
-                    ESC_CSI -> doCsi(b)
-                    ESC_CSI_UNSUPPORTED_PARAMETER_BYTE,
-                    ESC_CSI_UNSUPPORTED_INTERMEDIATE_BYTE -> doCsiUnsupportedParameterOrIntermediateByte(b)
-                    ESC_CSI_QUESTIONMARK -> doCsiQuestionMark(b)
-                    ESC_CSI_BIGGERTHAN -> doCsiBiggerThan(b)
+                    EscapeState.NONE -> if (b >= 32) handler.onCodePoint(b)
+                    EscapeState.ESC -> doEsc(b)
+                    EscapeState.POUND -> { handler.onEscCommand(EscapeState.POUND, b); finishSequence() }
+                    EscapeState.SELECT_LEFT_PAREN -> { handler.onEscCommand(EscapeState.SELECT_LEFT_PAREN, b); finishSequence() }
+                    EscapeState.SELECT_RIGHT_PAREN -> { handler.onEscCommand(EscapeState.SELECT_RIGHT_PAREN, b); finishSequence() }
+                    EscapeState.CSI -> doCsi(b)
+                    EscapeState.CSI_UNSUPPORTED_PARAMETER_BYTE,
+                    EscapeState.CSI_UNSUPPORTED_INTERMEDIATE_BYTE -> doCsiUnsupportedParameterOrIntermediateByte(b)
+                    EscapeState.CSI_QUESTIONMARK -> doCsiQuestionMark(b)
+                    EscapeState.CSI_BIGGERTHAN -> doCsiBiggerThan(b)
 
-                    ESC_CSI_EXCLAMATION,
-                    ESC_CSI_DOLLAR,
-                    ESC_CSI_DOUBLE_QUOTE,
-                    ESC_CSI_SINGLE_QUOTE,
-                    ESC_CSI_QUESTIONMARK_ARG_DOLLAR,
-                    ESC_CSI_ARGS_SPACE,
-                    ESC_CSI_ARGS_ASTERIX -> {
+                    EscapeState.CSI_EXCLAMATION,
+                    EscapeState.CSI_DOLLAR,
+                    EscapeState.CSI_DOUBLE_QUOTE,
+                    EscapeState.CSI_SINGLE_QUOTE,
+                    EscapeState.CSI_QUESTIONMARK_ARG_DOLLAR,
+                    EscapeState.CSI_ARGS_SPACE,
+                    EscapeState.CSI_ARGS_ASTERIX -> {
                         handler.onCsiCommand(mEscapeState, b, mArgs, mArgIndex + 1, mArgsSubParamsBitSet)
                     }
 
-                    ESC_PERCENT -> { handler.onEscCommand(ESC_PERCENT, b); finishSequence() }
-                    ESC_OSC -> doOsc(b)
-                    ESC_OSC_ESC -> doOscEsc(b)
+                    EscapeState.PERCENT -> { handler.onEscCommand(EscapeState.PERCENT, b); finishSequence() }
+                    EscapeState.OSC -> doOsc(b)
+                    EscapeState.OSC_ESC -> doOscEsc(b)
                     else -> unknownSequence(b)
                 }
                 if (!mContinueSequence) finishSequence()
@@ -69,19 +70,19 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
     }
 
     private fun startEscapeSequence() {
-        mEscapeState = ESC
+        mEscapeState = EscapeState.ESC
         mArgIndex = 0
         mArgs.fill(-1)
         mArgsSubParamsBitSet = 0
     }
 
-    private fun continueSequence(state: Int) {
+    private fun continueSequence(state: EscapeState) {
         mEscapeState = state
         mContinueSequence = true
     }
 
     private fun finishSequence() {
-        mEscapeState = ESC_NONE
+        mEscapeState = EscapeState.NONE
     }
 
     private fun parseArg(b: Int) {
@@ -112,60 +113,60 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
 
     private fun doEsc(b: Int) {
         when (b.toChar()) {
-            '#' -> continueSequence(ESC_POUND)
-            '%' -> continueSequence(ESC_PERCENT)
-            '(' -> continueSequence(ESC_SELECT_LEFT_PAREN)
-            ')' -> continueSequence(ESC_SELECT_RIGHT_PAREN)
+            '#' -> continueSequence(EscapeState.POUND)
+            '%' -> continueSequence(EscapeState.PERCENT)
+            '(' -> continueSequence(EscapeState.SELECT_LEFT_PAREN)
+            ')' -> continueSequence(EscapeState.SELECT_RIGHT_PAREN)
             'P' -> {
                 mOSCOrDeviceControlArgs.setLength(0)
-                continueSequence(ESC_P)
+                continueSequence(EscapeState.P)
             }
-            '[' -> continueSequence(ESC_CSI)
+            '[' -> continueSequence(EscapeState.CSI)
             ']' -> {
                 mOSCOrDeviceControlArgs.setLength(0)
-                continueSequence(ESC_OSC)
+                continueSequence(EscapeState.OSC)
             }
-            '_' -> continueSequence(ESC_APC)
-            else -> handler.onEscCommand(ESC, b)
+            '_' -> continueSequence(EscapeState.APC)
+            else -> handler.onEscCommand(EscapeState.ESC, b)
         }
     }
 
     private fun doCsi(b: Int) {
         when (b.toChar()) {
-            '!' -> continueSequence(ESC_CSI_EXCLAMATION)
-            '"' -> continueSequence(ESC_CSI_DOUBLE_QUOTE)
-            '\'' -> continueSequence(ESC_CSI_SINGLE_QUOTE)
-            '$' -> continueSequence(ESC_CSI_DOLLAR)
-            '*' -> continueSequence(ESC_CSI_ARGS_ASTERIX)
-            '?' -> continueSequence(ESC_CSI_QUESTIONMARK)
-            '>' -> continueSequence(ESC_CSI_BIGGERTHAN)
-            '<', '=' -> continueSequence(ESC_CSI_UNSUPPORTED_PARAMETER_BYTE)
-            ' ' -> continueSequence(ESC_CSI_ARGS_SPACE)
+            '!' -> continueSequence(EscapeState.CSI_EXCLAMATION)
+            '"' -> continueSequence(EscapeState.CSI_DOUBLE_QUOTE)
+            '\'' -> continueSequence(EscapeState.CSI_SINGLE_QUOTE)
+            '$' -> continueSequence(EscapeState.CSI_DOLLAR)
+            '*' -> continueSequence(EscapeState.CSI_ARGS_ASTERIX)
+            '?' -> continueSequence(EscapeState.CSI_QUESTIONMARK)
+            '>' -> continueSequence(EscapeState.CSI_BIGGERTHAN)
+            '<', '=' -> continueSequence(EscapeState.CSI_UNSUPPORTED_PARAMETER_BYTE)
+            ' ' -> continueSequence(EscapeState.CSI_ARGS_SPACE)
             else -> handleCsiCommonArgs(b) {
-                handler.onCsiCommand(ESC_CSI, b, mArgs, mArgIndex + 1, mArgsSubParamsBitSet)
+                handler.onCsiCommand(EscapeState.CSI, b, mArgs, mArgIndex + 1, mArgsSubParamsBitSet)
             }
         }
     }
 
     private fun doCsiQuestionMark(b: Int) {
         when (b.toChar()) {
-            '$' -> continueSequence(ESC_CSI_QUESTIONMARK_ARG_DOLLAR)
+            '$' -> continueSequence(EscapeState.CSI_QUESTIONMARK_ARG_DOLLAR)
             else -> handleCsiCommonArgs(b) {
-                handler.onCsiCommand(ESC_CSI_QUESTIONMARK, b, mArgs, mArgIndex + 1, mArgsSubParamsBitSet)
+                handler.onCsiCommand(EscapeState.CSI_QUESTIONMARK, b, mArgs, mArgIndex + 1, mArgsSubParamsBitSet)
             }
         }
     }
 
     private fun doCsiBiggerThan(b: Int) {
         handleCsiCommonArgs(b) {
-            handler.onCsiCommand(ESC_CSI_BIGGERTHAN, b, mArgs, mArgIndex + 1, mArgsSubParamsBitSet)
+            handler.onCsiCommand(EscapeState.CSI_BIGGERTHAN, b, mArgs, mArgIndex + 1, mArgsSubParamsBitSet)
         }
     }
 
     private fun doCsiUnsupportedParameterOrIntermediateByte(b: Int) {
         when {
-            mEscapeState == ESC_CSI_UNSUPPORTED_PARAMETER_BYTE && b in 0x30..0x3F -> continueSequence(ESC_CSI_UNSUPPORTED_PARAMETER_BYTE)
-            b in 0x20..0x2F -> continueSequence(ESC_CSI_UNSUPPORTED_INTERMEDIATE_BYTE)
+            mEscapeState == EscapeState.CSI_UNSUPPORTED_PARAMETER_BYTE && b in 0x30..0x3F -> continueSequence(EscapeState.CSI_UNSUPPORTED_PARAMETER_BYTE)
+            b in 0x20..0x2F -> continueSequence(EscapeState.CSI_UNSUPPORTED_INTERMEDIATE_BYTE)
             b in 0x40..0x7E -> finishSequence()
             else -> unknownSequence(b)
         }
@@ -174,7 +175,7 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
     private fun doOsc(b: Int) {
         when (b) {
             7 -> doOscSetTextParameters("\u0007")
-            27 -> continueSequence(ESC_OSC_ESC)
+            27 -> continueSequence(EscapeState.OSC_ESC)
             else -> collectOSCArgs(b)
         }
     }
@@ -185,7 +186,7 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
             else -> {
                 collectOSCArgs(27)
                 collectOSCArgs(b)
-                continueSequence(ESC_OSC)
+                continueSequence(EscapeState.OSC)
             }
         }
     }
@@ -198,20 +199,20 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
     }
 
     private fun doOscSetTextParameters(bellOrStringTerminator: String) {
-        var value = -1
-        var textParameter = ""
-        for (i in 0 until mOSCOrDeviceControlArgs.length) {
-            val b = mOSCOrDeviceControlArgs[i]
-            if (b == ';') {
-                textParameter = mOSCOrDeviceControlArgs.substring(i + 1)
-                break
-            } else if (b in '0'..'9') {
-                value = (if (value < 0) 0 else value * 10) + (b.code - '0'.code)
-            } else {
-                unknownSequence(b.code)
-                return
-            }
+        val separatorIndex = mOSCOrDeviceControlArgs.indexOf(';')
+        val valuePart = if (separatorIndex < 0) {
+            mOSCOrDeviceControlArgs.toString()
+        } else {
+            mOSCOrDeviceControlArgs.substring(0, separatorIndex)
         }
+        val illegal = valuePart.firstOrNull { it !in '0'..'9' }
+        if (illegal != null) {
+            unknownSequence(illegal.code)
+            return
+        }
+        val value = valuePart.toIntOrNull() ?: -1
+        val textParameter =
+            if (separatorIndex < 0) "" else mOSCOrDeviceControlArgs.substring(separatorIndex + 1)
         handler.onOscCommand(value, textParameter, bellOrStringTerminator)
         finishSequence()
     }
@@ -222,7 +223,7 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
                 handler.onDeviceControl(mOSCOrDeviceControlArgs.toString())
                 finishSequence()
             }
-            27.toByte() -> continueSequence(ESC_P_ESCAPE)
+            27.toByte() -> continueSequence(EscapeState.P_ESCAPE)
             else -> {
                 if (mOSCOrDeviceControlArgs.length <= MAX_OSC_STRING_LENGTH) {
                     mOSCOrDeviceControlArgs.appendCodePoint(b)
@@ -241,16 +242,16 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
                 mOSCOrDeviceControlArgs.appendCodePoint(27)
                 mOSCOrDeviceControlArgs.appendCodePoint(b)
             }
-            continueSequence(ESC_P)
+            continueSequence(EscapeState.P)
         }
     }
 
     private fun doApc(b: Int) {
-        if (b == 27) continueSequence(ESC_APC_ESCAPE)
+        if (b == 27) continueSequence(EscapeState.APC_ESCAPE)
     }
 
     private fun doApcEscape(b: Int) {
-        if (b == '\\'.code) finishSequence() else continueSequence(ESC_APC)
+        if (b == '\\'.code) finishSequence() else continueSequence(EscapeState.APC)
     }
 
     private fun unknownSequence(b: Int) {
@@ -267,7 +268,7 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
     }
 
     fun reset() {
-        mEscapeState = ESC_NONE
+        mEscapeState = EscapeState.NONE
         mArgIndex = 0
         mContinueSequence = false
         mArgs.fill(-1)
@@ -275,30 +276,6 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
     }
 
     companion object {
-        const val ESC_NONE = 0
-        const val ESC = 1
-        const val ESC_POUND = 2
-        const val ESC_SELECT_LEFT_PAREN = 3
-        const val ESC_SELECT_RIGHT_PAREN = 4
-        const val ESC_CSI = 6
-        const val ESC_CSI_QUESTIONMARK = 7
-        const val ESC_CSI_DOLLAR = 8
-        const val ESC_PERCENT = 9
-        const val ESC_OSC = 10
-        const val ESC_OSC_ESC = 11
-        const val ESC_CSI_BIGGERTHAN = 12
-        const val ESC_P = 13
-        const val ESC_P_ESCAPE = 24
-        const val ESC_CSI_QUESTIONMARK_ARG_DOLLAR = 14
-        const val ESC_CSI_ARGS_SPACE = 15
-        const val ESC_CSI_ARGS_ASTERIX = 16
-        const val ESC_CSI_DOUBLE_QUOTE = 17
-        const val ESC_CSI_SINGLE_QUOTE = 18
-        const val ESC_CSI_EXCLAMATION = 19
-        const val ESC_APC = 20
-        const val ESC_APC_ESCAPE = 21
-        const val ESC_CSI_UNSUPPORTED_PARAMETER_BYTE = 22
-        const val ESC_CSI_UNSUPPORTED_INTERMEDIATE_BYTE = 23
 
         const val MAX_ESCAPE_PARAMETERS = 32
         const val MAX_OSC_STRING_LENGTH = 8192
