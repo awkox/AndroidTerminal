@@ -8,7 +8,7 @@
 
 # AndroidTerminal
 
-一个使用 Kotlin + Compose 重写的高性能 Android 终端（默认扩展按键布局与字符宽度表与 Termux 对齐）
+一个基于 Termux 使用 Kotlin + Compose 重写的高性能 Android 终端
 
 ## 特性
 
