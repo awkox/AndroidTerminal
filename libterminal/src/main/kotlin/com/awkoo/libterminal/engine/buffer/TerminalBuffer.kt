@@ -312,6 +312,10 @@ internal class TerminalBuffer(
                 allocateFullLineIfNecessary(destInternal)
                     .copyInterval(sourceRow, sx, sx + w, dx)
             }
+            if (dx + w == mColumns) {
+                if (sx + w == mColumns && sourceRow?.mLineWrap == true) setLineWrap(dy + y2)
+                else clearLineWrap(dy + y2)
+            }
         }
     }
 
@@ -319,7 +323,10 @@ internal class TerminalBuffer(
         require(!(w < 0 || h < 0 || sx < 0 || sx + w > mColumns || sy < 0 || sy + h > mScreenRows)) {
             "Illegal arguments! blockSet($sx, $sy, $w, $h, $value, $mColumns, $mScreenRows)"
         }
-        for (y in 0..<h) for (x in 0..<w) setChar(sx + x, sy + y, value, style, extendedEffect)
+        for (y in 0..<h) {
+            for (x in 0..<w) setChar(sx + x, sy + y, value, style, extendedEffect)
+            if (sx + w == mColumns && value == ' '.code) clearLineWrap(sy + y)
+        }
     }
 
     /**
