@@ -147,13 +147,17 @@ class TerminalSession(
                 var bytesProcessed = chunk.length
 
                 synchronized(emulator) {
-                    emulator.append(chunk.buffer, chunk.length)
+                    try {
+                        emulator.append(chunk.buffer, chunk.length)
 
-                    while (bytesProcessed < 32 * 1024) {
-                        val moreChunk = terminalReadChannel.tryReceive().getOrNull() ?: break
-                        emulator.append(moreChunk.buffer, moreChunk.length)
-                        bytesProcessed += moreChunk.length
-                        terminalReadBufferPoolChannel.trySend(moreChunk)
+                        while (bytesProcessed < 32 * 1024) {
+                            val moreChunk = terminalReadChannel.tryReceive().getOrNull() ?: break
+                            emulator.append(moreChunk.buffer, moreChunk.length)
+                            bytesProcessed += moreChunk.length
+                            terminalReadBufferPoolChannel.trySend(moreChunk)
+                        }
+                    } catch (e: Exception) {
+                        e.printStackTrace()
                     }
                 }
 
