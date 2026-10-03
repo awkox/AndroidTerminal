@@ -356,6 +356,12 @@ internal class TerminalBuffer(
         return mLines[externalToInternalRow(externalRow)]?.getStyle(column) ?: TextStyle.NORMAL
     }
 
+    /** 读取指定单元格的扩展特效位；行或列越界、以及该行尚未分配时返回 0。 */
+    fun getExtendedEffectAt(externalRow: Int, column: Int): Long {
+        if (!rowInRange(externalRow) || column !in 0 until mColumns) return 0L
+        return mLines[externalToInternalRow(externalRow)]?.getExtendedEffect(column) ?: 0L
+    }
+
     /**
      * 把列号校准到字符边界：落在宽字符后半格内的列号推进到该字符之后。
      *

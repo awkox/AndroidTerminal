@@ -798,11 +798,9 @@ internal class TerminalEmulator(
                                 else if (erase) rendition.eraseFillStyle
                                 else style
                             val applyExt =
-                                if (keepVisualAttributes) screen.allocateFullLineIfNecessary(
-                                    screen.externalToInternalRow(row)
-                                ).getExtendedEffect(col)
-                                else if (erase) 0L
-                                else rendition.currentExtendedEffect
+                            if (keepVisualAttributes) screen.getExtendedEffectAt(row, col)
+                            else if (erase) 0L
+                            else rendition.currentExtendedEffect
 
                             screen.setChar(col, row, fillChar, applyStyle, applyExt)
                         }
