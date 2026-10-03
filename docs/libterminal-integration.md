@@ -6,7 +6,7 @@
 
 ```kotlin
 dependencies {
-    implementation("io.github.awkox:libterminal:<xxx>")
+    implementation("io.github.awkox:libterminal:4.0.2")
 }
 ```
 
@@ -34,14 +34,17 @@ interface ITerminalProcess {
     fun waitFor(): Int
     fun kill()
     fun close()
-    val failureReason: String?     // 非正常退出的可读原因（如 SSH 认证失败、连接中断）；
-                                   // 仅 waitFor() 返回非零后可读，本地进程恒为 null
+    val failureReason: String?     // 非正常退出的可读原因（如 SSH 认证失败、连接中断），默认实现返回 null；
+                                   // 仅 waitFor() 返回非零后、进程被 close() 前可读，本地进程恒为 null
 }
 ```
 
 demo（`libterminal-pty/.../pty/PtyFactory.kt`）通过 JNI 的 `createSubprocess`/`setPtyWindowSize`
 实现本地 pty：将 pty 文件描述符包装为 `FileInputStream` / `FileOutputStream` 暴露给上层，
 `kill()` 使用 `Os.kill(pid, SIGKILL)`。你可以用同样模式接入 SSH 或任意远程终端。
+
+demo 的启动参数 `CommandInfo`（`com.awkoo.libterminal.pty.CommandInfo`）封装 `executable`、
+`workingDirectory`、`arguments`、`extraEnvironment` 与 `stdin`。
 
 ### 2.2 创建会话（`TerminalSession`）
 
@@ -100,7 +103,7 @@ fun TerminalScreen(session: TerminalSession?) {
 | `textSize` | `Int`（var） | 字号（dp，自动约束在 4..100） |
 | `typeface` | `Typeface`（var） | 等宽字体，例如 `Typeface.MONOSPACE` 或 Assets 中字体 |
 | `colorScheme` | `TerminalColorScheme`（var） | 渲染配色主题基底，见 §3.5；可在运行时修改，已绑定会话立即重建（OSC 动态改色仍作为覆盖生效） |
-| `cursorStyle` | `TerminalCursorStyle`（var） | 默认光标样式（`BLOCK`/`UNDERLINE`/`BAR`）；立即应用并作用于新绑定会话，DECSET 主动切换优先于它 |
+| `cursorStyle` | `TerminalCursorStyle`（var） | 光标样式（`BLOCK`/`UNDERLINE`/`BAR`，默认 `BAR`）；立即应用并作用于新绑定会话，DECSET 主动切换优先于它 |
 | `cursorBlinking` | `Boolean`（var） | 光标闪烁开关（默认开启）；关闭时光标常亮 |
 | `textBlinking` | `Boolean`（var） | 文本（带闪烁属性）闪烁开关（默认开启）；关闭时相关文本常亮 |
 | `actionModeCustomizer` | `ActionModeCustomizer?`（var） | 定制长按选择的浮动工具栏 |
@@ -111,22 +114,23 @@ fun TerminalScreen(session: TerminalSession?) {
 | `toggleAutoScrollDisabled()` | fun | 切换自动滚动禁用（配合滚动锁定） |
 | `pasteTextFromClipboard()` | fun | 从剪贴板粘贴到终端 |
 | `dispose()` | fun | 释放协程、移除触摸模式监听，View 分离时**必须**调用 |
-| `inputVirtualKeyCodePoint(codePoint, controlDownFromEvent, leftAltDownFromEvent)` | fun | 注入扩展按键栏产生的 Unicode 码点 |
-| `onKeyDown(keyCode, event)` | fun | 注入完整 `KeyEvent`（扩展键/物理键盘复用） |
-| `onKeyUp(keyCode, event)` | fun | 与 `onKeyDown` 对称；扩展键栏如需注入松开事件可调用 |
+| `inputVirtualKeyCodePoint(codePoint, controlDownFromEvent = false, leftAltDownFromEvent = false)` | fun | 注入扩展按键栏产生的 Unicode 码点 |
+| `onKeyDown(keyCode, event)` | fun | 注入完整 `KeyEvent`（IME/扩展键/物理键盘复用） |
+| `onKeyUp(keyCode, event)` | fun | 抬起事件入口（IME 回调用）；非系统键直接消费，不注入模拟器 |
+| `onKeyPreIme(keyCode, event)` | fun | 拦截物理返回键：选择模式下先退出选择 |
 
 内置手势行为：
 
 | 手势 | 行为 |
 |------|------|
-| 单击 | 唤起软键盘；选择模式下点击空白处退出选择 |
+| 单击 | 唤起软键盘；选择模式下（非长按后续的）单击退出选择 |
 | 双击 | 唤起软键盘 |
 | 长按 | 进入文本选择（选择单词、显示 Copy/Paste 浮动工具栏与拖动手柄） |
 | 拖动 | 历史回滚导航 |
 | 双指缩放 | 调整字号 |
 | 滚轮 / 触控板 | 历史导航或鼠标追踪事件（视 vt 模式） |
 
-> 注意：选择模式在窗口失焦（`onWindowFocusChanged`）、View 失焦（`onFocusChanged`）时自动退出，
+> 注意：选择模式在窗口失焦（`onWindowFocusChanged`）、View 失焦（`onFocusChanged`）时自动退出。
 
 ### 3.2 `com.awkoo.libterminal.engine.TerminalSession`
 
@@ -138,17 +142,18 @@ fun TerminalScreen(session: TerminalSession?) {
 | `id` | `Int` | 会话 ID |
 | `sessionName` | `MutableStateFlow<String>` | 会话名（顶栏显示用） |
 | `titleState` | `StateFlow<String?>` | OSC 0/1/2 设置的终端标题（如 vim 标签） |
-| `isRunning` | `StateFlow<Boolean>` | `execute()` 后为 `true`，进程退出后置 `false` |
+| `isRunning` | `MutableStateFlow<Boolean>` | `execute()` 后为 `true`，进程退出后置 `false` |
 | `exitStatus` | `Int` | 进程退出码（负数表示信号编号） |
 | `isRemove` | `MutableStateFlow<Boolean>` | 请求移除标记（回车退出场景） |
 | `execute()` | fun | 启动进程与 I/O 协程 |
 | `write(data)` | fun | 写入字节 / 字符串到进程 stdin |
 | `reset()` | fun | 复位模拟器状态 |
-| `finishIfRunning()` | fun | SIGKILL 终止进程 |
+| `finishIfRunning()` | fun | 结束进程：本地 pty 为 `SIGKILL`，SSH 为请求断开并收尾（并非总是发信号） |
 
 ### 3.3 `com.awkoo.libterminal.view.interact.ActionModeCustomizer` / `ActionModeItem`
 
-自定义长按选择后浮动工具栏的文字与额外按钮（可做本地化 / 添加"分享"等操作）：
+自定义长按选择后浮动工具栏的文字与额外按钮（可做本地化 / 添加"分享"等操作）。
+`ActionModeCustomizer` 是 `open class`，直接继承即可：
 
 ```kotlin
 terminalView.actionModeCustomizer = object : ActionModeCustomizer() {
@@ -170,6 +175,9 @@ view.extraKeysModifierReader = {
     ExtraKeysModifierSnapshot(ctrl = ctrlOn, alt = altOn, shift = shiftOn, fn = fnOn)
 }
 ```
+
+> 注：`ExtraKeysModifierSnapshot` 是 `@JvmInline value class`（主构造为 `mask: Int`），
+> 上例的四个布尔参数来自与其同名的顶层工厂函数，读取属性用 `snapshot.ctrl` 等。
 
 ### 3.5 `com.awkoo.libterminal.color.TerminalColorScheme`
 
@@ -213,4 +221,4 @@ val full = TerminalColorScheme.custom(IntArray(TerminalColorScheme.COLOR_COUNT).
 #### 注意事项
 
 - 颜色值统一为 `0xFFRRGGBB`（不透明 ARGB）。
-- `TerminalColorScheme` 是纯值对象（基于内容判等），可在多 view 间安全复用；
+- `TerminalColorScheme` 是纯值对象（基于内容判等），可在多 view 间安全复用。

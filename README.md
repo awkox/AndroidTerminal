@@ -8,7 +8,7 @@
 
 # AndroidTerminal
 
-一个基于 Termux 并使用 Kotlin + Compose 重写的高性能 Android 终端
+一个使用 Kotlin + Compose 重写的高性能 Android 终端（默认扩展按键布局与字符宽度表与 Termux 对齐）
 
 ## 特性
 
@@ -23,7 +23,7 @@
 环境要求：
 
 - JDK 21
-- Android SDK 37
+- Android SDK（compileSdk 37、targetSdk 28）
 - Android NDK 29.0.14206865
 
 debug 版本：
@@ -53,7 +53,7 @@ release 版本需要环境变量 `KEYSTORE_PASS`、`KEY_ALIAS`、`KEY_PASS` 指�
 │   ├── text/           # 文本宽度、UTF-8 解码
 │   └── view/           # Canvas 渲染 View、文本选择、输入处理
 ├── libterminal-pty/    # 本地 PTY 进程模块（C++/JNI 原生实现 + Kotlin 封装）
-└── libterminal-ssh/    # SSH 终端模块（libssh + mbedtls，指纹探测与信任策略）
+└── libterminal-ssh/    # SSH 终端模块（libssh + mbedtls，服务端指纹探测与连接）
 ```
 
 ## 贡献
