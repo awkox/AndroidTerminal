@@ -1017,6 +1017,8 @@ internal class TerminalEmulator(
 
         val previousCol = mCursorCol
         val wasAboutToAutoWrap = mAboutToAutoWrap
+        // cursorCol setter 是 mAboutToAutoWrap 唯一清零属主：必须先经 setter 写列、再在此重建标志。
+        // 顺序不可调换，否则换行标志被写入即清，自动换行失效（Ctrl+R 光标倒退覆盖的根因）。
         this.cursorCol = min(previousCol + displayWidth, mRightMargin - 1)
         mAboutToAutoWrap = when {
             displayWidth <= 0 -> wasAboutToAutoWrap
