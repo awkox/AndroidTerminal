@@ -393,7 +393,7 @@ internal class TerminalEmulator(
                 doLinefeed()
             }
 
-            'F' -> setCursorRowCol(0, mBottomMargin - 1)
+            'F' -> {} // 仅 xterm 的 hpLowerleftBugCompat 资源（默认 false）开启时才移动光标，默认与其余桌面终端一致忽略
             'H' -> mTabStop[mCursorCol] = true
             'M' -> if (mCursorRow <= mTopMargin) {
                 screen.blockCopy(
