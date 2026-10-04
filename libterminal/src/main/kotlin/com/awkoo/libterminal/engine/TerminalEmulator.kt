@@ -316,14 +316,15 @@ internal class TerminalEmulator(
     }
 
     override fun onBackspace() {
-        if (mLeftMargin == mCursorCol) {
+        if (mCursorCol > mLeftMargin) {
+            this.cursorCol = mCursorCol - 1
+        } else if (isDecsetInternalBitSet(DECSET_BIT_REVERSE_WRAPAROUND)
+            && isDecsetInternalBitSet(DECSET_BIT_AUTOWRAP)
+        ) {
             val previousRow = mCursorRow - 1
             if (previousRow >= mTopMargin && screen.getLineWrap(previousRow)) {
-                screen.clearLineWrap(previousRow)
                 setCursorRowCol(previousRow, mRightMargin - 1)
             }
-        } else {
-            this.cursorCol = mCursorCol - 1
         }
     }
 

@@ -151,10 +151,6 @@ internal class TerminalBuffer(
         return mLines[externalToInternalRow(row)]?.mLineWrap ?: false
     }
 
-    fun clearLineWrap(row: Int) {
-        mLines[externalToInternalRow(row)]?.mLineWrap = false
-    }
-
     /**
      * 调整缓冲区尺寸。
      *
