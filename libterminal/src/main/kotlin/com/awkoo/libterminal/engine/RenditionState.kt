@@ -147,6 +147,14 @@ internal class RenditionState {
                                 }
                             }
                         }
+
+                        else -> {
+                            // 未知子模式：纯分号形式参数个数不可知，消费整条 SGR 剩余参数；
+                            // 冒号子参数形式不推进，由循环顶部按 argsSubParamsBitSet 跳过
+                            if ((argsSubParamsBitSet and (1 shl (i + 1))) == 0) {
+                                i = argCount - 1
+                            }
+                        }
                     }
                 } else {
                     // 参数不足，跳过当前 SGR 代码
