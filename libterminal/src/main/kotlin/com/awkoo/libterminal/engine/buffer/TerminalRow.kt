@@ -318,29 +318,35 @@ internal class TerminalRow(
     private fun handleWidthChange(columnToSet: Int, oldCodePointDisplayWidth: Int, newCodePointDisplayWidth: Int, newNextColumnIndex: Int, text: CharArray, style: TextStyle) {
         var text = text
         if (oldCodePointDisplayWidth == 2 && newCodePointDisplayWidth == 1) {
-            if (mSpaceUsed + 1 > text.size) {
-                val newText = CharArray(text.size + mColumns)
-                text.copyInto(destination = newText, endIndex = newNextColumnIndex)
-                text.copyInto(
-                    destination = newText,
-                    destinationOffset = newNextColumnIndex + 1,
-                    startIndex = newNextColumnIndex,
-                    endIndex = mSpaceUsed
-                )
-                text = newText
-                mText = text
-            } else {
-                text.copyInto(
-                    destination = text,
-                    destinationOffset = newNextColumnIndex + 1,
-                    startIndex = newNextColumnIndex,
-                    endIndex = mSpaceUsed
-                )
+            // 根源：宽字符起始于行末列时，其后半格在行外，columnToSet+1 即越出行界。
+            // 此时写 mStyle[(columnToSet+1)*2] 会超出 mStyle(mColumns*2) 的最大索引，
+            // 且行末没有后半格内容需要保留，右移插入占位空格并 ++mSpaceUsed 会产出幽灵列。
+            // 故行末只保留 setChar 已写入的单列降级结果，整个后半格调整跳过。
+            if (columnToSet + 1 < mColumns) {
+                if (mSpaceUsed + 1 > text.size) {
+                    val newText = CharArray(text.size + mColumns)
+                    text.copyInto(destination = newText, endIndex = newNextColumnIndex)
+                    text.copyInto(
+                        destination = newText,
+                        destinationOffset = newNextColumnIndex + 1,
+                        startIndex = newNextColumnIndex,
+                        endIndex = mSpaceUsed
+                    )
+                    text = newText
+                    mText = text
+                } else {
+                    text.copyInto(
+                        destination = text,
+                        destinationOffset = newNextColumnIndex + 1,
+                        startIndex = newNextColumnIndex,
+                        endIndex = mSpaceUsed
+                    )
+                }
+                text[newNextColumnIndex] = ' '
+                mStyle[(columnToSet + 1) * 2] = style.value
+                mStyle[(columnToSet + 1) * 2 + 1] = 0L
+                ++mSpaceUsed
             }
-            text[newNextColumnIndex] = ' '
-            mStyle[(columnToSet + 1) * 2] = style.value
-            mStyle[(columnToSet + 1) * 2 + 1] = 0L
-            ++mSpaceUsed
         } else if (oldCodePointDisplayWidth == 1 && newCodePointDisplayWidth == 2) {
             if (columnToSet == mColumns - 1) {
                 val oldCharCount = if (text[newNextColumnIndex - 1].isHighSurrogate() && newNextColumnIndex - 2 >= 0 && !text[newNextColumnIndex - 2].isHighSurrogate()) 2 else 1
