@@ -1014,9 +1014,14 @@ internal class TerminalEmulator(
             rendition.currentExtendedEffect
         )
 
-        if (autoWrap && displayWidth > 0) mAboutToAutoWrap =
-            (mCursorCol == mRightMargin - displayWidth)
-        this.cursorCol = min(mCursorCol + displayWidth, mRightMargin - 1)
+        val previousCol = mCursorCol
+        val wasAboutToAutoWrap = mAboutToAutoWrap
+        this.cursorCol = min(previousCol + displayWidth, mRightMargin - 1)
+        mAboutToAutoWrap = when {
+            displayWidth <= 0 -> wasAboutToAutoWrap
+            autoWrap -> previousCol == mRightMargin - displayWidth
+            else -> false
+        }
     }
 
     private fun doLinefeed() {
