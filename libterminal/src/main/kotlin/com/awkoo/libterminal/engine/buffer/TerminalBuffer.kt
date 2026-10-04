@@ -154,7 +154,8 @@ internal class TerminalBuffer(
     /**
      * 调整缓冲区尺寸。
      *
-     * 仅高度变化时执行简单垂直重排；宽度变化时委托给 [TerminalReflower] 执行文本重排。
+     * 备用屏不做 reflow，只做位置保持的裁剪与补白；
+     * 主屏仅高度变化时执行简单垂直重排，宽度变化时委托给 [TerminalReflower] 执行文本重排。
      */
     fun resize(
         newColumns: Int,
@@ -164,8 +165,10 @@ internal class TerminalBuffer(
         currentStyle: TextStyle,
         altScreen: Boolean
     ): CursorCoord {
-        val newCursor = if (newColumns == mColumns && newRows <= mTotalRows) {
-            handleSimpleVerticalResize(newRows, newTotalRows, cursor, currentStyle, altScreen)
+        val newCursor = if (altScreen) {
+            handleAltScreenResize(newColumns, newRows, newTotalRows, cursor)
+        } else if (newColumns == mColumns && newRows <= mTotalRows) {
+            handleSimpleVerticalResize(newRows, newTotalRows, cursor, currentStyle)
         } else {
             handleHorizontalResize(newColumns, newRows, newTotalRows, cursor, currentStyle)
         }
@@ -181,8 +184,7 @@ internal class TerminalBuffer(
         newRows: Int,
         newTotalRows: Int,
         cursor: CursorCoord,
-        currentStyle: TextStyle,
-        altScreen: Boolean
+        currentStyle: TextStyle
     ): CursorCoord {
         var cursorRow = cursor.row
         var shiftDownOfTopRow = mScreenRows - newRows
@@ -211,8 +213,7 @@ internal class TerminalBuffer(
             mScreenFirstRow % mTotalRows
         }
         mTotalRows = newTotalRows
-        this.activeTranscriptRows =
-            if (altScreen) 0 else max(0, this.activeTranscriptRows + shiftDownOfTopRow)
+        this.activeTranscriptRows = max(0, this.activeTranscriptRows + shiftDownOfTopRow)
         cursorRow -= shiftDownOfTopRow
         mScreenRows = newRows
         return CursorCoord.pack(cursor.col, cursorRow)
@@ -253,6 +254,52 @@ internal class TerminalBuffer(
             oldCursorRow = cursor.row,
             currentStyle = currentStyle
         )
+    }
+
+    /**
+     * 备用屏尺寸调整：顶锚定的位置保持裁剪与补白，不执行 reflow。
+     *
+     * 备用屏内容归全屏应用所有，应用收到 SIGWINCH 后按原格子差分重绘；
+     * 合并或重断行会破坏应用的重绘假设，因此行结构保持不动。
+     * 尺寸收缩时保留顶部 rowsToCopy 行、丢弃底部行，与扩展时的补白方向一致。
+     */
+    private fun handleAltScreenResize(
+        newColumns: Int,
+        newRows: Int,
+        newTotalRows: Int,
+        cursor: CursorCoord
+    ): CursorCoord {
+        val oldLines = mLines
+        val oldScreenFirstRow = mScreenFirstRow
+        val oldScreenRows = mScreenRows
+        val oldTotalRows = mTotalRows
+        val oldColumns = mColumns
+
+        mLines = arrayOfNulls(newTotalRows)
+        mTotalRows = newTotalRows
+        mScreenRows = newRows
+        mScreenFirstRow = 0
+        activeTranscriptRows = 0
+        mColumns = newColumns
+        mSharedBlankRow = TerminalRow(newColumns, TextStyle.NORMAL)
+
+        val rowsToCopy = min(oldScreenRows, newRows)
+        for (externalRow in 0 until rowsToCopy) {
+            val src = oldLines[(oldScreenFirstRow + externalRow).mod(oldTotalRows)] ?: continue
+            mLines[externalRow] = if (oldColumns == newColumns) src else copyRow(src, oldColumns, newColumns)
+        }
+
+        return CursorCoord.pack(
+            cursor.col.coerceAtMost(newColumns - 1),
+            cursor.row.coerceAtMost(newRows - 1)
+        )
+    }
+
+    private fun copyRow(src: TerminalRow, oldColumns: Int, newColumns: Int): TerminalRow {
+        val dst = TerminalRow(newColumns, TextStyle.NORMAL)
+        dst.copyInterval(src, 0, min(oldColumns, newColumns), 0)
+        dst.mLineWrap = src.mLineWrap
+        return dst
     }
 
     private fun blockCopyLinesDown(srcInternal: Int, len: Int) {
