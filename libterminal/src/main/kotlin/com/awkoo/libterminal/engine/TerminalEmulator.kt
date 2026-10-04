@@ -817,10 +817,14 @@ internal class TerminalEmulator(
 
     private fun handleCsiDollarRect(b: Int, args: IntArray, argCount: Int) {
         val reverse = b == 't'.code
-        val top = (AnsiEscapeParser.getArg(args, 0, 1, true) - 1 + originTop).coerceAtMost(originBottom)
-        val left = (AnsiEscapeParser.getArg(args, 1, 1, true) - 1 + originLeft).coerceAtMost(originRight)
-        val bottom = (AnsiEscapeParser.getArg(args, 2, mRows, true) + 1 + originTop).coerceAtMost(originBottom)
-        val right = (AnsiEscapeParser.getArg(args, 3, mColumns, true) + 1 + originLeft).coerceAtMost(originRight)
+        val topArg = AnsiEscapeParser.getArg(args, 0, 1, true)
+        val leftArg = AnsiEscapeParser.getArg(args, 1, 1, true)
+        val bottomArg = AnsiEscapeParser.getArg(args, 2, mRows, true)
+        val rightArg = AnsiEscapeParser.getArg(args, 3, mColumns, true)
+        val top = (min(topArg, bottomArg) - 1 + originTop).coerceIn(originTop, originBottom - 1)
+        val left = (min(leftArg, rightArg) - 1 + originLeft).coerceIn(originLeft, originRight - 1)
+        val bottom = (max(topArg, bottomArg) + originTop).coerceIn(originTop, originBottom)
+        val right = (max(leftArg, rightArg) + originLeft).coerceIn(originLeft, originRight)
         for (i in 4 until argCount) {
             val argCode = AnsiEscapeParser.getArg(args, i, 0, false)
             val bits = when (argCode) {
