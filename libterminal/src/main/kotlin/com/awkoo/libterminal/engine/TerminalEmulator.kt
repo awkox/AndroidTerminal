@@ -604,21 +604,25 @@ internal class TerminalEmulator(
         }
     }
 
+    /**
+     * ED 擦除显示。擦除边界为整个可见屏幕,不受滚动区域与左右边距约束;
+     * ED0 光标起至屏末,ED1 屏首至光标(含光标行),ED2 全屏,ED3 清回滚区。
+     */
     private fun handleCsiJ(args: IntArray) {
         mAboutToAutoWrap = false
         when (AnsiEscapeParser.getArg(args, 0, 0, true)) {
             0 -> {
-                blockClear(mCursorCol, mCursorRow, mRightMargin - mCursorCol)
+                blockClear(mCursorCol, mCursorRow, mColumns - mCursorCol)
                 blockClear(
-                    mLeftMargin,
+                    0,
                     mCursorRow + 1,
-                    mRightMargin - mLeftMargin,
-                    mBottomMargin - (mCursorRow + 1)
+                    mColumns,
+                    mRows - (mCursorRow + 1)
                 )
             }
 
             1 -> {
-                blockClear(0, mTopMargin, mColumns, mCursorRow - mTopMargin)
+                blockClear(0, 0, mColumns, mCursorRow)
                 blockClear(0, mCursorRow, mCursorCol + 1)
             }
 
