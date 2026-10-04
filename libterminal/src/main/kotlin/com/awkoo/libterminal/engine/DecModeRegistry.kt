@@ -67,13 +67,18 @@ internal class DecModeRegistry {
         currentFlags = (currentFlags and mask.inv()) or (saved and mask)
     }
 
-    /** CSI ? s：保存某个内部位。 */
+    /** CSI ? s：快照所选位在 currentFlags 中的当前值。 */
     fun saveModeBit(bit: Int) {
-        savedFlags = savedFlags or bit
+        savedFlags = (savedFlags and bit.inv()) or (currentFlags and bit)
     }
 
-    /** CSI ? r：查询某个内部位是否被保存。 */
-    fun isSaved(bit: Int): Boolean = (savedFlags and bit) != 0
+    /**
+     * CSI ? r：读回所选位的快照值。
+     *
+     * 参数须为 [mapExternalToInternal] 映射成功的内部位；
+     * 从未快照过的位读值为 0，即恢复为关，而非该模式的默认值。
+     */
+    fun restoreModeBit(bit: Int): Boolean = (savedFlags and bit) != 0
 
     /** 将外部 DEC 位号映射为内部位，未知位号返回 -1。 */
     fun mapExternalToInternal(decsetBit: Int): Int = when (decsetBit) {

@@ -743,7 +743,7 @@ internal class TerminalEmulator(
                     val internalBit = decModes.mapExternalToInternal(externalBit)
                     if (internalBit != -1) {
                         if (b == 's'.code) decModes.saveModeBit(internalBit)
-                        else doDecSetOrReset(decModes.isSaved(internalBit), externalBit)
+                        else doDecSetOrReset(decModes.restoreModeBit(internalBit), externalBit)
                     }
                 }
             }
