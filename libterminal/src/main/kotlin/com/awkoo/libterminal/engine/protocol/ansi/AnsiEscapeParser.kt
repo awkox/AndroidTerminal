@@ -181,8 +181,8 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
     }
 
     private fun doOscEsc(b: Int) {
-        when (b.toChar()) {
-            '\\' -> doOscSetTextParameters("\u001b\\")
+        when (b) {
+            '\\'.code -> doOscSetTextParameters("\u001b\\")
             else -> {
                 collectOSCArgs(27)
                 collectOSCArgs(b)
@@ -218,12 +218,8 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
     }
 
     private fun doDeviceControl(b: Int) {
-        when (b.toByte()) {
-            '\\'.code.toByte() -> {
-                handler.onDeviceControl(mOSCOrDeviceControlArgs.toString())
-                finishSequence()
-            }
-            27.toByte() -> continueSequence(EscapeState.P_ESCAPE)
+        when (b) {
+            '\u001b'.code -> continueSequence(EscapeState.P_ESCAPE)
             else -> {
                 if (mOSCOrDeviceControlArgs.length <= MAX_OSC_STRING_LENGTH) {
                     mOSCOrDeviceControlArgs.appendCodePoint(b)
