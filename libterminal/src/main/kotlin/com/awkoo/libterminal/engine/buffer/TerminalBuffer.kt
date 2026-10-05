@@ -429,33 +429,12 @@ internal class TerminalBuffer(
         bottom: Int,
         right: Int
     ) {
-        // 仅操作主样式槽（偶数索引）的 effect 位
-        // 扩展特效槽（奇数索引）由 setChar 写入时清零
-        val effectMask = TextStyle.EFFECT_MASK
         for (y in top..<bottom) {
             val line = allocateFullLineIfNecessary(externalToInternalRow(y))
             val startOfLine = if (rectangular || y == top) left else leftMargin
             val endOfLine = if (rectangular || y + 1 == bottom) right else rightMargin
             for (x in startOfLine..<endOfLine) {
-                val raw = line.getRawStyle(x)
-                val effect = (raw and effectMask).toInt()
-                val newEffect = when {
-                    reverse -> (effect and bits.inv()) or (bits and effect.inv())
-                    setOrClear -> effect or bits
-                    else -> effect and bits.inv()
-                }
-
-                line.setRawStyle(x, (raw and effectMask.inv()) or (newEffect.toLong() and effectMask))
-
-                // 主下划线标志位如果发生由开到关的变化，
-                // 必须同步清空奇数槽的下划线样式
-                val wasUnderline = (effect and TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE) != 0
-                val isUnderline = (newEffect and TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE) != 0
-                if (wasUnderline && !isUnderline) {
-                    val ext = line.getExtendedEffect(x)
-                    // 仅抹除低 3 位的 style，保留真彩色扩展位，避免其他状态撕裂
-                    line.setExtendedEffect(x, ext and TextStyle.EXT_UNDERLINE_STYLE_MASK.inv())
-                }
+                line.modifyEffect(x, bits, setOrClear, reverse)
             }
         }
     }

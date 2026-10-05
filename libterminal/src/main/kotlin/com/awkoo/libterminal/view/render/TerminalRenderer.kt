@@ -390,9 +390,9 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
 
         if (savedMatrix) canvas.restore()
 
-        // 自定义下划线绘制：要求主样式下划线位有效，防止 SGR 24 后残留的扩展样式误绘；
+        // 自定义下划线绘制：开关与形状的一致性由 TerminalRow 写入时保证（形状非零 ⇒ 开关已开）；
         // 可见性与文字保持一致（隐藏属性、闪烁熄灭阶段不绘制）
-        if (underline && underlineStyle != TextStyle.UNDERLINE_STYLE_NONE && !invisible && textIsVisible) {
+        if (underlineStyle != TextStyle.UNDERLINE_STYLE_NONE && !invisible && textIsVisible) {
             // 解析下划线颜色：默认跟随文字前景色（含 dim/reverseVideo 后的最终渲染色）
             val decodedColor = TextStyle.decodeUnderlineColor(extendedEffect)
             mUnderlinePaint.color = if (decodedColor != TextStyle.COLOR_INDEX_FOREGROUND) {

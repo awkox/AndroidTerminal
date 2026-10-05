@@ -150,17 +150,19 @@ internal class TerminalRow(
     }
 
     fun clear(style: TextStyle, extendedEffect: Long = 0L) {
+        val ext = normalizeExtendedEffect(style.value, extendedEffect)
         if (!isBlank) mText.fill(' ')
         for (i in 0 until mColumns) {
             mStyle[i * 2] = style.value
-            mStyle[i * 2 + 1] = extendedEffect
+            mStyle[i * 2 + 1] = ext
         }
         mSpaceUsed = mColumns
         mHasNonOneWidthOrSurrogateChars = false
         mLineWrap = false
+        // 扩展槽中下划线位关闭时不可见的残留（形状已归零、颜色独立）不影响空白判定
         isBlank = (style.foreColor == TextStyle.COLOR_INDEX_FOREGROUND) &&
                   (style.backColor == TextStyle.COLOR_INDEX_BACKGROUND) &&
-                  (style.effect == 0) && (extendedEffect == 0L)
+                  (style.effect == 0)
     }
 
     /**
@@ -177,11 +179,13 @@ internal class TerminalRow(
         var columnToSet = columnToSet
         require(!(columnToSet < 0 || columnToSet >= mColumns)) { "TerminalRow.setChar(): columnToSet=$columnToSet, codePoint=$codePoint, style=${style.value}" }
 
+        val ext = normalizeExtendedEffect(style.value, extendedEffect)
+
         if (codePoint != ' '.code && codePoint != 0) {
             isBlank = false
         } else if (style.foreColor != TextStyle.COLOR_INDEX_FOREGROUND ||
                    style.backColor != TextStyle.COLOR_INDEX_BACKGROUND ||
-                   style.effect != 0 || extendedEffect != 0L) {
+                   style.effect != 0) {
             isBlank = false
         }
 
@@ -192,7 +196,7 @@ internal class TerminalRow(
             // 快速路径：全为 ASCII 单宽字符，直接替换
             if (isAsciiPrintable) {
                 mStyle[columnToSet * 2] = style.value
-                mStyle[columnToSet * 2 + 1] = extendedEffect
+                mStyle[columnToSet * 2 + 1] = ext
                 mText[columnToSet] = codePoint.toChar()
                 if (codePoint != 0x20) isBlank = false
                 return
@@ -201,7 +205,7 @@ internal class TerminalRow(
                 mHasNonOneWidthOrSurrogateChars = true
             } else {
                 mStyle[columnToSet * 2] = style.value
-                mStyle[columnToSet * 2 + 1] = extendedEffect
+                mStyle[columnToSet * 2 + 1] = ext
                 mText[columnToSet] = codePoint.toChar()
                 return
             }
@@ -216,15 +220,15 @@ internal class TerminalRow(
             if (wasExtraColForWideChar) columnToSet--
         } else {
             // 普通/宽字符：如果目标在宽字符后半列，先拆分宽字符
-            if (wasExtraColForWideChar) setChar(columnToSet - 1, ' '.code, style)
+            if (wasExtraColForWideChar) setChar(columnToSet - 1, ' '.code, style, ext)
             val overwritingWideCharInNextColumn =
                 newCodePointDisplayWidth == 2 && wideDisplayCharacterStartingAt(columnToSet + 1)
-            if (overwritingWideCharInNextColumn) setChar(columnToSet + 1, ' '.code, style)
+            if (overwritingWideCharInNextColumn) setChar(columnToSet + 1, ' '.code, style, ext)
         }
 
         // 在 columnToSet 调整（组合字符合并）之后写入样式，确保写入正确的列
         mStyle[columnToSet * 2] = style.value
-        mStyle[columnToSet * 2 + 1] = extendedEffect
+        mStyle[columnToSet * 2 + 1] = ext
 
         var text = mText
         val oldStartOfColumnIndex = findStartOfColumn(columnToSet)
@@ -258,7 +262,7 @@ internal class TerminalRow(
             oldStartOfColumnIndex + (if (newIsCombining) oldCharactersUsedForColumn else 0)
         )
 
-        handleWidthChange(columnToSet, oldCodePointDisplayWidth, newCodePointDisplayWidth, newNextColumnIndex, text, style)
+        handleWidthChange(columnToSet, oldCodePointDisplayWidth, newCodePointDisplayWidth, newNextColumnIndex, text, style, ext)
     }
 
     /**
@@ -315,7 +319,7 @@ internal class TerminalRow(
      * 宽→窄：在新字符后插入一个空格占位
      * 窄→宽：删除原后半列的字符
      */
-    private fun handleWidthChange(columnToSet: Int, oldCodePointDisplayWidth: Int, newCodePointDisplayWidth: Int, newNextColumnIndex: Int, text: CharArray, style: TextStyle) {
+    private fun handleWidthChange(columnToSet: Int, oldCodePointDisplayWidth: Int, newCodePointDisplayWidth: Int, newNextColumnIndex: Int, text: CharArray, style: TextStyle, extendedEffect: Long) {
         var text = text
         if (oldCodePointDisplayWidth == 2 && newCodePointDisplayWidth == 1) {
             // 根源：宽字符起始于行末列时，其后半格在行外，columnToSet+1 即越出行界。
@@ -344,7 +348,7 @@ internal class TerminalRow(
                 }
                 text[newNextColumnIndex] = ' '
                 mStyle[(columnToSet + 1) * 2] = style.value
-                mStyle[(columnToSet + 1) * 2 + 1] = 0L
+                mStyle[(columnToSet + 1) * 2 + 1] = extendedEffect
                 ++mSpaceUsed
             }
         } else if (oldCodePointDisplayWidth == 1 && newCodePointDisplayWidth == 2) {
@@ -376,13 +380,58 @@ internal class TerminalRow(
         return TextStyle(mStyle[column * 2])
     }
 
-    inline fun getRawStyle(column: Int): Long = mStyle[column * 2]
-
-    inline fun setRawStyle(column: Int, value: Long) { mStyle[column * 2] = value }
+    /**
+     * 读取主样式原始值。
+     *
+     * 断言「下划线位为 0 时扩展槽形状为 0」，使新增写入路径若绕过 [normalizeExtendedEffect]
+     * 会在测试中立即暴露，而不是等渲染出错。
+     */
+    inline fun getRawStyle(column: Int): Long {
+        val raw = mStyle[column * 2]
+        assert(
+            raw and TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE.toLong() != 0L ||
+                (mStyle[column * 2 + 1] and TextStyle.EXT_UNDERLINE_STYLE_MASK) == 0L
+        ) { "下划线位关闭时扩展槽下划线形状必须为 0：column=$column raw=$raw ext=${mStyle[column * 2 + 1]}" }
+        return raw
+    }
 
     inline fun getExtendedEffect(column: Int): Long = mStyle[column * 2 + 1]
 
-    inline fun setExtendedEffect(column: Int, effect: Long) { mStyle[column * 2 + 1] = effect }
+    /**
+     * 修改指定列主样式的特效位，保证双槽位状态一致。
+     *
+     * @param bits 特效位掩码
+     * @param setOrClear true=置位，false=清位
+     * @param reverse true=翻转 bits 中的位（bits 中原本置位的清零、清零的置位）
+     */
+    fun modifyEffect(column: Int, bits: Int, setOrClear: Boolean, reverse: Boolean) {
+        val raw = mStyle[column * 2]
+        val effect = (raw and TextStyle.EFFECT_MASK).toInt()
+        val newEffect = when {
+            reverse -> (effect and bits.inv()) or (bits and effect.inv())
+            setOrClear -> effect or bits
+            else -> effect and bits.inv()
+        }
+        mStyle[column * 2] =
+            (raw and TextStyle.EFFECT_MASK.inv()) or (newEffect.toLong() and TextStyle.EFFECT_MASK)
+        mStyle[column * 2 + 1] = normalizeExtendedEffect(mStyle[column * 2], mStyle[column * 2 + 1])
+        // 特效位非零即非默认样式，与 setChar 的空白判定口径一致；
+        // 清位后无法在不扫描整行的前提下判定能否恢复空白，保守保持非空白
+        if (newEffect != 0) isBlank = false
+    }
+
+    /**
+     * 下划线开关与扩展槽下划线形状的单向派生：开关关闭时形状归零。
+     *
+     * 颜色位（bit 3 及以上）独立于开关（SGR 58 可单独设色），予以保留。
+     * 下划线形状是位布局上唯一跨槽位耦合的字段，收口在此处，
+     * 使 [mStyle] 恒满足「开关关闭 ⇒ 形状为 0」的不变量。
+     */
+    private fun normalizeExtendedEffect(styleValue: Long, extendedEffect: Long): Long {
+        val underlineOn = styleValue and TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE.toLong() != 0L
+        return if (underlineOn) extendedEffect
+        else extendedEffect and TextStyle.EXT_UNDERLINE_STYLE_MASK.inv()
+    }
 
     companion object {
         private const val SPARE_CAPACITY_FACTOR = 1.5f

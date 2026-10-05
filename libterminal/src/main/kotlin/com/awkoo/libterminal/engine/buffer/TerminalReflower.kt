@@ -71,9 +71,10 @@ internal object TerminalReflower {
                         val safeCol = if (col < oldLine.mStyle.size / 2) col else oldLine.mStyle.size / 2 - 1
                         val style = oldLine.getStyle(safeCol)
 
+                        // 扩展槽中的下划线位关闭时的残留颜色不可见，不构成需保留的自定义样式；
+                        // 下划线可见（含形状）必伴随 style.effect 的下划线位，已由上一项涵盖
                         val hasCustomStyle = style.backColor != TextStyle.COLOR_INDEX_BACKGROUND
                             || style.effect != 0
-                            || oldLine.getExtendedEffect(safeCol) != 0L
                         if (cp != ' '.code || hasCustomStyle) {
                             lastNonSpaceIndex = i + charCount
                         }
