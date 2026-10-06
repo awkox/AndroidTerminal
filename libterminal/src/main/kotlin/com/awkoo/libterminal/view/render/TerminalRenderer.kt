@@ -301,35 +301,18 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
         emulator: TerminalEmulator
     ) {
         var mes = mes
-        var foreColor = textStyle.foreColor
-        var backColor = textStyle.backColor
-        
+        val colors = resolver.resolve(textStyle, reverseVideo)
+        val foreColor = (colors ushr 32).toInt()
+        val backColor = colors.toInt()
+
         val bold = textStyle.isBold
         val blink = textStyle.isBlink
         val underline = textStyle.isUnderline
         val italic = textStyle.isItalic
         val strikeThrough = textStyle.isStrikeThrough
-        val dim = textStyle.isDim
         val invisible = textStyle.isInvisible
         // 扩展特效中的下划线样式，NONE 表示无自定义下划线
         val underlineStyle = TextStyle.decodeUnderlineStyle(extendedEffect)
-
-        if ((foreColor and -0x1000000) != -0x1000000) {
-            // 粗体使用前 8 色中的亮色（如果适用）
-            if (bold && foreColor >= 0 && foreColor < 8) foreColor += 8
-            foreColor = resolver.color(foreColor)
-        }
-
-        if ((backColor and -0x1000000) != -0x1000000) {
-            backColor = resolver.color(backColor)
-        }
-
-        val reverseVideoHere = reverseVideo xor textStyle.isInverse
-        if (reverseVideoHere) {
-            val tmp = foreColor
-            foreColor = backColor
-            backColor = tmp
-        }
 
         var left = startColumn * this.fontWidth
         var right = left + runWidthColumns * this.fontWidth
@@ -361,13 +344,6 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
         val textIsVisible = !blink || emulator.isTextVisible
 
         if (!invisible && textIsVisible) {
-            if (dim) {
-                val red = (0xFF and (foreColor shr 16)) * 2 / 3
-                val green = (0xFF and (foreColor shr 8)) * 2 / 3
-                val blue = (0xFF and foreColor) * 2 / 3
-                foreColor = -0x1000000 + (red shl 16) + (green shl 8) + blue
-            }
-
             mTextPaint.isFakeBoldText = bold
             // 带扩展下划线样式时由独立路径绘制，画笔下划线仅回退用于无扩展样式的数据
             mTextPaint.isUnderlineText = underline && underlineStyle == TextStyle.UNDERLINE_STYLE_NONE
@@ -396,7 +372,7 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
             // 解析下划线颜色：默认跟随文字前景色（含 dim/reverseVideo 后的最终渲染色）
             val decodedColor = TextStyle.decodeUnderlineColor(extendedEffect)
             mUnderlinePaint.color = if (decodedColor != TextStyle.COLOR_INDEX_FOREGROUND) {
-                if ((decodedColor and -0x1000000) == -0x1000000) decodedColor else resolver.color(decodedColor)
+                resolver.resolveColor(decodedColor)
             } else {
                 foreColor
             }
