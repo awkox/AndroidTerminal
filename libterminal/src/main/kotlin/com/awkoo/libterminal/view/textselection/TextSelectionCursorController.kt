@@ -8,6 +8,7 @@ import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
 import com.awkoo.libterminal.R
+import com.awkoo.libterminal.engine.buffer.SnapAlign
 import com.awkoo.libterminal.engine.buffer.TerminalBuffer
 import com.awkoo.libterminal.view.interact.ActionModeItem
 import com.awkoo.libterminal.view.TerminalView
@@ -280,18 +281,22 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
 
             // 4. 校准中文字符/宽字符对齐
             if (isStart) {
-                mSelX1 = getValidCurX(screen, mSelY1, mSelX1)
+                mSelX1 = getValidCurX(screen, mSelY1, mSelX1, SnapAlign.Start)
             } else {
-                mSelX2 = getValidCurX(screen, mSelY2, mSelX2)
+                mSelX2 = getValidCurX(screen, mSelY2, mSelX2, SnapAlign.End)
             }
         }
 
         terminalView.invalidate()
     }
 
-    /** 落在宽字符后半格的列号推进到该字符之后，零宽字符不占列直接跳过。 */
-    private fun getValidCurX(screen: TerminalBuffer, cy: Int, cx: Int): Int =
-        screen.snapToColumn(cy, cx)
+    /**
+     * 把列号校准到字符边界。
+     *
+     * 起点向字符起始吸附，否则该宽字符被漏选；终点向字符之后吸附，否则该半格无归属。
+     */
+    private fun getValidCurX(screen: TerminalBuffer, cy: Int, cx: Int, align: SnapAlign): Int =
+        screen.snapToColumn(cy, cx, align)
 
     fun decrementYTextSelectionCursors(decrement: Int) {
         mSelY1 -= decrement

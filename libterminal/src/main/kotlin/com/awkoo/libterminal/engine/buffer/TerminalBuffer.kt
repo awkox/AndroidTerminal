@@ -68,13 +68,9 @@ internal class TerminalBuffer(
                 }
                 continue
             }
-            val x1Index = lineObject.findStartOfColumn(x1)
-            var x2Index =
-                if (x2 < mColumns) lineObject.findStartOfColumn(x2) else lineObject.mSpaceUsed
-            if (x2Index == x1Index && x2 < mColumns) {
-                x2Index = lineObject.findStartOfColumn(x2 + 1)
-            }
-            val line = lineObject.mText
+            val x1Index = lineObject.startCharOfColumn(x1)
+            val x2Index = lineObject.endCharOfColumn(x2 - 1)
+            val line = lineObject.textChars()
             val rowLineWrap = getLineWrap(row)
             val lastPrintingCharIndex = if (rowLineWrap && x2 == columns) {
                 x2Index - 1
@@ -103,24 +99,11 @@ internal class TerminalBuffer(
     /**
      * 判断外部行的指定列是否是空白格（空格或越界空）。
      *
-     * 与 [getSelectedText] 单格选择"是否为空"的语义保持一致，
-     * 但在 [TextSelectionCursorController] 的单词扩展中避免每次构建字符串的开销，
-     * 直接扫描 char 数组判断。
+     * 字符判定收口在 [TerminalRow.isCellBlank]，此处只负责外行号寻址与越界放行。
      */
     fun isCellBlank(column: Int, row: Int): Boolean {
-        if (column !in 0 until mColumns || !rowInRange(row)) return true
-        val lineObject = mLines[externalToInternalRow(row)] ?: return true
-        var x1 = lineObject.findStartOfColumn(column)
-        var x2 = lineObject.findStartOfColumn(column + 1)
-        if (x2 == x1) {
-            x2 = lineObject.findStartOfColumn(column + 2)
-        }
-        x2 = min(x2, lineObject.mSpaceUsed)
-        val line = lineObject.mText
-        for (i in x1 until x2) {
-            if (line[i] != ' ') return false
-        }
-        return true
+        if (!rowInRange(row)) return true
+        return mLines[externalToInternalRow(row)]?.isCellBlank(column) ?: true
     }
 
     val activeRows: Int
@@ -406,15 +389,15 @@ internal class TerminalBuffer(
     }
 
     /**
-     * 把列号校准到字符边界：落在宽字符后半格内的列号推进到该字符之后。
+     * 把列号校准到字符边界，落在宽字符后半格内时按 [align] 吸附。
      *
      * [column] 先夹取到 [0, mColumns)；[row] 越界或该行无内容时按无数据处理，
      * 返回夹取后的列号。
      */
-    fun snapToColumn(row: Int, column: Int): Int {
+    fun snapToColumn(row: Int, column: Int, align: SnapAlign): Int {
         val clamped = clampColumn(column)
         if (!rowInRange(row)) return clamped
-        return mLines[externalToInternalRow(row)]?.snapToColumn(clamped) ?: clamped
+        return mLines[externalToInternalRow(row)]?.snapToColumn(clamped, align) ?: clamped
     }
 
     fun setOrClearEffect(

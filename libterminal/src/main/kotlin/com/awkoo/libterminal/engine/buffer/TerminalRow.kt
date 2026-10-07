@@ -6,10 +6,27 @@ import com.awkoo.libterminal.text.charCountAtSafe
 import com.awkoo.libterminal.text.forEachColumn
 
 /**
+ * 列吸附方向。
+ *
+ * 列号落在宽字符后半格内时没有唯一归属，选区两端需要相反的吸附方向：
+ * 起点向字符起始吸，否则该宽字符被漏选；终点向字符之后吸，否则该半格无归属。
+ */
+internal enum class SnapAlign {
+    /** 吸附到字符起始列（floor）。 */
+    Start,
+    /** 吸附到字符之后（ceil）。 */
+    End
+}
+
+/**
  * 终端单行数据。
  *
- * 文本存储在 [mText]（char 数组）中，样式存储在 [mStyle]（Long 数组）中，
- * 渲染时可直接按列索引访问，无需拆箱。
+ * 文本存储在私有 char 数组中，样式存储在私有 Long 数组中，
+ * 渲染时可直接按列索引访问，无需拆箱。对外只经 [textChars]/[charLength] 读取，
+ * 经 [getStyle]/[getRawStyle]/[getExtendedEffect] 取样式。
+ *
+ * 列与 char 的换算一律经由本类：[startCharOfColumn]/[endCharOfColumn]、
+ * [forEachRun]、[snapToColumn]，消费者不得自行扫 char 数组推列。
  */
 internal class TerminalRow(
     /** 本行列数。 */
@@ -17,20 +34,17 @@ internal class TerminalRow(
     style: TextStyle
 ) {
     /** 存储行内文本的字符数组，可能包含用于填充的尾部空格。 */
-    @JvmField
-    var mText = CharArray((SPARE_CAPACITY_FACTOR * mColumns).toInt()) { ' ' }
+    private var mText = CharArray((SPARE_CAPACITY_FACTOR * mColumns).toInt()) { ' ' }
 
     /** 已使用的字符数（Java char 单位）。 */
-    var mSpaceUsed = 0
-        private set
+    private var mSpaceUsed = 0
 
     /** 行末是否因输出而自动换行。 */
     @JvmField
     var mLineWrap: Boolean = false
 
     /** 各列的样式位，交错存储：偶数索引=主样式，奇数索引=扩展特效。以原始 Long 存储以避免装箱。 */
-    @JvmField
-    val mStyle = LongArray(mColumns * 2)
+    private val mStyle = LongArray(mColumns * 2)
 
     /** 本行是否包含宽度 != 1 的字符或代理项对，用于禁用快速路径。 */
     var mHasNonOneWidthOrSurrogateChars: Boolean = false
@@ -43,6 +57,18 @@ internal class TerminalRow(
     init {
         clear(style)
     }
+
+    /**
+     * 行内文本的 char 数组，char 空间的唯一读取出口。
+     *
+     * 返回的引用有效至本行下一次 [setChar]/[clear]：写入可能原地移位内容，
+     * 扩容时还会整体替换数组。调用方须在同一次绘制/查询内读完，不得跨写入持有。
+     */
+    fun textChars(): CharArray = mText
+
+    /** 已使用的 char 数（Java char 单位），作为 [textChars] 的读取上界。 */
+    val charLength: Int
+        get() = mSpaceUsed
 
     /**
      * 从源行复制 [sourceX1] 到 [sourceX2)（不含）的内容到本行 [destinationX] 位置。
@@ -96,7 +122,7 @@ internal class TerminalRow(
      * 当行内包含宽字符或代理项对时，列号与字符索引不是一一对应，
      * 需要从头扫描累加显示宽度来定位。无宽字符时直接返回列号（O(1) 快速路径）。
      */
-    fun findStartOfColumn(column: Int): Int {
+    private fun findStartOfColumn(column: Int): Int {
         if (column == mColumns) return mSpaceUsed
         if (!mHasNonOneWidthOrSurrogateChars) return column
 
@@ -123,16 +149,122 @@ internal class TerminalRow(
     }
 
     /**
-     * 把列号校准到字符边界：落在宽字符后半格内的列号推进到该字符之后。
+     * 逐码点迭代本行内容，替代消费者手写的 `withCodePointAt + WcWidth + 列推进` 状态机。
      *
-     * 扫描到 NUL 即视为无内容并返回原列号，返回值恒 ≥ [column]。
+     * 回调参数：
+     * - [column] 码点起始显示列；正宽码点恒 < 列数，仅零宽码点可能因前一个宽字符而 ≥ 列数
+     * - [charStart]/[charEnd] 该码点在 [textChars] 中的区间，[charEnd] 不含其后跟随的零宽码点
+     * - [width] 显示宽度，0 或负数表示零宽（组合字符），此类码点不推进列
+     * - [rawStyle]/[extEffect] 同帧成对返回：正宽码点取其起始列的槽，零宽码点进位复用所属
+     *   正宽码点的槽（写入方 [setChar] 把组合字符样式写在基字符列上，两者本就同槽）；
+     *   行首即零宽码点、无槽可复用时恒为 0/默认，与 reflow 的空行样式初值一致
+     *
+     * 返回 false 可提前停止。迭代期间不得调用 [setChar]/[clear]/[copyInterval] 变异本行。
      */
-    fun snapToColumn(column: Int): Int {
+    inline fun forEachRun(
+        action: (
+            column: Int,
+            charStart: Int,
+            charEnd: Int,
+            codePoint: Int,
+            width: Int,
+            rawStyle: Long,
+            extEffect: Long
+        ) -> Boolean
+    ) {
+        var carriedStyleColumn = -1
+        mText.forEachColumn(0, mSpaceUsed) { charStart, column, codePoint, width, charCount ->
+            val rawStyle: Long
+            val extEffect: Long
+            if (width > 0) {
+                carriedStyleColumn = column
+                rawStyle = getRawStyle(column)
+                extEffect = getExtendedEffect(column)
+            } else if (carriedStyleColumn >= 0) {
+                rawStyle = getRawStyle(carriedStyleColumn)
+                extEffect = getExtendedEffect(carriedStyleColumn)
+            } else {
+                rawStyle = 0L
+                extEffect = 0L
+            }
+            action(
+                column,
+                charStart,
+                charStart + charCount,
+                codePoint,
+                width,
+                rawStyle,
+                extEffect
+            )
+        }
+    }
+
+    /**
+     * 列 [column] 的内容起始 char 索引。
+     *
+     * 列号落在宽字符后半格内时返回该宽字符的起始索引，两个半格共享同一 char 区间。
+     * 越界列钳到行内容边界：列号 ≤ 0 → 0，列号 ≥ 列数 → [charLength]。
+     */
+    fun startCharOfColumn(column: Int): Int {
+        if (column <= 0) return 0
+        if (column >= mColumns) return mSpaceUsed
+        return findStartOfColumn(column).coerceAtMost(mSpaceUsed)
+    }
+
+    /**
+     * 列 [column] 的内容结束 char 索引（排他），与 [startCharOfColumn] 构成该列的完整 char 区间。
+     *
+     * 宽字符的两个半格返回同一区间；行尾之后返回 [charLength]。
+     */
+    fun endCharOfColumn(column: Int): Int {
+        if (column >= mColumns) return mSpaceUsed
+        val start = startCharOfColumn(column)
+        val next = findStartOfColumn(column + 1)
+        val end = if (next > start) next else findStartOfColumn(column + 2)
+        return end.coerceAtMost(mSpaceUsed)
+    }
+
+    /**
+     * 列 [column] 是否为空白格（空格或行内容之外）。
+     *
+     * 口径与字符内容一致：只看 char 是否为空格，不看样式。
+     */
+    fun isCellBlank(column: Int): Boolean {
+        if (column < 0 || column >= mColumns) return true
+        val text = mText
+        for (i in startCharOfColumn(column) until endCharOfColumn(column)) {
+            if (text[i] != ' ') return false
+        }
+        return true
+    }
+
+    /**
+     * 本行内容占用的显示列数（列语义，非 char 数）。
+     *
+     * 行末宽字符无后半格可用时仍按其显示宽度计入，结果可能等于列数 + 1。
+     */
+    fun getEffectiveTextLength(): Int {
+        var width = 0
+        mText.forEachColumn(0, mSpaceUsed) { _, _, _, w, _ ->
+            if (w > 0) width += w
+            true
+        }
+        return width
+    }
+
+    /**
+     * 把列号校准到字符边界：落在宽字符后半格内的列号按 [align] 吸附。
+     *
+     * 扫描到 NUL 即视为无内容并返回原列号。
+     */
+    fun snapToColumn(column: Int, align: SnapAlign): Int {
         if (!mHasNonOneWidthOrSurrogateChars) return column
 
         mText.forEachColumn(0, mSpaceUsed) { _, col, codePoint, width, _ ->
             if (codePoint == 0) return@forEachColumn false
-            if (column in (col + 1)..<col + width) return col + width
+            if (column in (col + 1)..<col + width) {
+                return if (align == SnapAlign.Start) col else col + width
+            }
             true
         }
         return column

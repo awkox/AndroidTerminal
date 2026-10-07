@@ -5,12 +5,12 @@ package com.awkoo.libterminal.text
  *
  * 使用内联值类实现零分配开销，将特效标志、前景色和背景色紧凑编码到一个 Long 中。
  *
- * 主样式（[com.awkoo.libterminal.engine.buffer.TerminalRow.mStyle] 偶数索引）位布局：
+ * 主样式（[com.awkoo.libterminal.engine.buffer.TerminalRow.getRawStyle] 返回值）位布局：
  * - bit 0..10：11 个特效标志位（粗体、斜体、下划线、闪烁、反色、隐藏、删除线、保护、暗淡、前景真色、背景真色）
  * - bit 16..39：背景色（索引色占 9 位，真色占 24 位）
  * - bit 40..63：前景色（索引色占 9 位，真色占 24 位）
  *
- * 扩展特效（[com.awkoo.libterminal.engine.buffer.TerminalRow.mStyle] 奇数索引）位布局：
+ * 扩展特效（[com.awkoo.libterminal.engine.buffer.TerminalRow.getExtendedEffect] 返回值）位布局：
  * - bit 0..2：下划线样式（0=无, 1=单线, 2=双线, 3=波浪, 4=点线, 5=虚线）
  * - bit 3：下划线真色标志（1=24-bit RGB, 0=索引色）
  * - bit 16..39：下划线颜色（索引色占 9 位，真色占 24 位）

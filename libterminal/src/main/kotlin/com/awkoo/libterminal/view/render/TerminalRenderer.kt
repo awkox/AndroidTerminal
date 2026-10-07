@@ -11,8 +11,6 @@ import android.graphics.Typeface
 import com.awkoo.libterminal.engine.TerminalEmulator
 import com.awkoo.libterminal.engine.TerminalCursorStyle
 import com.awkoo.libterminal.text.TextStyle
-import com.awkoo.libterminal.text.WcWidth
-import com.awkoo.libterminal.text.withCodePointAt
 import com.awkoo.libterminal.engine.buffer.TerminalBuffer
 import kotlin.math.abs
 import kotlin.math.ceil
@@ -167,11 +165,7 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
         }
 
         val lineObject = screen.getRowForRead(row)
-        val line = lineObject.mText
-        val charsUsedInLine = lineObject.mSpaceUsed
-        // 行内仅含 BMP 单宽字符时，可整体跳过 wcwidth 计算与零宽字符扫描。
-        // 该标记是保守的：false ⇒ 必为单宽，true 仅表示"可能存在"
-        val hasNonOneWidth = lineObject.mHasNonOneWidthOrSurrogateChars
+        val line = lineObject.textChars()
 
         var lastRunRawStyle: Long = 0L
         var lastRunExtEffect: Long = 0L
@@ -183,79 +177,70 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
         var currentCharIndex = 0
         var measuredWidthForRun = 0f
 
-        var column = 0
-        while (column < columns) {
-            line.withCodePointAt(currentCharIndex, charsUsedInLine) { codePoint, charsForCodePoint ->
-                val codePointWcWidth = if (hasNonOneWidth) WcWidth.width(codePoint) else 1
-                val insideCursor = (cursorX == column || (codePointWcWidth == 2 && cursorX == column + 1))
-                val insideSelection = column in selx1..selx2
-                val rawStyle = lineObject.getRawStyle(column)
-                val extEffect = lineObject.getExtendedEffect(column)
-
-                val measuredCodePointWidth =
-                    if (codePoint < asciiMeasures.size) asciiMeasures[codePoint]
-                    else if (charsForCodePoint == 1 && codePoint < bmpMeasureCache.size) {
-                        var cached = bmpMeasureCache[codePoint]
-                        if (cached < 0f) {
-                            cached = mTextPaint.measureText(line, currentCharIndex, charsForCodePoint)
-                            bmpMeasureCache[codePoint] = cached
-                        }
-                        cached
-                    } else mTextPaint.measureText(line, currentCharIndex, charsForCodePoint)
-                    
-                val fontWidthMismatch = abs(measuredCodePointWidth / this.fontWidth - codePointWcWidth) > 0.01
-
-                // 直接比较原始 Long，避免 TextStyle 装箱
-                // 当样式/扩展特效/光标/选区/字体宽度任一变化时，中断当前文本运行
-                if (rawStyle != lastRunRawStyle ||
-                    extEffect != lastRunExtEffect ||
-                    insideCursor != lastRunInsideCursor ||
-                    insideSelection != lastRunInsideSelection ||
-                    fontWidthMismatch != lastRunFontWidthMismatch) {
-                    if (column == 0) {
-                        // 跳过首列（无可绘制内容），仅记录当前样式
-                    } else {
-                        drawTextRun(
-                            canvas,
-                            line,
-                            resolver,
-                            heightOffset,
-                            lastRunStartColumn,
-                            column - lastRunStartColumn,
-                            lastRunStartIndex,
-                            currentCharIndex - lastRunStartIndex,
-                            measuredWidthForRun,
-                            if (lastRunInsideCursor) resolver.cursor else 0,
-                            cursorShape,
-                            TextStyle(lastRunRawStyle),
-                            lastRunExtEffect,
-                            reverseVideo || (lastRunInsideCursor && cursorShape == TerminalCursorStyle.BLOCK) || lastRunInsideSelection,
-                            mEmulator
-                        )
-                    }
-                    measuredWidthForRun = 0f
-                    lastRunRawStyle = rawStyle
-                    lastRunExtEffect = extEffect
-                    lastRunInsideCursor = insideCursor
-                    lastRunInsideSelection = insideSelection
-                    lastRunStartColumn = column
-                    lastRunStartIndex = currentCharIndex
-                    lastRunFontWidthMismatch = fontWidthMismatch
-                }
-                measuredWidthForRun += measuredCodePointWidth
-                column += codePointWcWidth
-                currentCharIndex += charsForCodePoint
-                
-                // 跳过后续的零宽字符（如组合字符）；无宽字符行可整体跳过
-                while (hasNonOneWidth && currentCharIndex < charsUsedInLine) {
-                    var advance = 0
-                    line.withCodePointAt(currentCharIndex, charsUsedInLine) { cp, cc ->
-                        if (WcWidth.width(cp) <= 0) advance = cc
-                    }
-                    if (advance == 0) break
-                    currentCharIndex += advance
-                }
+        lineObject.forEachRun { column, charStart, charEnd, codePoint, codePointWcWidth, rawStyle, extEffect ->
+            if (codePointWcWidth <= 0) {
+                currentCharIndex = charEnd
+                return@forEachRun true
             }
+            if (column >= columns) return@forEachRun false
+
+            val insideCursor = (cursorX == column || (codePointWcWidth == 2 && cursorX == column + 1))
+            val insideSelection = column in selx1..selx2
+            val charsForCodePoint = charEnd - charStart
+
+            val measuredCodePointWidth =
+                if (codePoint < asciiMeasures.size) asciiMeasures[codePoint]
+                else if (charsForCodePoint == 1 && codePoint < bmpMeasureCache.size) {
+                    var cached = bmpMeasureCache[codePoint]
+                    if (cached < 0f) {
+                        cached = mTextPaint.measureText(line, charStart, charsForCodePoint)
+                        bmpMeasureCache[codePoint] = cached
+                    }
+                    cached
+                } else mTextPaint.measureText(line, charStart, charsForCodePoint)
+
+            val fontWidthMismatch = abs(measuredCodePointWidth / this.fontWidth - codePointWcWidth) > 0.01
+
+            // 直接比较原始 Long，避免 TextStyle 装箱
+            // 当样式/扩展特效/光标/选区/字体宽度任一变化时，中断当前文本运行
+            if (rawStyle != lastRunRawStyle ||
+                extEffect != lastRunExtEffect ||
+                insideCursor != lastRunInsideCursor ||
+                insideSelection != lastRunInsideSelection ||
+                fontWidthMismatch != lastRunFontWidthMismatch) {
+                if (column == 0) {
+                    // 跳过首列（无可绘制内容），仅记录当前样式
+                } else {
+                    drawTextRun(
+                        canvas,
+                        line,
+                        resolver,
+                        heightOffset,
+                        lastRunStartColumn,
+                        column - lastRunStartColumn,
+                        lastRunStartIndex,
+                        currentCharIndex - lastRunStartIndex,
+                        measuredWidthForRun,
+                        if (lastRunInsideCursor) resolver.cursor else 0,
+                        cursorShape,
+                        TextStyle(lastRunRawStyle),
+                        lastRunExtEffect,
+                        reverseVideo || (lastRunInsideCursor && cursorShape == TerminalCursorStyle.BLOCK) || lastRunInsideSelection,
+                        mEmulator
+                    )
+                }
+                measuredWidthForRun = 0f
+                lastRunRawStyle = rawStyle
+                lastRunExtEffect = extEffect
+                lastRunInsideCursor = insideCursor
+                lastRunInsideSelection = insideSelection
+                lastRunStartColumn = column
+                lastRunStartIndex = charStart
+                lastRunFontWidthMismatch = fontWidthMismatch
+            }
+            measuredWidthForRun += measuredCodePointWidth
+            currentCharIndex = charEnd
+            true
         }
 
         drawTextRun(

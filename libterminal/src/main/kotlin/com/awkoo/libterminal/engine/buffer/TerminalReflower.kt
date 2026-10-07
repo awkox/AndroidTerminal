@@ -1,8 +1,6 @@
 package com.awkoo.libterminal.engine.buffer
 
 import com.awkoo.libterminal.text.TextStyle
-import com.awkoo.libterminal.text.WcWidth
-import com.awkoo.libterminal.text.withCodePointAt
 
 /**
  * 专门处理终端尺寸发生水平变化时的复杂文本重排（Reflow）操作。
@@ -62,83 +60,61 @@ internal object TerminalReflower {
 
             var lastNonSpaceIndex = 0
             if (oldLine.mLineWrap) {
-                lastNonSpaceIndex = oldLine.mSpaceUsed
+                lastNonSpaceIndex = oldLine.charLength
             } else {
-                var col = 0
-                var i = 0
-                while (i < oldLine.mSpaceUsed) {
-                    oldLine.mText.withCodePointAt(i, oldLine.mSpaceUsed) { cp, charCount ->
-                        val safeCol = if (col < oldLine.mStyle.size / 2) col else oldLine.mStyle.size / 2 - 1
-                        val style = oldLine.getStyle(safeCol)
+                oldLine.forEachRun { _, _, charEnd, codePoint, _, rawStyle, _ ->
+                    val style = TextStyle(rawStyle)
 
-                        // 扩展槽中的下划线位关闭时的残留颜色不可见，不构成需保留的自定义样式；
-                        // 下划线可见（含形状）必伴随 style.effect 的下划线位，已由上一项涵盖
-                        val hasCustomStyle = style.backColor != TextStyle.COLOR_INDEX_BACKGROUND
-                            || style.effect != 0
-                        if (cp != ' '.code || hasCustomStyle) {
-                            lastNonSpaceIndex = i + charCount
-                        }
-
-                        val displayWidth = WcWidth.width(cp)
-                        if (displayWidth > 0) col += displayWidth
-                        i += charCount
+                    // 扩展槽中的下划线位关闭时的残留颜色不可见，不构成需保留的自定义样式；
+                    // 下划线可见（含形状）必伴随 style.effect 的下划线位，已由上一项涵盖
+                    val hasCustomStyle = style.backColor != TextStyle.COLOR_INDEX_BACKGROUND
+                        || style.effect != 0
+                    if (codePoint != ' '.code || hasCustomStyle) {
+                        lastNonSpaceIndex = charEnd
                     }
+                    true
                 }
 
                 if (cursorAtThisRow) {
                     var colCursor = 0
                     var cursorIdx = 0
-                    while (cursorIdx < oldLine.mSpaceUsed && colCursor <= oldCursorColumn) {
-                        oldLine.mText.withCodePointAt(cursorIdx, oldLine.mSpaceUsed) { cp, charCount ->
-                            val displayWidth = WcWidth.width(cp)
-                            colCursor += if (displayWidth > 0) displayWidth else 0
-                            cursorIdx += charCount
-                        }
+                    oldLine.forEachRun { _, _, charEnd, _, width, _, _ ->
+                        if (width > 0) colCursor += width
+                        cursorIdx = charEnd
+                        colCursor <= oldCursorColumn
                     }
                     if (cursorIdx > lastNonSpaceIndex) lastNonSpaceIndex = cursorIdx
                 }
             }
 
-            var currentOldCol = 0
-            var styleAtCol: TextStyle = TextStyle(0)
-            var extEffectAtCol: Long = 0L
-            var i = 0
-            while (i < lastNonSpaceIndex) {
-                oldLine.mText.withCodePointAt(i, lastNonSpaceIndex) { codePoint, charCount ->
-                    val displayWidth = WcWidth.width(codePoint)
-                    if (displayWidth > 0) {
-                        val safeCol = if (currentOldCol < oldLine.mStyle.size / 2) currentOldCol else oldLine.mStyle.size / 2 - 1
-                        styleAtCol = oldLine.getStyle(safeCol)
-                        extEffectAtCol = oldLine.getExtendedEffect(safeCol)
-                    }
+            oldLine.forEachRun { column, charStart, _, codePoint, width, rawStyle, extEffect ->
+                if (charStart >= lastNonSpaceIndex) return@forEachRun false
 
-                    if (currentOutputExternalColumn + displayWidth > buffer.mColumns) {
-                        buffer.setLineWrap(currentOutputExternalRow)
-                        if (currentOutputExternalRow == buffer.mScreenRows - 1) {
-                            if (newCursorPlaced) newCursorRow--
-                            buffer.scrollDownOneLine(0, buffer.mScreenRows, currentStyle)
-                        } else {
-                            currentOutputExternalRow++
-                        }
-                        currentOutputExternalColumn = 0
+                if (currentOutputExternalColumn + width > buffer.mColumns) {
+                    buffer.setLineWrap(currentOutputExternalRow)
+                    if (currentOutputExternalRow == buffer.mScreenRows - 1) {
+                        if (newCursorPlaced) newCursorRow--
+                        buffer.scrollDownOneLine(0, buffer.mScreenRows, currentStyle)
+                    } else {
+                        currentOutputExternalRow++
                     }
-
-                    val offsetDueToCombiningChar =
-                        (if (displayWidth <= 0 && currentOutputExternalColumn > 0) 1 else 0)
-                    val outputColumn = currentOutputExternalColumn - offsetDueToCombiningChar
-                    buffer.setChar(outputColumn, currentOutputExternalRow, codePoint, styleAtCol, extEffectAtCol)
-
-                    if (displayWidth > 0) {
-                        if (oldCursorRow == externalOldRow && oldCursorColumn == currentOldCol) {
-                            newCursorColumn = currentOutputExternalColumn
-                            newCursorRow = currentOutputExternalRow
-                            newCursorPlaced = true
-                        }
-                        currentOldCol += displayWidth
-                        currentOutputExternalColumn += displayWidth
-                    }
-                    i += charCount
+                    currentOutputExternalColumn = 0
                 }
+
+                val offsetDueToCombiningChar =
+                    (if (width <= 0 && currentOutputExternalColumn > 0) 1 else 0)
+                val outputColumn = currentOutputExternalColumn - offsetDueToCombiningChar
+                buffer.setChar(outputColumn, currentOutputExternalRow, codePoint, TextStyle(rawStyle), extEffect)
+
+                if (width > 0) {
+                    if (oldCursorRow == externalOldRow && oldCursorColumn == column) {
+                        newCursorColumn = currentOutputExternalColumn
+                        newCursorRow = currentOutputExternalRow
+                        newCursorPlaced = true
+                    }
+                    currentOutputExternalColumn += width
+                }
+                true
             }
             if (!newCursorPlaced && oldCursorRow == externalOldRow) {
                 newCursorColumn = currentOutputExternalColumn
