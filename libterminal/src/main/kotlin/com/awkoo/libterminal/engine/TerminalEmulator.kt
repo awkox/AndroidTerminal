@@ -489,7 +489,9 @@ internal class TerminalEmulator(
             'M' -> handleCsiM(args)
             'P' -> handleCsiP(args)
             'S' -> {
-                val linesToScroll = AnsiEscapeParser.getArg(args, 0, 1, true)
+                val linesToScrollArg = AnsiEscapeParser.getArg(args, 0, 1, true)
+                val linesBetween = mBottomMargin - mTopMargin
+                val linesToScroll = min(linesBetween, linesToScrollArg)
                 for (i in 0 until linesToScroll) scrollDownOneLine()
             }
 
