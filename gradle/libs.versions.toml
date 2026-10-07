@@ -10,7 +10,6 @@ materialIconsCore = "1.7.8"
 serialization = "1.11.0"
 coroutines = "1.10.2"
 compose-settings = "3.2.0"
-uiToolingPreview = "1.12.0"
 uiTooling = "1.12.0"
 core = "1.19.1"
 navigationCompose = "2.10.2"
@@ -39,8 +38,6 @@ serialization-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-serializ
 serialization-protobuf = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-protobuf", version.ref = "serialization" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 timber = { group = "com.jakewharton.timber", name = "timber", version = "5.0.1" }
-androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview", version.ref = "uiToolingPreview" }
-androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling", version.ref = "uiTooling" }
 androidx-core = { group = "androidx.core", name = "core", version.ref = "core" }
 androidx-junit = { group = "androidx.test.ext", name = "junit", version.ref = "junit" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "espressoCore" }

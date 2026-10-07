@@ -14,20 +14,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.graphics.toArgb
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.flowWithLifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.lifecycleScope
+import com.awkoo.libterminal.color.TerminalColorScheme
 import com.awkoo.terminal.ui.compose.SessionListDrawer
 import com.awkoo.terminal.ui.theme.resolvedIsDark
-import com.awkoo.libterminal.color.TerminalColorScheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.dropWhile
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.dropWhile
 
 /**
  * 终端模拟器主 Activity。
@@ -90,7 +87,6 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    @Preview
     fun MainScreen(colorScheme: TerminalColorScheme = TerminalColorScheme.dark()) {
         SessionListDrawer(colorScheme = colorScheme)
     }

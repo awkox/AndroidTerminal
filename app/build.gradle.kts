@@ -83,8 +83,6 @@ kotlin {
 
 dependencies {
     coreLibraryDesugaring(libs.android.desugar)
-    implementation(libs.androidx.compose.ui.tooling.preview)
-    debugImplementation(libs.androidx.compose.ui.tooling)
     implementation(libs.hilt.android)
     ksp(libs.hilt.android.compiler)
     //testImplementation(libs.junit)
