@@ -39,9 +39,27 @@ internal class TerminalRow(
     /** 已使用的字符数（Java char 单位）。 */
     private var mSpaceUsed = 0
 
-    /** 行末是否因输出而自动换行。 */
-    @JvmField
-    var mLineWrap: Boolean = false
+    /**
+     * 行末是否因输出而自动换行。
+     *
+     * 行级元数据，只在行生命周期事件上变更，写入收口在 [clear]/[markLineWrap]/[copyLineWrapFrom]：
+     * 行内的字符写入与横向搬移（[setChar]/[copyInterval]）不持有该状态，因此也不得触碰它。
+     */
+    private var mLineWrap = false
+
+    /** [mLineWrap] 的唯一读口。 */
+    val isLineWrap: Boolean
+        get() = mLineWrap
+
+    /** 标记本行行末自动换行，本行成为下一行的续行起点。 */
+    fun markLineWrap() {
+        mLineWrap = true
+    }
+
+    /** 行对象整体复制时同步续行标记，使标记与内容同生共死。 */
+    fun copyLineWrapFrom(source: TerminalRow) {
+        mLineWrap = source.mLineWrap
+    }
 
     /** 各列的样式位，交错存储：偶数索引=主样式，奇数索引=扩展特效。以原始 Long 存储以避免装箱。 */
     private val mStyle = LongArray(mColumns * 2)

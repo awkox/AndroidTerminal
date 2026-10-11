@@ -396,15 +396,15 @@ internal class TerminalEmulator(
             'F' -> {} // 仅 xterm 的 hpLowerleftBugCompat 资源（默认 false）开启时才移动光标，默认与其余桌面终端一致忽略
             'H' -> mTabStop[mCursorCol] = true
             'M' -> if (mCursorRow <= mTopMargin) {
-                screen.blockCopy(
-                    mLeftMargin,
+                screen.shiftLines(
                     mTopMargin,
-                    mRightMargin - mLeftMargin,
-                    mBottomMargin - (mTopMargin + 1),
+                    mBottomMargin,
+                    1,
                     mLeftMargin,
-                    mTopMargin + 1
+                    mRightMargin,
+                    up = false,
+                    style = rendition.eraseFillStyle
                 )
-                blockClear(mLeftMargin, mTopMargin, mRightMargin - mLeftMargin)
             } else {
                 mCursorRow--
             }
@@ -499,15 +499,15 @@ internal class TerminalEmulator(
                 val linesToScrollArg = AnsiEscapeParser.getArg(args, 0, 1, true)
                 val linesBetween = mBottomMargin - mTopMargin
                 val linesToScroll = min(linesBetween, linesToScrollArg)
-                screen.blockCopy(
-                    mLeftMargin,
+                screen.shiftLines(
                     mTopMargin,
-                    mRightMargin - mLeftMargin,
-                    linesBetween - linesToScroll,
+                    mBottomMargin,
+                    linesToScroll,
                     mLeftMargin,
-                    mTopMargin + linesToScroll
+                    mRightMargin,
+                    up = false,
+                    style = rendition.eraseFillStyle
                 )
-                blockClear(mLeftMargin, mTopMargin, mRightMargin - mLeftMargin, linesToScroll)
             }
 
             'X' -> {
@@ -1049,27 +1049,13 @@ internal class TerminalEmulator(
 
     private fun scrollDownOneLine() {
         this.scrollCounter++
-        val currentStyle = rendition.eraseFillStyle
-        if (mLeftMargin != 0 || mRightMargin != mColumns) {
-            screen.blockCopy(
-                mLeftMargin,
-                mTopMargin + 1,
-                mRightMargin - mLeftMargin,
-                mBottomMargin - mTopMargin - 1,
-                mLeftMargin,
-                mTopMargin
-            )
-            screen.blockSet(
-                mLeftMargin,
-                mBottomMargin - 1,
-                mRightMargin - mLeftMargin,
-                1,
-                ' '.code,
-                currentStyle
-            )
-        } else {
-            screen.scrollDownOneLine(mTopMargin, mBottomMargin, currentStyle)
-        }
+        screen.scrollRegionOneLine(
+            mTopMargin,
+            mBottomMargin,
+            mLeftMargin,
+            mRightMargin,
+            rendition.eraseFillStyle
+        )
     }
 
     private fun doDecSetOrReset(setting: Boolean, externalBit: Int) {

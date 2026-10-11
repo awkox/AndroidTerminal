@@ -126,12 +126,12 @@ internal class TerminalBuffer(
     }
 
     fun setLineWrap(row: Int) {
-        allocateFullLineIfNecessary(externalToInternalRow(row)).mLineWrap = true
+        allocateFullLineIfNecessary(externalToInternalRow(row)).markLineWrap()
     }
 
     fun getLineWrap(row: Int): Boolean {
         if (!rowInRange(row)) return false
-        return mLines[externalToInternalRow(row)]?.mLineWrap ?: false
+        return mLines[externalToInternalRow(row)]?.isLineWrap ?: false
     }
 
     /**
@@ -281,7 +281,7 @@ internal class TerminalBuffer(
     private fun copyRow(src: TerminalRow, oldColumns: Int, newColumns: Int): TerminalRow {
         val dst = TerminalRow(newColumns, TextStyle.NORMAL)
         dst.copyInterval(src, 0, min(oldColumns, newColumns), 0)
-        dst.mLineWrap = src.mLineWrap
+        dst.copyLineWrapFrom(src)
         return dst
     }
 
@@ -308,9 +308,17 @@ internal class TerminalBuffer(
         mScreenFirstRow = (mScreenFirstRow + 1) % mTotalRows
         if (this.activeTranscriptRows < mTotalRows - mScreenRows) this.activeTranscriptRows++
 
-        val blankRow = externalToInternalRow(bottomMargin - 1)
-        mLines[blankRow]?.clear(style) ?: run { mLines[blankRow] = TerminalRow(mColumns, style) }
+        blankRowAt(bottomMargin - 1, style)
     }
+
+    /** 把指定外行复位为空白行：行对象存在时就地 [TerminalRow.clear]，否则分配新行。 */
+    private fun blankRowAt(externalRow: Int, style: TextStyle) {
+        val internal = externalToInternalRow(externalRow)
+        mLines[internal]?.clear(style) ?: run { mLines[internal] = TerminalRow(mColumns, style) }
+    }
+
+    /** 列区间是否覆盖整行：只有整行搬移才能让行级元数据随行走。 */
+    private fun coversWholeRow(left: Int, right: Int): Boolean = left == 0 && right == mColumns
 
     /**
      * 把源矩形 [sx, sy, w, h] 的内容按行复制到目标矩形 [dx, dy, w, h]。
@@ -428,18 +436,79 @@ internal class TerminalBuffer(
 
     /** 在指定行插入空行，并将后续行向下移动 */
     fun insertLines(y: Int, count: Int, bottomMargin: Int, style: TextStyle) {
-        if (count <= 0) return
-        val linesToMove = bottomMargin - y - count
-        if (linesToMove > 0) blockCopy(0, y, mColumns, linesToMove, 0, y + count)
-        blockSet(0, y, mColumns, count, ' '.code, style)
+        shiftLines(y, bottomMargin, count, 0, mColumns, up = false, style = style)
     }
 
     /** 删除指定行，并将后续行向上移动填补 */
     fun deleteLines(y: Int, count: Int, bottomMargin: Int, style: TextStyle) {
-        if (count <= 0) return
-        val linesToMove = bottomMargin - y - count
-        if (linesToMove > 0) blockCopy(0, y + count, mColumns, linesToMove, 0, y)
-        blockSet(0, y + linesToMove, mColumns, count, ' '.code, style)
+        shiftLines(y, bottomMargin, count, 0, mColumns, up = true, style = style)
+    }
+
+    /**
+     * 在行区间 [top, bottom) 内把内容纵向搬移 [count] 行，腾出的 [count] 行以 [style] 复位。
+     *
+     * [up] 为 true 时内容整体上移、空行落在区间底部；为 false 时内容整体下移、空行落在区间顶部。
+     *
+     * 列区间 [left, right) 覆盖整行时以行对象整体搬移，行级元数据（续行标记）随行走；
+     * 收窄时只能搬矩形内容，行级元数据不参与。全宽与收窄的分派在此收口，调用方只报意图。
+     *
+     * 本操作只改区间内容，不推进滚动历史；带滚动历史的滚动见 [scrollRegionOneLine]。
+     */
+    fun shiftLines(
+        top: Int,
+        bottom: Int,
+        count: Int,
+        left: Int,
+        right: Int,
+        up: Boolean,
+        style: TextStyle
+    ) {
+        val region = bottom - top
+        val n = min(count, region)
+        if (n <= 0) return
+
+        if (!coversWholeRow(left, right)) {
+            val width = right - left
+            val moved = region - n
+            if (moved > 0) {
+                if (up) blockCopy(left, top + n, width, moved, left, top)
+                else blockCopy(left, top, width, moved, left, top + n)
+            }
+            blockSet(left, if (up) top + moved else top, width, n, ' '.code, style)
+            return
+        }
+
+        if (up) repeat(n) { rotateRegionUp(top, bottom) } else repeat(n) { rotateRegionDown(top, bottom) }
+        val firstBlank = if (up) bottom - n else top
+        for (k in 0 until n) blankRowAt(firstBlank + k, style)
+    }
+
+    /**
+     * 把行区间 [top, bottom) 的内容整体上移一行并推进滚动历史。
+     *
+     * 列区间收窄时该区间不参与滚动历史，退化为 [shiftLines] 的单行上移。
+     */
+    fun scrollRegionOneLine(top: Int, bottom: Int, left: Int, right: Int, style: TextStyle) {
+        if (coversWholeRow(left, right)) scrollDownOneLine(top, bottom, style)
+        else shiftLines(top, bottom, 1, left, right, up = true, style = style)
+    }
+
+    /** 把外行区间 [top, bottom) 的行对象整体上移一行，区间首行绕回区间末行。 */
+    private fun rotateRegionUp(top: Int, bottom: Int) {
+        val head = mLines[externalToInternalRow(top)]
+        for (row in top until bottom - 1) {
+            mLines[externalToInternalRow(row)] = mLines[externalToInternalRow(row + 1)]
+        }
+        mLines[externalToInternalRow(bottom - 1)] = head
+    }
+
+    /** 把外行区间 [top, bottom) 的行对象整体下移一行，区间末行绕回区间首行。 */
+    private fun rotateRegionDown(top: Int, bottom: Int) {
+        val tail = mLines[externalToInternalRow(bottom - 1)]
+        for (row in bottom - 1 downTo top + 1) {
+            mLines[externalToInternalRow(row)] = mLines[externalToInternalRow(row - 1)]
+        }
+        mLines[externalToInternalRow(top)] = tail
     }
 
     /** 在指定列插入空白字符，并将后续字符向右平移 */

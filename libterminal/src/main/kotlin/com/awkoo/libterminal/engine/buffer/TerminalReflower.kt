@@ -59,7 +59,7 @@ internal object TerminalReflower {
             }
 
             var lastNonSpaceIndex = 0
-            if (oldLine.mLineWrap) {
+            if (oldLine.isLineWrap) {
                 lastNonSpaceIndex = oldLine.charLength
             } else {
                 oldLine.forEachRun { _, _, charEnd, codePoint, _, rawStyle, _ ->
@@ -121,7 +121,7 @@ internal object TerminalReflower {
                 newCursorRow = currentOutputExternalRow
                 newCursorPlaced = true
             }
-            if (externalOldRow != (oldScreenRows - 1) && !oldLine.mLineWrap) {
+            if (externalOldRow != (oldScreenRows - 1) && !oldLine.isLineWrap) {
                 if (currentOutputExternalRow == buffer.mScreenRows - 1) {
                     if (newCursorPlaced) newCursorRow--
                     buffer.scrollDownOneLine(0, buffer.mScreenRows, currentStyle)
