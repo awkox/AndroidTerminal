@@ -50,6 +50,10 @@ internal class TerminalEmulator(
             mAboutToAutoWrap = false
         }
 
+    /** 光标列 [col] 的排他右边界：已越过右边距时右边距失效，退回屏宽。 */
+    private fun rightEdgeExclusive(col: Int): Int =
+        if (col >= mRightMargin) mColumns else mRightMargin
+
     private fun setCursorPosition(x: Int, y: Int) {
         val newRow = (originTop + y).coerceIn(originTop, originBottom - 1)
         val newCol = (originLeft + x).coerceIn(originLeft, originRight - 1)
@@ -455,7 +459,7 @@ internal class TerminalEmulator(
                 min(originBottom - 1, mCursorRow + AnsiEscapeParser.getArg(args, 0, 1, true))
 
             'C', 'a' -> this.cursorCol =
-                min(mRightMargin - 1, mCursorCol + AnsiEscapeParser.getArg(args, 0, 1, true))
+                min(rightEdgeExclusive(mCursorCol) - 1, mCursorCol + AnsiEscapeParser.getArg(args, 0, 1, true))
 
             'D' -> this.cursorCol =
                 max(mLeftMargin, mCursorCol - AnsiEscapeParser.getArg(args, 0, 1, true))
@@ -991,7 +995,7 @@ internal class TerminalEmulator(
         // 自动换行：行尾 + (预备换行 + 普通字符) 或 宽字符 → 换行
         val autoWrap = isDecsetInternalBitSet(DECSET_BIT_AUTOWRAP)
         val displayWidth = WcWidth.width(cp)
-        val cursorInLastColumn = mCursorCol == mRightMargin - 1
+        val cursorInLastColumn = mCursorCol == rightEdgeExclusive(mCursorCol) - 1
 
         if (autoWrap) {
             if (cursorInLastColumn && ((mAboutToAutoWrap && displayWidth == 1) || displayWidth == 2)) {
@@ -1029,10 +1033,10 @@ internal class TerminalEmulator(
         val wasAboutToAutoWrap = mAboutToAutoWrap
         // cursorCol setter 是 mAboutToAutoWrap 唯一清零属主：必须先经 setter 写列、再在此重建标志。
         // 顺序不可调换，否则换行标志被写入即清，自动换行失效（Ctrl+R 光标倒退覆盖的根因）。
-        this.cursorCol = min(previousCol + displayWidth, mRightMargin - 1)
+        this.cursorCol = min(previousCol + displayWidth, rightEdgeExclusive(previousCol) - 1)
         mAboutToAutoWrap = when {
             displayWidth <= 0 -> wasAboutToAutoWrap
-            autoWrap -> previousCol == mRightMargin - displayWidth
+            autoWrap -> previousCol == rightEdgeExclusive(previousCol) - displayWidth
             else -> false
         }
     }
@@ -1115,10 +1119,7 @@ internal class TerminalEmulator(
 
     private fun nextTabStop(numTabs: Int): Int {
         var n = numTabs
-        for (i in mCursorCol + 1 until mColumns) if (mTabStop[i] && --n == 0) return min(
-            i,
-            mRightMargin
-        )
+        for (i in mCursorCol + 1 until mColumns) if (mTabStop[i] && --n == 0) return min(i, mRightMargin - 1)
         return mRightMargin - 1
     }
 
