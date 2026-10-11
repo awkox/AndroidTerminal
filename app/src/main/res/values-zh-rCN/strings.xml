@@ -15,11 +15,6 @@
     <string name="action_paste">粘贴</string>
 
     <string name="settings_title">设置</string>
-    <string name="settings_group_modules">模块</string>
-    <string name="settings_module_libterminal">libterminal</string>
-    <string name="settings_module_libterminal_subtitle">终端模拟核心：主题、字体、光标、回滚</string>
-    <string name="settings_module_pty">libterminal-pty</string>
-    <string name="settings_module_pty_subtitle">本地进程：命令、参数、环境变量、stdin</string>
     <string name="settings_group_appearance">外观</string>
     <string name="settings_group_terminal">终端</string>
     <string name="settings_theme_mode">主题模式</string>

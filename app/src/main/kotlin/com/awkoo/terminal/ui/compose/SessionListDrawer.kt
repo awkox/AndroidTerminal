@@ -37,7 +37,7 @@ import com.awkoo.terminal.extrakeys.ExtraKeyDispatcher
 import com.awkoo.terminal.extrakeys.ExtraKeysBar
 import com.awkoo.terminal.extrakeys.ExtraKeysModifierState
 import com.awkoo.terminal.ui.MainActivity
-import com.awkoo.terminal.ui.settings.SettingsNavHost
+import com.awkoo.terminal.ui.settings.SettingsView
 import com.awkoo.libterminal.view.TerminalView
 import com.awkoo.libterminal.view.ExtraKeysModifierSnapshot
 import com.awkoo.libterminal.view.interact.ActionModeCustomizer
@@ -230,7 +230,7 @@ fun MainActivity.SessionListDrawer(colorScheme: TerminalColorScheme) {
             exit = slideOutHorizontally { it } + fadeOut(),
             label = "settings-overlay"
         ) {
-            SettingsNavHost(onExit = { showSettings = false }, viewModel = viewModel)
+            SettingsView(onExit = { showSettings = false }, viewModel = viewModel)
         }
     }
 }

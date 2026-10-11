@@ -1,14 +1,17 @@
 package com.awkoo.terminal.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -19,32 +22,32 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.alorma.compose.settings.ui.SettingsGroup
+import com.alorma.compose.settings.ui.SettingsMenuLink
 import com.awkoo.terminal.R
 import com.awkoo.terminal.core.PtyConfig
 import com.awkoo.terminal.core.PtyEnvVar
 import com.awkoo.terminal.ui.MainViewModel
 
 /**
- * libterminal-pty 子页：本地进程启动设置。
+ * 本地进程启动分组：启动、环境变量与 stdin。
  *
- * 配置新建本地会话的启动命令、参数、自定义环境变量与 stdin 内容，
- * 编辑即写回 DataStore（与本仓库其它设置项一致的即时持久化）。
+ * 三组共用一份本地草稿，因此作为设置单页的一个分区整体渲染（不拆成多个
+ * LazyColumn item，避免草稿状态跨 item 提升到页面层）。
+ * 草稿仅以进入页面时的持久化值初始化，编辑时即时写穿到 DataStore，
+ * 避免把共享状态放在异步 Flow 上导致输入延迟/丢字。
+ * 输入行与 compose-settings tile 共用 16dp 内容边距，参数带序号、
+ * 行尾删除、末尾为贴合 tile 的添加行。
  *
  * @param viewModel 用于读写 [PtyConfig] 的主界面 ViewModel
- * @param onBack 返回按钮回调（弹出本页返回根页）
  */
 @Composable
-fun PtySettingsScreen(
-    viewModel: MainViewModel,
-    onBack: () -> Unit
-) {
+fun LocalSessionSettingsSection(viewModel: MainViewModel) {
     val config by viewModel.ptyConfig.collectAsStateWithLifecycle()
 
-    // 本地草稿：仅以进入页面时的持久化值初始化，编辑时即时写穿到 DataStore，
-    // 避免把共学状态放在异步 Flow 上导致输入延迟/丢字。
     var command by remember { mutableStateOf(config.command) }
     var args by remember { mutableStateOf(config.args) }
     var environment by remember { mutableStateOf(config.environment) }
@@ -92,13 +95,12 @@ fun PtySettingsScreen(
         sync(newArgs = args)
     }
 
-    SettingsScreen(
-        title = stringResource(R.string.settings_module_pty),
-        showBackButton = true,
-        onBack = onBack
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(24.dp)
     ) {
-        item {
-            SettingsGroup(title = { Text(stringResource(R.string.settings_group_launch)) }) {
+        SettingsGroup(title = { Text(stringResource(R.string.settings_group_launch)) }) {
+            SettingsCard {
                 OutlinedTextField(
                     value = command,
                     onValueChange = {
@@ -110,44 +112,59 @@ fun PtySettingsScreen(
                         Text(stringResource(R.string.settings_command_hint))
                     },
                     singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
                 )
                 for ((index, arg) in args.withIndex()) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
                     ) {
+                        Text(
+                            text = "${index + 1}",
+                            modifier = Modifier.width(24.dp),
+                            textAlign = TextAlign.End,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                         OutlinedTextField(
                             value = arg,
                             onValueChange = { updated -> updateArg(index, updated) },
                             label = { Text(stringResource(R.string.settings_args)) },
                             singleLine = true,
+                            trailingIcon = {
+                                IconButton(onClick = { removeArg(index) }) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        stringResource(R.string.settings_remove_arg)
+                                    )
+                                }
+                            },
                             modifier = Modifier.weight(1f)
                         )
-                        IconButton(onClick = { removeArg(index) }) {
-                            Icon(
-                                Icons.Default.Delete,
-                                stringResource(R.string.settings_remove_arg)
-                            )
-                        }
                     }
                 }
-                OutlinedButton(
+                SettingsMenuLink(
+                    title = { Text(stringResource(R.string.settings_add_arg)) },
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
                     onClick = { addArg() },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Default.Add, null)
-                    Text(stringResource(R.string.settings_add_arg))
-                }
+                    colors = CardTileColors()
+                )
             }
         }
-        item {
-            SettingsGroup(title = { Text(stringResource(R.string.settings_group_env)) }) {
+        SettingsGroup(title = { Text(stringResource(R.string.settings_group_env)) }) {
+            SettingsCard {
                 for ((index, env) in environment.withIndex()) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
                     ) {
                         OutlinedTextField(
                             value = env.key,
@@ -161,27 +178,28 @@ fun PtySettingsScreen(
                             onValueChange = { value -> updateEnv(index, env.key, value) },
                             label = { Text(stringResource(R.string.settings_env_value)) },
                             singleLine = true,
+                            trailingIcon = {
+                                IconButton(onClick = { removeEnv(index) }) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        stringResource(R.string.settings_remove_env)
+                                    )
+                                }
+                            },
                             modifier = Modifier.weight(1f)
                         )
-                        IconButton(onClick = { removeEnv(index) }) {
-                            Icon(
-                                Icons.Default.Delete,
-                                stringResource(R.string.settings_remove_env)
-                            )
-                        }
                     }
                 }
-                OutlinedButton(
+                SettingsMenuLink(
+                    title = { Text(stringResource(R.string.settings_add_env)) },
+                    icon = { Icon(Icons.Default.Add, contentDescription = null) },
                     onClick = { addEnv() },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Icon(Icons.Default.Add, null)
-                    Text(stringResource(R.string.settings_add_env))
-                }
+                    colors = CardTileColors()
+                )
             }
         }
-        item {
-            SettingsGroup(title = { Text(stringResource(R.string.settings_stdin)) }) {
+        SettingsGroup(title = { Text(stringResource(R.string.settings_stdin)) }) {
+            SettingsCard {
                 OutlinedTextField(
                     value = stdin,
                     onValueChange = {
@@ -193,7 +211,9 @@ fun PtySettingsScreen(
                         Text(stringResource(R.string.settings_stdin_hint))
                     },
                     minLines = 3,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
                 )
             }
         }
