@@ -1,5 +1,5 @@
 [![GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
-[![Kotlin](https://img.shields.io/badge/Kotlin-2.4.20-purple.svg)](https://kotlinlang.org)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.4.21-purple.svg)](https://kotlinlang.org)
 [![Platform: Android](https://img.shields.io/badge/Platform-Android-green.svg)](https://developer.android.com)
 [![minSdk](https://img.shields.io/badge/minSdk-28-orange.svg)](https://developer.android.com/studio)
 [![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/awkox/AndroidTerminal/ci.yml?label=编译&logo=github)](.github/workflows/ci.yml)
