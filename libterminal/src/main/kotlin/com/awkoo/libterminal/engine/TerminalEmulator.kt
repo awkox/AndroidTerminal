@@ -26,13 +26,13 @@ internal class TerminalEmulator(
     private var mCursorRow = 0
     private var mCursorCol = 0
     @JvmField
-    var mRows = defaultRows
+    var mRows = DEFAULT_ROWS
     @JvmField
-    var mColumns = defaultColumns
+    var mColumns = DEFAULT_COLUMNS
     @JvmField
-    var mCellWidthPixels = defaultCellWidthPixels
+    var mCellWidthPixels = DEFAULT_CELL_WIDTH_PIXELS
     @JvmField
-    var mCellHeightPixels = defaultCellHeightPixels
+    var mCellHeightPixels = DEFAULT_CELL_HEIGHT_PIXELS
 
     private var mAboutToAutoWrap = false
 
@@ -1189,15 +1189,16 @@ internal class TerminalEmulator(
 
 
     companion object {
-        private const val defaultRows = 24
-        private val COMBINED_ATTRS =
+        private const val COMBINED_ATTRS =
             TextStyle.CHARACTER_ATTRIBUTE_BOLD or TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE or
                 TextStyle.CHARACTER_ATTRIBUTE_BLINK or TextStyle.CHARACTER_ATTRIBUTE_INVERSE
         private val DSR_STATUS_RESPONSE =
             byteArrayOf(27, '['.code.toByte(), '0'.code.toByte(), 'n'.code.toByte())
-        private const val defaultColumns = 80
-        private const val defaultCellWidthPixels = 10
-        private const val defaultCellHeightPixels = 20
+
+        private const val DEFAULT_ROWS = 24
+        private const val DEFAULT_COLUMNS = 80
+        private const val DEFAULT_CELL_WIDTH_PIXELS = 10
+        private const val DEFAULT_CELL_HEIGHT_PIXELS = 20
 
         const val MOUSE_LEFT_BUTTON: Int = 0
         const val MOUSE_LEFT_BUTTON_MOVED: Int = 32
