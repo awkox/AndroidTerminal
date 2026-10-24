@@ -15,7 +15,7 @@ internal enum class EscapeState {
     PERCENT,
     OSC,
     OSC_ESC,
-    CSI_BIGGER_THAN,
+    CSI_GREATER_THAN,
     P,
     P_ESCAPE,
     CSI_QUESTIONMARK_ARG_DOLLAR,

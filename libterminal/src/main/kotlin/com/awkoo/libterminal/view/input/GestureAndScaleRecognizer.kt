@@ -6,7 +6,7 @@ import android.view.MotionEvent
 import android.view.ScaleGestureDetector
 
 /** [GestureDetector] 与 [ScaleGestureDetector] 的组合封装。 */
-internal class GestureAndScaleRecognizer(context: Context, val mListener: Listener) {
+internal class GestureAndScaleRecognizer(context: Context, val listener: Listener) {
     interface Listener {
         fun onSingleTapUp(e: MotionEvent): Boolean
 
@@ -25,12 +25,12 @@ internal class GestureAndScaleRecognizer(context: Context, val mListener: Listen
         fun onLongPress(e: MotionEvent)
     }
 
-    private val mGestureDetector: GestureDetector
-    private val mScaleDetector: ScaleGestureDetector
+    private val gestureDetector: GestureDetector
+    private val scaleDetector: ScaleGestureDetector
     var isAfterLongPress: Boolean = false
 
     init {
-        mGestureDetector =
+        gestureDetector =
             GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
                 override fun onScroll(
                     e1: MotionEvent?,
@@ -38,7 +38,7 @@ internal class GestureAndScaleRecognizer(context: Context, val mListener: Listen
                     dx: Float,
                     dy: Float
                 ): Boolean {
-                    return mListener.onScroll(e2, dx, dy)
+                    return listener.onScroll(e2, dx, dy)
                 }
 
                 override fun onFling(
@@ -47,29 +47,29 @@ internal class GestureAndScaleRecognizer(context: Context, val mListener: Listen
                     velocityX: Float,
                     velocityY: Float
                 ): Boolean {
-                    return mListener.onFling(e2, velocityX, velocityY)
+                    return listener.onFling(e2, velocityX, velocityY)
                 }
 
                 override fun onDown(e: MotionEvent): Boolean {
-                    return mListener.onDown(e.x, e.y)
+                    return listener.onDown(e.x, e.y)
                 }
 
                 override fun onLongPress(e: MotionEvent) {
-                    mListener.onLongPress(e)
+                    listener.onLongPress(e)
                     isAfterLongPress = true
                 }
             }, null, true /* ignoreMultitouch */)
 
-        mGestureDetector.setOnDoubleTapListener(object : GestureDetector.OnDoubleTapListener {
+        gestureDetector.setOnDoubleTapListener(object : GestureDetector.OnDoubleTapListener {
             override fun onSingleTapConfirmed(p0: MotionEvent): Boolean =
-                isAfterLongPress || mListener.onSingleTapUp(p0)
+                isAfterLongPress || listener.onSingleTapUp(p0)
 
-            override fun onDoubleTap(p0: MotionEvent): Boolean = mListener.onDoubleTap(p0)
+            override fun onDoubleTap(p0: MotionEvent): Boolean = listener.onDoubleTap(p0)
 
             override fun onDoubleTapEvent(p0: MotionEvent): Boolean = true
         })
 
-        mScaleDetector = ScaleGestureDetector(
+        scaleDetector = ScaleGestureDetector(
             context,
             object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
                 override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
@@ -77,27 +77,27 @@ internal class GestureAndScaleRecognizer(context: Context, val mListener: Listen
                 }
 
                 override fun onScale(detector: ScaleGestureDetector): Boolean {
-                    return mListener.onScale(
+                    return listener.onScale(
                         detector.focusX,
                         detector.focusY,
                         detector.scaleFactor
                     )
                 }
             })
-        mScaleDetector.isQuickScaleEnabled = false
+        scaleDetector.isQuickScaleEnabled = false
     }
 
     fun onTouchEvent(event: MotionEvent) {
-        mGestureDetector.onTouchEvent(event)
-        mScaleDetector.onTouchEvent(event)
+        gestureDetector.onTouchEvent(event)
+        scaleDetector.onTouchEvent(event)
         when (event.action) {
             MotionEvent.ACTION_DOWN -> isAfterLongPress = false
 
             // 在 vim 等支持鼠标事件的场景中，长按后抬起不应移动光标
-            MotionEvent.ACTION_UP if !isAfterLongPress -> mListener.onUp(event)
+            MotionEvent.ACTION_UP if !isAfterLongPress -> listener.onUp(event)
         }
     }
 
     val isInProgress: Boolean
-        get() = mScaleDetector.isInProgress
+        get() = scaleDetector.isInProgress
 }

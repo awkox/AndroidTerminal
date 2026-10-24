@@ -94,7 +94,7 @@ internal class TerminalGestureListener(
 
         val eventDownTime = e.downTime
         view.post(object : Runnable {
-            private var mLastY = 0
+            private var lastY = 0
 
             override fun run() {
                 if (mouseTrackingAtStartOfFling != emulator.isMouseTrackingActive) {
@@ -104,14 +104,14 @@ internal class TerminalGestureListener(
                 if (scroller.isFinished) return
                 val more = scroller.computeScrollOffset()
                 val newY = scroller.currY
-                val diff = if (mouseTrackingAtStartOfFling) (newY - mLastY) else (newY - view.topRow)
+                val diff = if (mouseTrackingAtStartOfFling) (newY - lastY) else (newY - view.topRow)
                 val syntheticEvent = MotionEvent.obtain(
                     eventDownTime, eventDownTime,
                     MotionEvent.ACTION_DOWN, 0f, 0f, 0
                 )
                 view.touchHandler.doScroll(syntheticEvent, diff)
                 syntheticEvent.recycle()
-                mLastY = newY
+                lastY = newY
                 if (more) view.post(this)
             }
         })

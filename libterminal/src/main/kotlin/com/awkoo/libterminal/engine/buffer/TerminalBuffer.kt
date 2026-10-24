@@ -298,7 +298,7 @@ internal class TerminalBuffer(
 
     fun scrollDownOneLine(topMargin: Int, bottomMargin: Int, style: TextStyle) {
         require(!(topMargin > bottomMargin - 1 || topMargin < 0 || bottomMargin > screenRows)) {
-            "topMargin=$topMargin, bottomMargin=$bottomMargin, mScreenRows=$screenRows"
+            "topMargin=$topMargin, bottomMargin=$bottomMargin, screenRows=$screenRows"
         }
 
         blockCopyLinesDown(screenFirstRow, topMargin)

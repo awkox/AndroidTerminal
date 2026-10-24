@@ -8,7 +8,7 @@ import kotlin.math.ceil
  * 像素 → 索引是命中测试（向下取整）；索引 → 像素取该格的**第一个像素**，
  * 因此列轴严格互逆：`xToColumn(columnToX(cx)) == cx`。
  *
- * 行轴的前边界被判给上一格（`mFontLineSpacingAndAscent > 0`），
+ * 行轴的前边界被判给上一格（`baselineOffset > 0`），
  * 即 `yToRow(rowToY(cy), ls, mfa) == cy - 1`；需要「第 cy 格之后」的边界时传 `cy + 1`。
  *
  * 两侧均按 Double 精确计算：Float 的舍入会破坏互逆（`30 * 9.1f == 273.0f`，`273 / 9.1f < 30`）。

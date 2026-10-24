@@ -30,11 +30,11 @@ internal enum class SnapAlign {
  */
 internal class TerminalRow(
     /** 本行列数。 */
-    private val mColumns: Int,
+    private val columns: Int,
     style: TextStyle
 ) {
     /** 存储行内文本的字符数组，可能包含用于填充的尾部空格。 */
-    private var mText = CharArray((SPARE_CAPACITY_FACTOR * mColumns).toInt()) { ' ' }
+    private var text = CharArray((SPARE_CAPACITY_FACTOR * columns).toInt()) { ' ' }
 
     /** 已使用的字符数（Java char 单位）。 */
     private var usedCharCount = 0
@@ -45,27 +45,27 @@ internal class TerminalRow(
      * 行级元数据，只在行生命周期事件上变更，写入收口在 [clear]/[markLineWrap]/[copyLineWrapFrom]：
      * 行内的字符写入与横向搬移（[setChar]/[copyInterval]）不持有该状态，因此也不得触碰它。
      */
-    private var mLineWrap = false
+    private var lineWrap = false
 
-    /** [mLineWrap] 的唯一读口。 */
+    /** [lineWrap] 的唯一读口。 */
     val isLineWrap: Boolean
-        get() = mLineWrap
+        get() = lineWrap
 
     /** 标记本行行末自动换行，本行成为下一行的续行起点。 */
     fun markLineWrap() {
-        mLineWrap = true
+        lineWrap = true
     }
 
     /** 行对象整体复制时同步续行标记，使标记与内容同生共死。 */
     fun copyLineWrapFrom(source: TerminalRow) {
-        mLineWrap = source.mLineWrap
+        lineWrap = source.lineWrap
     }
 
     /** 各列的样式位，交错存储：偶数索引=主样式，奇数索引=扩展特效。以原始 Long 存储以避免装箱。 */
-    private val styleAndEffectBits = LongArray(mColumns * 2)
+    private val styleAndEffectBits = LongArray(columns * 2)
 
     /** 本行是否包含宽度 != 1 的字符或代理项对，用于禁用快速路径。 */
-    var mHasNonOneWidthOrSurrogateChars: Boolean = false
+    var hasNonOneWidthOrSurrogateChars: Boolean = false
 
     /** 本行是否全为空白。 */
     var isBlank = true
@@ -82,7 +82,7 @@ internal class TerminalRow(
      * 返回的引用有效至本行下一次 [setChar]/[clear]：写入可能原地移位内容，
      * 扩容时还会整体替换数组。调用方须在同一次绘制/查询内读完，不得跨写入持有。
      */
-    fun textChars(): CharArray = mText
+    fun textChars(): CharArray = text
 
     /** 已使用的 char 数（Java char 单位），作为 [textChars] 的读取上界。 */
     val charLength: Int
@@ -97,13 +97,13 @@ internal class TerminalRow(
     fun copyInterval(line: TerminalRow, sourceX1: Int, sourceX2: Int, destinationX: Int) {
         var sourceX1 = sourceX1
         var destinationX = destinationX
-        mHasNonOneWidthOrSurrogateChars =
-            mHasNonOneWidthOrSurrogateChars or line.mHasNonOneWidthOrSurrogateChars
+        hasNonOneWidthOrSurrogateChars =
+            hasNonOneWidthOrSurrogateChars or line.hasNonOneWidthOrSurrogateChars
         val x1 = line.findStartOfColumn(sourceX1)
         val x2 = line.findStartOfColumn(sourceX2)
         var startingFromSecondHalfOfWideChar =
             (sourceX1 > 0 && line.wideDisplayCharacterStartingAt(sourceX1 - 1))
-        val sourceChars = if (this == line) line.mText.copyOf(line.mText.size) else line.mText
+        val sourceChars = if (this == line) line.text.copyOf(line.text.size) else line.text
         val sourceStyle = if (this == line) line.styleAndEffectBits.copyOf() else line.styleAndEffectBits
         var latestNonCombiningWidth = 0
         var i = x1
@@ -141,17 +141,17 @@ internal class TerminalRow(
      * 需要从头扫描累加显示宽度来定位。无宽字符时直接返回列号（O(1) 快速路径）。
      */
     private fun findStartOfColumn(column: Int): Int {
-        if (column == mColumns) return usedCharCount
-        if (!mHasNonOneWidthOrSurrogateChars) return column
+        if (column == columns) return usedCharCount
+        if (!hasNonOneWidthOrSurrogateChars) return column
 
-        mText.forEachColumn(0, usedCharCount) { i, col, _, w, charCount ->
+        text.forEachColumn(0, usedCharCount) { i, col, _, w, charCount ->
             if (w > 0) {
                 val currentColumn = col + w
                 if (currentColumn == column) {
                     var newCharIndex = i + charCount
                     while (newCharIndex < usedCharCount) {
-                        if (WcWidth.width(mText, newCharIndex) <= 0) {
-                            newCharIndex += mText.charCountAtSafe(newCharIndex, usedCharCount)
+                        if (WcWidth.width(text, newCharIndex) <= 0) {
+                            newCharIndex += text.charCountAtSafe(newCharIndex, usedCharCount)
                         } else {
                             break
                         }
@@ -191,7 +191,7 @@ internal class TerminalRow(
         ) -> Boolean
     ) {
         var carriedStyleColumn = -1
-        mText.forEachColumn(0, usedCharCount) { charStart, column, codePoint, width, charCount ->
+        text.forEachColumn(0, usedCharCount) { charStart, column, codePoint, width, charCount ->
             val rawStyle: Long
             val extEffect: Long
             if (width > 0) {
@@ -225,7 +225,7 @@ internal class TerminalRow(
      */
     fun startCharOfColumn(column: Int): Int {
         if (column <= 0) return 0
-        if (column >= mColumns) return usedCharCount
+        if (column >= columns) return usedCharCount
         return findStartOfColumn(column).coerceAtMost(usedCharCount)
     }
 
@@ -235,7 +235,7 @@ internal class TerminalRow(
      * 宽字符的两个半格返回同一区间；行尾之后返回 [charLength]。
      */
     fun endCharOfColumn(column: Int): Int {
-        if (column >= mColumns) return usedCharCount
+        if (column >= columns) return usedCharCount
         val start = startCharOfColumn(column)
         val next = findStartOfColumn(column + 1)
         val end = if (next > start) next else findStartOfColumn(column + 2)
@@ -248,8 +248,8 @@ internal class TerminalRow(
      * 口径与字符内容一致：只看 char 是否为空格，不看样式。
      */
     fun isCellBlank(column: Int): Boolean {
-        if (column < 0 || column >= mColumns) return true
-        val text = mText
+        if (column < 0 || column >= columns) return true
+        val text = text
         for (i in startCharOfColumn(column) until endCharOfColumn(column)) {
             if (text[i] != ' ') return false
         }
@@ -262,9 +262,9 @@ internal class TerminalRow(
      * 扫描到 NUL 即视为无内容并返回原列号。
      */
     fun snapToColumn(column: Int, align: SnapAlign): Int {
-        if (!mHasNonOneWidthOrSurrogateChars) return column
+        if (!hasNonOneWidthOrSurrogateChars) return column
 
-        mText.forEachColumn(0, usedCharCount) { _, col, codePoint, width, _ ->
+        text.forEachColumn(0, usedCharCount) { _, col, codePoint, width, _ ->
             if (codePoint == 0) return@forEachColumn false
             if (column in (col + 1)..<col + width) {
                 return if (align == SnapAlign.Start) col else col + width
@@ -275,7 +275,7 @@ internal class TerminalRow(
     }
 
     private fun wideDisplayCharacterStartingAt(column: Int): Boolean {
-        mText.forEachColumn(0, usedCharCount) { _, col, _, w, _ ->
+        text.forEachColumn(0, usedCharCount) { _, col, _, w, _ ->
             if (w > 0) {
                 if (col == column && w == 2) return true
                 if (col + w > column) return false
@@ -287,14 +287,14 @@ internal class TerminalRow(
 
     fun clear(style: TextStyle, extendedEffect: Long = 0L) {
         val ext = normalizeExtendedEffect(style.value, extendedEffect)
-        if (!isBlank) mText.fill(' ')
-        for (i in 0 until mColumns) {
+        if (!isBlank) text.fill(' ')
+        for (i in 0 until columns) {
             styleAndEffectBits[i * 2] = style.value
             styleAndEffectBits[i * 2 + 1] = ext
         }
-        usedCharCount = mColumns
-        mHasNonOneWidthOrSurrogateChars = false
-        mLineWrap = false
+        usedCharCount = columns
+        hasNonOneWidthOrSurrogateChars = false
+        lineWrap = false
         // 扩展槽中下划线位关闭时不可见的残留（形状已归零、颜色独立）不影响空白判定
         isBlank = (style.foreColor == TextStyle.COLOR_INDEX_FOREGROUND) &&
                   (style.backColor == TextStyle.COLOR_INDEX_BACKGROUND) &&
@@ -313,7 +313,7 @@ internal class TerminalRow(
      */
     fun setChar(columnToSet: Int, codePoint: Int, style: TextStyle, extendedEffect: Long = 0L) {
         var columnToSet = columnToSet
-        require(!(columnToSet < 0 || columnToSet >= mColumns)) { "TerminalRow.setChar(): columnToSet=$columnToSet, codePoint=$codePoint, style=${style.value}" }
+        require(!(columnToSet < 0 || columnToSet >= columns)) { "TerminalRow.setChar(): columnToSet=$columnToSet, codePoint=$codePoint, style=${style.value}" }
 
         val ext = normalizeExtendedEffect(style.value, extendedEffect)
 
@@ -328,21 +328,21 @@ internal class TerminalRow(
         val isAsciiPrintable = codePoint in 0x20..0x7E
         val newCodePointDisplayWidth = if(isAsciiPrintable) 1 else WcWidth.width(codePoint)
 
-        if (!mHasNonOneWidthOrSurrogateChars) {
+        if (!hasNonOneWidthOrSurrogateChars) {
             // 快速路径：全为 ASCII 单宽字符，直接替换
             if (isAsciiPrintable) {
                 styleAndEffectBits[columnToSet * 2] = style.value
                 styleAndEffectBits[columnToSet * 2 + 1] = ext
-                mText[columnToSet] = codePoint.toChar()
+                text[columnToSet] = codePoint.toChar()
                 if (codePoint != 0x20) isBlank = false
                 return
             }
             if (codePoint >= Character.MIN_SUPPLEMENTARY_CODE_POINT || newCodePointDisplayWidth != 1) {
-                mHasNonOneWidthOrSurrogateChars = true
+                hasNonOneWidthOrSurrogateChars = true
             } else {
                 styleAndEffectBits[columnToSet * 2] = style.value
                 styleAndEffectBits[columnToSet * 2 + 1] = ext
-                mText[columnToSet] = codePoint.toChar()
+                text[columnToSet] = codePoint.toChar()
                 return
             }
         }
@@ -366,7 +366,7 @@ internal class TerminalRow(
         styleAndEffectBits[columnToSet * 2] = style.value
         styleAndEffectBits[columnToSet * 2 + 1] = ext
 
-        var text = mText
+        var text = text
         val oldStartOfColumnIndex = findStartOfColumn(columnToSet)
         val oldCodePointDisplayWidth = WcWidth.width(text, oldStartOfColumnIndex)
 
@@ -374,7 +374,7 @@ internal class TerminalRow(
 
         if (newIsCombining) {
             val combiningCharsCount = WcWidth.zeroWidthCharsCount(
-                mText,
+                this@TerminalRow.text,
                 oldStartOfColumnIndex,
                 oldStartOfColumnIndex + oldCharactersUsedForColumn
             )
@@ -407,7 +407,7 @@ internal class TerminalRow(
      * 宽字符在行尾时可能没有完整的后半列，需用 mSpaceUsed 作为边界。
      */
     private fun calculateOldCharactersUsed(columnToSet: Int, oldStartOfColumnIndex: Int, oldCodePointDisplayWidth: Int): Int {
-        return if (columnToSet + oldCodePointDisplayWidth < mColumns) {
+        return if (columnToSet + oldCodePointDisplayWidth < columns) {
             val oldEndOfColumnIndex = findStartOfColumn(columnToSet + oldCodePointDisplayWidth)
             oldEndOfColumnIndex - oldStartOfColumnIndex
         } else {
@@ -420,7 +420,7 @@ internal class TerminalRow(
         if (charDifference > 0) {
             val oldCharactersAfterColumn = usedCharCount - oldNextColumnIndex
             if (usedCharCount + charDifference > text.size) {
-                val newText = CharArray(text.size + mColumns)
+                val newText = CharArray(text.size + columns)
                 text.copyInto(destination = newText, endIndex = oldNextColumnIndex)
                 text.copyInto(
                     destination = newText,
@@ -429,7 +429,7 @@ internal class TerminalRow(
                     endIndex = oldNextColumnIndex + oldCharactersAfterColumn
                 )
                 text = newText
-                mText = text
+                this@TerminalRow.text = text
             } else {
                 text.copyInto(
                     destination = text,
@@ -460,11 +460,11 @@ internal class TerminalRow(
         if (oldCodePointDisplayWidth == 2 && newCodePointDisplayWidth == 1) {
             // 根源：宽字符起始于行末列时，其后半格在行外，columnToSet+1 即越出行界。
             // 此时写 mStyle[(columnToSet+1)*2] 会超出 mStyle(mColumns*2) 的最大索引，
-            // 且行末没有后半格内容需要保留，右移插入占位空格并 ++mSpaceUsed 会产出幽灵列。
+            // 且行末没有后半格内容需要保留，右移插入占位空格并 ++usedCharCount 会产出幽灵列。
             // 故行末只保留 setChar 已写入的单列降级结果，整个后半格调整跳过。
-            if (columnToSet + 1 < mColumns) {
+            if (columnToSet + 1 < columns) {
                 if (usedCharCount + 1 > text.size) {
-                    val newText = CharArray(text.size + mColumns)
+                    val newText = CharArray(text.size + columns)
                     text.copyInto(destination = newText, endIndex = newNextColumnIndex)
                     text.copyInto(
                         destination = newText,
@@ -473,7 +473,7 @@ internal class TerminalRow(
                         endIndex = usedCharCount
                     )
                     text = newText
-                    mText = text
+                    this@TerminalRow.text = text
                 } else {
                     text.copyInto(
                         destination = text,
@@ -488,17 +488,17 @@ internal class TerminalRow(
                 ++usedCharCount
             }
         } else if (oldCodePointDisplayWidth == 1 && newCodePointDisplayWidth == 2) {
-            if (columnToSet == mColumns - 1) {
+            if (columnToSet == columns - 1) {
                 val oldCharCount = if (text[newNextColumnIndex - 1].isHighSurrogate() && newNextColumnIndex - 2 >= 0 && !text[newNextColumnIndex - 2].isHighSurrogate()) 2 else 1
                 if (oldCharCount == 2) {
                     text[newNextColumnIndex - 2] = ' '.code.toChar()
                 }
                 text[newNextColumnIndex - 1] = ' '.code.toChar()
-            } else if (columnToSet == mColumns - 2) {
+            } else if (columnToSet == columns - 2) {
                 usedCharCount = newNextColumnIndex
             } else {
                 val newNextNextColumnIndex =
-                    newNextColumnIndex + (if (mText[newNextColumnIndex].isHighSurrogate()) 2 else 1)
+                    newNextColumnIndex + (if (this@TerminalRow.text[newNextColumnIndex].isHighSurrogate()) 2 else 1)
                 val nextLen = newNextNextColumnIndex - newNextColumnIndex
 
                 text.copyInto(

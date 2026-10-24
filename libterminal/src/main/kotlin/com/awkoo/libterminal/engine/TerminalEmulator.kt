@@ -91,7 +91,7 @@ internal class TerminalEmulator(
 
     private var g0IsLineDrawing = false
     private var g1IsLineDrawing = false
-    private var isG0shiftedIn = true
+    private var isG0ShiftedIn = true
 
     // DEC 私有模式位状态注册表（当前位 + 已保存位）
     private val decModes = DecModeRegistry()
@@ -122,7 +122,7 @@ internal class TerminalEmulator(
         state.savedDecFlags = decModes.current
         state.useLineDrawingG0 = g0IsLineDrawing
         state.useLineDrawingG1 = g1IsLineDrawing
-        state.useLineDrawingUsesG0 = isG0shiftedIn
+        state.useLineDrawingUsesG0 = isG0ShiftedIn
     }
 
     private fun restoreCursor() {
@@ -136,7 +136,7 @@ internal class TerminalEmulator(
         decModes.restoreAutowrapAndOrigin(state.savedDecFlags)
         g0IsLineDrawing = state.useLineDrawingG0
         g1IsLineDrawing = state.useLineDrawingG1
-        isG0shiftedIn = state.useLineDrawingUsesG0
+        isG0ShiftedIn = state.useLineDrawingUsesG0
     }
 
     private var isInsertMode = false
@@ -183,7 +183,7 @@ internal class TerminalEmulator(
         setDefaultTabStops()
         g1IsLineDrawing = false
         g0IsLineDrawing = false
-        isG0shiftedIn = true
+        isG0ShiftedIn = true
         savedStateMain.resetDefaults()
         savedStateAlt.resetDefaults()
         decModes.resetDefault()
@@ -297,7 +297,7 @@ internal class TerminalEmulator(
     /**
      * 开关输入冻结。
      *
-     * frozen 为真时后续 [append] 的原始字节被缓存而不解码（屏幕完全静止）；
+     * paused 为真时后续 [append] 的原始字节被缓存而不解码（屏幕完全静止）；
      * 为假时按序重放缓存并恢复实时。需在 synchronized(emulator) 内调用。
      */
     fun setInputPaused(paused: Boolean) {
@@ -345,11 +345,11 @@ internal class TerminalEmulator(
     }
 
     override fun onShiftIn() {
-        isG0shiftedIn = true
+        isG0ShiftedIn = true
     }
 
     override fun onShiftOut() {
-        isG0shiftedIn = false
+        isG0ShiftedIn = false
     }
 
     override fun onEscCommand(state: EscapeState, command: Int) {
@@ -430,7 +430,7 @@ internal class TerminalEmulator(
         when (state) {
             EscapeState.CSI -> handleCsiStandard(command, args, argCount, subParams)
             EscapeState.CSI_QUESTIONMARK -> handleCsiQuestionMark(command, args, argCount)
-            EscapeState.CSI_BIGGER_THAN -> handleCsiBiggerThan(command)
+            EscapeState.CSI_GREATER_THAN -> handleCsiBiggerThan(command)
             EscapeState.CSI_DOLLAR -> handleCsiDollar(command, args, argCount)
             EscapeState.CSI_DOUBLE_QUOTE -> handleCsiDoubleQuote(command, args)
             EscapeState.CSI_SINGLE_QUOTE -> handleCsiSingleQuote(command, args)
@@ -988,7 +988,7 @@ internal class TerminalEmulator(
     private fun emitCodePoint(codePoint: Int) {
         lastPrintedCodePoint = codePoint
         var cp = codePoint
-        if (if (isG0shiftedIn) g0IsLineDrawing else g1IsLineDrawing) {
+        if (if (isG0ShiftedIn) g0IsLineDrawing else g1IsLineDrawing) {
             cp = mapSpecialCharacters(cp)
         }
 
