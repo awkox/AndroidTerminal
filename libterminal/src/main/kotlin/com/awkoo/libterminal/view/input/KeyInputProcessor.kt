@@ -143,7 +143,7 @@ internal class KeyInputProcessor(
         val shiftDown = (keyMod and KeySequenceEncoder.KEYMOD_SHIFT) != 0
         val pageKey = keyCode == KeyEvent.KEYCODE_PAGE_UP || keyCode == KeyEvent.KEYCODE_PAGE_DOWN
         if (shiftDown && pageKey) {
-            scrollRows(if (keyCode == KeyEvent.KEYCODE_PAGE_UP) -emulator.mRows else emulator.mRows)
+            scrollRows(if (keyCode == KeyEvent.KEYCODE_PAGE_UP) -emulator.rows else emulator.rows)
             return true
         }
         return false

@@ -15,15 +15,15 @@ import com.awkoo.libterminal.view.TerminalView
 import kotlin.math.max
 
 internal class TextSelectionCursorController(private val terminalView: TerminalView) : CursorController {
-    private val mStartHandle: TextSelectionHandleView =
+    private val startHandle: TextSelectionHandleView =
         TextSelectionHandleView(terminalView, this, TextSelectionHandleView.LEFT)
-    private val mEndHandle: TextSelectionHandleView =
+    private val endHandle: TextSelectionHandleView =
         TextSelectionHandleView(terminalView, this, TextSelectionHandleView.RIGHT)
-    private var mIsSelectingText = false
-    private var mShowStartTime = System.currentTimeMillis()
+    private var isSelectingText = false
+    private var showStartTime = System.currentTimeMillis()
 
-    private val mHandleHeight: Int
-        get() = max(mStartHandle.handleHeight, mEndHandle.handleHeight)
+    private val handleHeight: Int
+        get() = max(startHandle.handleHeight, endHandle.handleHeight)
     private var selectionStartCol = -1
     private var selectionStartRow = -1
     private var selectionEndCol = -1
@@ -37,14 +37,14 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
 
     override fun show(event: MotionEvent) {
         // 触发选择的瞬间最先冻结屏幕，再执行定位等其它操作，避免冻结前的间隙里后台输出使选区漂移
-        terminalView.mEmulator?.let { emulator ->
+        terminalView.emulator?.let { emulator ->
             synchronized(emulator) { emulator.setInputPaused(true) }
         }
 
         setInitialTextSelectionPosition(event)
 
-        mShowStartTime = System.currentTimeMillis()
-        mIsSelectingText = true
+        showStartTime = System.currentTimeMillis()
+        isSelectingText = true
 
         render()
         setSelectionActionMode()
@@ -54,12 +54,12 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
         if (!isActive) return false
 
         // 防止在 show 调用后立即 hide（如长按方向键）
-        if (System.currentTimeMillis() - mShowStartTime < 300) {
+        if (System.currentTimeMillis() - showStartTime < 300) {
             return false
         }
 
-        mStartHandle.hide()
-        mEndHandle.hide()
+        startHandle.hide()
+        endHandle.hide()
 
         actionMode?.finish()
         actionMode = null
@@ -68,10 +68,10 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
         selectionStartRow = -1
         selectionEndCol = -1
         selectionStartCol = -1
-        mIsSelectingText = false
+        isSelectingText = false
 
         // 退出选择模式即解除冻结，按序重放冻结期间的输出并恢复实时
-        terminalView.mEmulator?.let { emulator ->
+        terminalView.emulator?.let { emulator ->
             synchronized(emulator) { emulator.setInputPaused(false) }
         }
 
@@ -108,14 +108,14 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
         }
 
         // 统一调用，消灭冗余代码
-        layoutHandle(mStartHandle, selectionStartCol, selectionEndCol, isStart = true)
-        layoutHandle(mEndHandle, selectionStartRow, selectionEndRow, isStart = false)
+        layoutHandle(startHandle, selectionStartCol, selectionEndCol, isStart = true)
+        layoutHandle(endHandle, selectionStartRow, selectionEndRow, isStart = false)
 
         actionMode?.invalidate()
     }
 
     fun setInitialTextSelectionPosition(event: MotionEvent) {
-        val emulator = terminalView.mEmulator ?: return
+        val emulator = terminalView.emulator ?: return
 
         synchronized(emulator) {
             val screen = emulator.screen
@@ -138,16 +138,16 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
                         } else break
                     } else if (screen.getLineWrap(selectionEndCol - 1) &&
                         // 上一行折行且行尾格非空白才跨行，避免把空白格兜进选区
-                        !screen.isCellBlank(emulator.mColumns - 1, selectionEndCol - 1)
+                        !screen.isCellBlank(emulator.columns - 1, selectionEndCol - 1)
                     ) {
                         // 当前行是上一行的折行继续行，跳回上一行行尾继续扩展
                         selectionEndCol--
-                        selectionStartCol = emulator.mColumns - 1
+                        selectionStartCol = emulator.columns - 1
                     } else break
                 }
                 // 右扩：
                 while (true) {
-                    if (selectionStartRow < emulator.mColumns - 1) {
+                    if (selectionStartRow < emulator.columns - 1) {
                         if (!screen.isCellBlank(selectionStartRow + 1, selectionEndRow)) {
                             selectionStartRow++
                         } else break
@@ -233,7 +233,7 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
                 }
 
                 val terminalBottom = terminalView.bottom
-                bottom += mHandleHeight
+                bottom += handleHeight
                 if (bottom > terminalBottom) bottom = terminalBottom
 
                 outRect.set(x1, top, x2, bottom)
@@ -242,11 +242,11 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
     }
 
     override fun updatePosition(handle: TextSelectionHandleView, x: Int, y: Int) {
-        val emulator = terminalView.mEmulator ?: return
+        val emulator = terminalView.emulator ?: return
 
         synchronized(emulator) {
             val screen = emulator.screen
-            val isStart = handle === mStartHandle
+            val isStart = handle === startHandle
 
             // 1. 获取光标基础坐标（产出方已夹取到缓冲区合法范围）
             val coord = terminalView.bufferCellAt(x.toFloat(), y.toFloat())
@@ -274,7 +274,7 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
             if (!emulator.isAlternateBufferActive) {
                 if (curY <= terminalView.topRow) {
                     terminalView.scrollbackBy(1)
-                } else if (curY >= terminalView.topRow + emulator.mRows) {
+                } else if (curY >= terminalView.topRow + emulator.rows) {
                     terminalView.scrollbackBy(-1)
                 }
             }
@@ -308,7 +308,7 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
     }
 
     override val isActive: Boolean
-        get() = mIsSelectingText
+        get() = isSelectingText
 
     fun getSelectors(sel: IntArray) {
         sel[0] = selectionEndCol
@@ -319,7 +319,7 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
 
     val selectedText: String
         get() {
-            val emulator = terminalView.mEmulator ?: return ""
+            val emulator = terminalView.emulator ?: return ""
             synchronized(emulator) {
                 return emulator.getSelectedText(selectionStartCol, selectionEndCol, selectionStartRow, selectionEndRow)
             }

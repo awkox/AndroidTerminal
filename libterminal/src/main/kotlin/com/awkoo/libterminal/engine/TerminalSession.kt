@@ -84,10 +84,10 @@ class TerminalSession(
     /** 启动子进程（通过 processFactory）并拉起读/写/仿真/退出协程；会话须先调用一次。 */
     fun execute() {
         val p = processFactory(
-            emulator.mRows,
-            emulator.mColumns,
-            emulator.mCellWidthPixels,
-            emulator.mCellHeightPixels
+            emulator.rows,
+            emulator.columns,
+            emulator.cellWidthPixels,
+            emulator.cellHeightPixels
         )
         this.process = p
         isRunning.value = true

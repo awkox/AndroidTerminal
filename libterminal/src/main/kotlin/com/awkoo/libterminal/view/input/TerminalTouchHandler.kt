@@ -39,7 +39,7 @@ internal class TerminalTouchHandler(
     }
 
     fun onTouchEvent(event: MotionEvent): Boolean {
-        val emulator = view.mEmulator ?: return true
+        val emulator = view.emulator ?: return true
 
         if (view.isSelectingText) {
             view.updateFloatingToolbarVisibility(event)
@@ -56,7 +56,7 @@ internal class TerminalTouchHandler(
     }
 
     fun onGenericMotionEvent(event: MotionEvent): Boolean {
-        val emulator = view.mEmulator ?: return false
+        val emulator = view.emulator ?: return false
         if (!event.isFromSource(InputDevice.SOURCE_MOUSE)) return false
         return when (event.action) {
             MotionEvent.ACTION_SCROLL -> {
@@ -81,14 +81,14 @@ internal class TerminalTouchHandler(
     // 接管外部传递进来的平滑滚动事件并处理余数
     fun handleScrollEvent(event: MotionEvent, dy: Float) {
         val distanceY = dy + scrollRemainder
-        val deltaRows = (distanceY / view.mRenderer.fontLineSpacing).toInt()
-        scrollRemainder = distanceY - deltaRows * view.mRenderer.fontLineSpacing
+        val deltaRows = (distanceY / view.renderer.fontLineSpacing).toInt()
+        scrollRemainder = distanceY - deltaRows * view.renderer.fontLineSpacing
         doScroll(event, deltaRows)
     }
 
     /** 执行滚动：移动终端历史、发送按键事件或转发鼠标滚轮事件。 */
     fun doScroll(event: MotionEvent, rowsDown: Int) {
-        val emulator = view.mEmulator ?: return
+        val emulator = view.emulator ?: return
         val up = rowsDown < 0
         val amount = abs(rowsDown)
 
@@ -117,7 +117,7 @@ internal class TerminalTouchHandler(
 
     /** 向终端发送单个鼠标事件代码。 */
     fun sendMouseEventCode(e: MotionEvent, button: Int, pressed: Boolean) {
-        val emulator = view.mEmulator ?: return
+        val emulator = view.emulator ?: return
         val coord = view.viewportCellAt(e.x, e.y)
         var x = coord.col
         var y = coord.row

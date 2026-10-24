@@ -48,8 +48,8 @@ internal object TerminalReflower {
             } else if (skippedBlankLines > 0) {
                 // 输出之前跳过的空行（在输出中补回空白行）
                 for (i in 0..<skippedBlankLines) {
-                    if (currentOutputExternalRow == buffer.mScreenRows - 1) {
-                        buffer.scrollDownOneLine(0, buffer.mScreenRows, currentStyle)
+                    if (currentOutputExternalRow == buffer.screenRows - 1) {
+                        buffer.scrollDownOneLine(0, buffer.screenRows, currentStyle)
                     } else {
                         currentOutputExternalRow++
                     }
@@ -90,11 +90,11 @@ internal object TerminalReflower {
             oldLine.forEachRun { column, charStart, _, codePoint, width, rawStyle, extEffect ->
                 if (charStart >= lastNonSpaceIndex) return@forEachRun false
 
-                if (currentOutputExternalColumn + width > buffer.mColumns) {
+                if (currentOutputExternalColumn + width > buffer.columns) {
                     buffer.setLineWrap(currentOutputExternalRow)
-                    if (currentOutputExternalRow == buffer.mScreenRows - 1) {
+                    if (currentOutputExternalRow == buffer.screenRows - 1) {
                         if (newCursorPlaced) newCursorRow--
-                        buffer.scrollDownOneLine(0, buffer.mScreenRows, currentStyle)
+                        buffer.scrollDownOneLine(0, buffer.screenRows, currentStyle)
                     } else {
                         currentOutputExternalRow++
                     }
@@ -122,9 +122,9 @@ internal object TerminalReflower {
                 newCursorPlaced = true
             }
             if (externalOldRow != (oldScreenRows - 1) && !oldLine.isLineWrap) {
-                if (currentOutputExternalRow == buffer.mScreenRows - 1) {
+                if (currentOutputExternalRow == buffer.screenRows - 1) {
                     if (newCursorPlaced) newCursorRow--
-                    buffer.scrollDownOneLine(0, buffer.mScreenRows, currentStyle)
+                    buffer.scrollDownOneLine(0, buffer.screenRows, currentStyle)
                 } else {
                     currentOutputExternalRow++
                 }

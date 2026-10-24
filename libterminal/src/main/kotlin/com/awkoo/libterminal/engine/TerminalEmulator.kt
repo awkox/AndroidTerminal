@@ -23,36 +23,36 @@ internal class TerminalEmulator(
     maxTranscriptRows: Int = 5000
 ) : TerminalActionHandler {
 
-    private var mCursorRow = 0
-    private var mCursorCol = 0
+    private var _cursorRow = 0
+    private var _cursorCol = 0
     @JvmField
-    var mRows = DEFAULT_ROWS
+    var rows = DEFAULT_ROWS
     @JvmField
-    var mColumns = DEFAULT_COLUMNS
+    var columns = DEFAULT_COLUMNS
     @JvmField
-    var mCellWidthPixels = DEFAULT_CELL_WIDTH_PIXELS
+    var cellWidthPixels = DEFAULT_CELL_WIDTH_PIXELS
     @JvmField
-    var mCellHeightPixels = DEFAULT_CELL_HEIGHT_PIXELS
+    var cellHeightPixels = DEFAULT_CELL_HEIGHT_PIXELS
 
-    private var mAboutToAutoWrap = false
+    private var aboutToAutoWrap = false
 
     var cursorRow: Int
-        get() = mCursorRow
+        get() = _cursorRow
         private set(row) {
-            mCursorRow = row.coerceIn(0, mRows - 1)
-            mAboutToAutoWrap = false
+            _cursorRow = row.coerceIn(0, rows - 1)
+            aboutToAutoWrap = false
         }
 
     var cursorCol: Int
-        get() = mCursorCol
+        get() = _cursorCol
         private set(col) {
-            mCursorCol = col.coerceIn(0, mColumns - 1)
-            mAboutToAutoWrap = false
+            _cursorCol = col.coerceIn(0, columns - 1)
+            aboutToAutoWrap = false
         }
 
     /** 光标列 [col] 的排他右边界：已越过右边距时右边距失效，退回屏宽。 */
     private fun rightEdgeExclusive(col: Int): Int =
-        if (col >= mRightMargin) mColumns else mRightMargin
+        if (col >= rightMargin) columns else rightMargin
 
     private fun setCursorPosition(x: Int, y: Int) {
         val newRow = (originTop + y).coerceIn(originTop, originBottom - 1)
@@ -61,33 +61,33 @@ internal class TerminalEmulator(
     }
 
     private fun setCursorColRespectingOriginMode(col: Int) =
-        setCursorPosition(col, mCursorRow)
+        setCursorPosition(col, _cursorRow)
 
     private fun setCursorRowCol(row: Int, col: Int) {
         this.cursorRow = row
         this.cursorCol = col
     }
 
-    private val mMainBuffer = TerminalBuffer(mColumns, maxTranscriptRows, mRows)
-    private val mAltBuffer = TerminalBuffer(mColumns, mRows, mRows)
+    private val mainBuffer = TerminalBuffer(columns, maxTranscriptRows, rows)
+    private val altBuffer = TerminalBuffer(columns, rows, rows)
 
-    var screen = mMainBuffer
+    var screen = mainBuffer
         private set
 
-    val isAlternateBufferActive: Boolean get() = this.screen == mAltBuffer
+    val isAlternateBufferActive: Boolean get() = this.screen == altBuffer
 
-    private var mTopMargin = 0
-    private var mBottomMargin = 0
-    private var mLeftMargin = 0
-    private var mRightMargin = 0
+    private var topMargin = 0
+    private var bottomMargin = 0
+    private var leftMargin = 0
+    private var rightMargin = 0
 
-    private val originTop: Int get() = if (isDecsetInternalBitSet(DECSET_BIT_ORIGIN_MODE)) mTopMargin else 0
-    private val originLeft: Int get() = if (isDecsetInternalBitSet(DECSET_BIT_ORIGIN_MODE)) mLeftMargin else 0
-    private val originBottom: Int get() = if (isDecsetInternalBitSet(DECSET_BIT_ORIGIN_MODE)) mBottomMargin else mRows
-    private val originRight: Int get() = if (isDecsetInternalBitSet(DECSET_BIT_ORIGIN_MODE)) mRightMargin else mColumns
+    private val originTop: Int get() = if (isDecsetInternalBitSet(DECSET_BIT_ORIGIN_MODE)) topMargin else 0
+    private val originLeft: Int get() = if (isDecsetInternalBitSet(DECSET_BIT_ORIGIN_MODE)) leftMargin else 0
+    private val originBottom: Int get() = if (isDecsetInternalBitSet(DECSET_BIT_ORIGIN_MODE)) bottomMargin else rows
+    private val originRight: Int get() = if (isDecsetInternalBitSet(DECSET_BIT_ORIGIN_MODE)) rightMargin else columns
 
-    private val mSavedStateMain = SavedScreenState()
-    private val mSavedStateAlt = SavedScreenState()
+    private val savedStateMain = SavedScreenState()
+    private val savedStateAlt = SavedScreenState()
 
     private var g0IsLineDrawing = false
     private var g1IsLineDrawing = false
@@ -111,36 +111,36 @@ internal class TerminalEmulator(
     var cursorStyle: TerminalCursorStyle = TerminalCursorStyle.BAR
 
     private fun saveCursor() {
-        val state = if (isAlternateBufferActive) mSavedStateAlt else mSavedStateMain
-        state.mSavedCursorRow = mCursorRow
-        state.mSavedCursorCol = mCursorCol
-        state.mSavedEffect = rendition.effect
-        state.mSavedForeColor = rendition.foreColor
-        state.mSavedBackColor = rendition.backColor
-        state.mSavedUnderlineStyle = rendition.underlineStyle
-        state.mSavedUnderlineColor = rendition.underlineColor
-        state.mSavedDecFlags = decModes.current
-        state.mUseLineDrawingG0 = g0IsLineDrawing
-        state.mUseLineDrawingG1 = g1IsLineDrawing
-        state.mUseLineDrawingUsesG0 = isG0shiftedIn
+        val state = if (isAlternateBufferActive) savedStateAlt else savedStateMain
+        state.savedCursorRow = _cursorRow
+        state.savedCursorCol = _cursorCol
+        state.savedEffect = rendition.effect
+        state.savedForeColor = rendition.foreColor
+        state.savedBackColor = rendition.backColor
+        state.savedUnderlineStyle = rendition.underlineStyle
+        state.savedUnderlineColor = rendition.underlineColor
+        state.savedDecFlags = decModes.current
+        state.useLineDrawingG0 = g0IsLineDrawing
+        state.useLineDrawingG1 = g1IsLineDrawing
+        state.useLineDrawingUsesG0 = isG0shiftedIn
     }
 
     private fun restoreCursor() {
-        val state = if (isAlternateBufferActive) mSavedStateAlt else mSavedStateMain
-        setCursorRowCol(state.mSavedCursorRow, state.mSavedCursorCol)
-        rendition.effect = state.mSavedEffect
-        rendition.foreColor = state.mSavedForeColor
-        rendition.backColor = state.mSavedBackColor
-        rendition.underlineStyle = state.mSavedUnderlineStyle
-        rendition.underlineColor = state.mSavedUnderlineColor
-        decModes.restoreAutowrapAndOrigin(state.mSavedDecFlags)
-        g0IsLineDrawing = state.mUseLineDrawingG0
-        g1IsLineDrawing = state.mUseLineDrawingG1
-        isG0shiftedIn = state.mUseLineDrawingUsesG0
+        val state = if (isAlternateBufferActive) savedStateAlt else savedStateMain
+        setCursorRowCol(state.savedCursorRow, state.savedCursorCol)
+        rendition.effect = state.savedEffect
+        rendition.foreColor = state.savedForeColor
+        rendition.backColor = state.savedBackColor
+        rendition.underlineStyle = state.savedUnderlineStyle
+        rendition.underlineColor = state.savedUnderlineColor
+        decModes.restoreAutowrapAndOrigin(state.savedDecFlags)
+        g0IsLineDrawing = state.useLineDrawingG0
+        g1IsLineDrawing = state.useLineDrawingG1
+        isG0shiftedIn = state.useLineDrawingUsesG0
     }
 
-    private var mInsertMode = false
-    private var tabStops = BooleanArray(mColumns)
+    private var isInsertMode = false
+    private var tabStops = BooleanArray(columns)
 
     @Volatile @JvmField
     var isCursorBlinkingEnabled = false
@@ -173,58 +173,58 @@ internal class TerminalEmulator(
 
     fun reset() {
         cursorStyle = TerminalCursorStyle.BAR
-        mInsertMode = false
-        mLeftMargin = 0
-        mTopMargin = 0
-        mBottomMargin = mRows
-        mRightMargin = mColumns
-        mAboutToAutoWrap = false
+        isInsertMode = false
+        leftMargin = 0
+        topMargin = 0
+        bottomMargin = rows
+        rightMargin = columns
+        aboutToAutoWrap = false
         rendition.reset()
         setDefaultTabStops()
         g1IsLineDrawing = false
         g0IsLineDrawing = false
         isG0shiftedIn = true
-        mSavedStateMain.resetDefaults()
-        mSavedStateAlt.resetDefaults()
+        savedStateMain.resetDefaults()
+        savedStateAlt.resetDefaults()
         decModes.resetDefault()
-        mSavedStateMain.mSavedDecFlags = decModes.current
-        mSavedStateAlt.mSavedDecFlags = decModes.current
+        savedStateMain.savedDecFlags = decModes.current
+        savedStateAlt.savedDecFlags = decModes.current
         oscColorOverrides.resetAll()
         utf8Decoder.reset()
         ansiParser.reset()
     }
 
     fun resize(columns: Int, rows: Int, cellWidthPixels: Int, cellHeightPixels: Int) {
-        this.mCellWidthPixels = cellWidthPixels
-        this.mCellHeightPixels = cellHeightPixels
+        this.cellWidthPixels = cellWidthPixels
+        this.cellHeightPixels = cellHeightPixels
 
-        val sizeChanged = mColumns != columns || mRows != rows
+        val sizeChanged = this@TerminalEmulator.columns != columns || this@TerminalEmulator.rows != rows
 
         if (sizeChanged) {
-            if (mRows != rows) {
-                mRows = rows
-                mTopMargin = 0
-                mBottomMargin = mRows
+            if (this@TerminalEmulator.rows != rows) {
+                this@TerminalEmulator.rows = rows
+                topMargin = 0
+                bottomMargin = this@TerminalEmulator.rows
             }
-            if (mColumns != columns) {
-                val oldColumns = mColumns
+            if (this@TerminalEmulator.columns != columns) {
+                val oldColumns = this@TerminalEmulator.columns
                 val oldTabStop = tabStops
-                mColumns = columns
-                tabStops = BooleanArray(mColumns)
+                this@TerminalEmulator.columns = columns
+                tabStops = BooleanArray(this@TerminalEmulator.columns)
                 setDefaultTabStops()
                 oldTabStop.copyInto(tabStops, endIndex = min(oldColumns, columns))
-                mLeftMargin = 0
-                mRightMargin = mColumns
+                leftMargin = 0
+                rightMargin = this@TerminalEmulator.columns
             }
         }
 
-        if (sizeChanged || screen.mColumns != mColumns || screen.mScreenRows != mRows) {
-            val newTotalRows = if (isAlternateBufferActive) mRows else mMainBuffer.mTotalRows
+        if (sizeChanged || screen.columns != this@TerminalEmulator.columns || screen.screenRows != this@TerminalEmulator.rows) {
+            val newTotalRows = if (isAlternateBufferActive) this@TerminalEmulator.rows else mainBuffer.totalRows
             val newCursor = screen.resize(
-                mColumns,
-                mRows,
+                this@TerminalEmulator.columns,
+                this@TerminalEmulator.rows,
                 newTotalRows,
-                CursorCoord.pack(mCursorCol, mCursorRow), // 传入打包的 Long
+                CursorCoord.pack(_cursorCol, _cursorRow), // 传入打包的 Long
                 // 重排生成的空白行使用默认样式，避免把瞬态 SGR 特效/背景泄漏到新空行
                 TextStyle.NORMAL,
                 this.isAlternateBufferActive
@@ -235,7 +235,7 @@ internal class TerminalEmulator(
     }
 
     private fun setDefaultTabStops() {
-        for (i in 0 until mColumns) tabStops[i] = (i and 7) == 0 && i != 0
+        for (i in 0 until columns) tabStops[i] = (i and 7) == 0 && i != 0
     }
 
     private fun isDecsetInternalBitSet(bit: Int) = decModes.isSet(bit)
@@ -320,14 +320,14 @@ internal class TerminalEmulator(
     }
 
     override fun onBackspace() {
-        if (mCursorCol > mLeftMargin) {
-            this.cursorCol = mCursorCol - 1
+        if (_cursorCol > leftMargin) {
+            this.cursorCol = _cursorCol - 1
         } else if (isDecsetInternalBitSet(DECSET_BIT_REVERSE_WRAPAROUND)
             && isDecsetInternalBitSet(DECSET_BIT_AUTOWRAP)
         ) {
-            val previousRow = mCursorRow - 1
-            if (previousRow >= mTopMargin && screen.getLineWrap(previousRow)) {
-                setCursorRowCol(previousRow, mRightMargin - 1)
+            val previousRow = _cursorRow - 1
+            if (previousRow >= topMargin && screen.getLineWrap(previousRow)) {
+                setCursorRowCol(previousRow, rightMargin - 1)
             }
         }
     }
@@ -341,7 +341,7 @@ internal class TerminalEmulator(
     }
 
     override fun onCarriageReturn() {
-        this.cursorCol = mLeftMargin
+        this.cursorCol = leftMargin
     }
 
     override fun onShiftIn() {
@@ -356,7 +356,7 @@ internal class TerminalEmulator(
         when (state) {
             EscapeState.ESC -> handleEscStandard(command)
             EscapeState.POUND -> {
-                if (command == '8'.code) screen.blockSet(0, 0, mColumns, mRows, 'E'.code, rendition.style)
+                if (command == '8'.code) screen.blockSet(0, 0, columns, rows, 'E'.code, rendition.style)
             }
 
             EscapeState.SELECT_LEFT_PAREN -> g0IsLineDrawing = (command == '0'.code)
@@ -368,26 +368,26 @@ internal class TerminalEmulator(
 
     private fun handleEscStandard(b: Int) {
         when (b.toChar()) {
-            '6' -> if (mCursorCol > mLeftMargin) {
-                this.cursorCol = mCursorCol - 1
+            '6' -> if (_cursorCol > leftMargin) {
+                this.cursorCol = _cursorCol - 1
             } else {
-                val rows = mBottomMargin - mTopMargin
-                screen.insertColumns(mLeftMargin, mTopMargin, 1, rows, mRightMargin, rendition.styleWithoutEffect)
+                val rows = bottomMargin - topMargin
+                screen.insertColumns(leftMargin, topMargin, 1, rows, rightMargin, rendition.styleWithoutEffect)
             }
 
             '7' -> saveCursor()
             '8' -> restoreCursor()
-            '9' -> if (mCursorCol < mRightMargin - 1) {
-                this.cursorCol = mCursorCol + 1
+            '9' -> if (_cursorCol < rightMargin - 1) {
+                this.cursorCol = _cursorCol + 1
             } else {
-                val rows = mBottomMargin - mTopMargin
-                screen.deleteColumns(mLeftMargin, mTopMargin, 1, rows, mRightMargin, rendition.styleWithoutEffect)
+                val rows = bottomMargin - topMargin
+                screen.deleteColumns(leftMargin, topMargin, 1, rows, rightMargin, rendition.styleWithoutEffect)
             }
 
             'c' -> {
                 reset()
-                mMainBuffer.clearTranscript()
-                blockClear(0, 0, mColumns, mRows)
+                mainBuffer.clearTranscript()
+                blockClear(0, 0, columns, rows)
                 setCursorPosition(0, 0)
             }
 
@@ -398,19 +398,19 @@ internal class TerminalEmulator(
             }
 
             'F' -> {} // 仅 xterm 的 hpLowerleftBugCompat 资源（默认 false）开启时才移动光标，默认与其余桌面终端一致忽略
-            'H' -> tabStops[mCursorCol] = true
-            'M' -> if (mCursorRow <= mTopMargin) {
+            'H' -> tabStops[_cursorCol] = true
+            'M' -> if (_cursorRow <= topMargin) {
                 screen.shiftLines(
-                    mTopMargin,
-                    mBottomMargin,
+                    topMargin,
+                    bottomMargin,
                     1,
-                    mLeftMargin,
-                    mRightMargin,
+                    leftMargin,
+                    rightMargin,
                     up = false,
                     style = rendition.eraseFillStyle
                 )
             } else {
-                mCursorRow--
+                _cursorRow--
             }
 
             'N', '0' -> {} // 忽略
@@ -452,34 +452,34 @@ internal class TerminalEmulator(
         when (b.toChar()) {
             'A' -> {
                 this.cursorRow =
-                    max(originTop, mCursorRow - AnsiEscapeParser.getArg(args, 0, 1, true))
+                    max(originTop, _cursorRow - AnsiEscapeParser.getArg(args, 0, 1, true))
             }
 
             'B' -> this.cursorRow =
-                min(originBottom - 1, mCursorRow + AnsiEscapeParser.getArg(args, 0, 1, true))
+                min(originBottom - 1, _cursorRow + AnsiEscapeParser.getArg(args, 0, 1, true))
 
             'C', 'a' -> this.cursorCol =
-                min(rightEdgeExclusive(mCursorCol) - 1, mCursorCol + AnsiEscapeParser.getArg(args, 0, 1, true))
+                min(rightEdgeExclusive(_cursorCol) - 1, _cursorCol + AnsiEscapeParser.getArg(args, 0, 1, true))
 
             'D' -> this.cursorCol =
-                max(mLeftMargin, mCursorCol - AnsiEscapeParser.getArg(args, 0, 1, true))
+                max(leftMargin, _cursorCol - AnsiEscapeParser.getArg(args, 0, 1, true))
 
             'E' -> {
                 setCursorPosition(
                     0,
-                    mCursorRow - originTop + AnsiEscapeParser.getArg(args, 0, 1, true)
+                    _cursorRow - originTop + AnsiEscapeParser.getArg(args, 0, 1, true)
                 )
             }
 
             'F' -> {
                 setCursorPosition(
                     0,
-                    mCursorRow - originTop - AnsiEscapeParser.getArg(args, 0, 1, true)
+                    _cursorRow - originTop - AnsiEscapeParser.getArg(args, 0, 1, true)
                 )
             }
 
             'G' -> this.cursorCol =
-                AnsiEscapeParser.getArg(args, 0, 1, true).coerceIn(1, mColumns) - 1
+                AnsiEscapeParser.getArg(args, 0, 1, true).coerceIn(1, columns) - 1
 
             'H', 'f' -> setCursorPosition(
                 AnsiEscapeParser.getArg(args, 1, 1, true) - 1,
@@ -494,32 +494,32 @@ internal class TerminalEmulator(
             'P' -> handleCsiP(args)
             'S' -> {
                 val linesToScrollArg = AnsiEscapeParser.getArg(args, 0, 1, true)
-                val linesBetween = mBottomMargin - mTopMargin
+                val linesBetween = bottomMargin - topMargin
                 val linesToScroll = min(linesBetween, linesToScrollArg)
                 for (i in 0 until linesToScroll) scrollDownOneLine()
             }
 
             'T' -> {
                 val linesToScrollArg = AnsiEscapeParser.getArg(args, 0, 1, true)
-                val linesBetween = mBottomMargin - mTopMargin
+                val linesBetween = bottomMargin - topMargin
                 val linesToScroll = min(linesBetween, linesToScrollArg)
                 screen.shiftLines(
-                    mTopMargin,
-                    mBottomMargin,
+                    topMargin,
+                    bottomMargin,
                     linesToScroll,
-                    mLeftMargin,
-                    mRightMargin,
+                    leftMargin,
+                    rightMargin,
                     up = false,
                     style = rendition.eraseFillStyle
                 )
             }
 
             'X' -> {
-                mAboutToAutoWrap = false
+                aboutToAutoWrap = false
                 screen.blockSet(
-                    mCursorCol,
-                    mCursorRow,
-                    min(AnsiEscapeParser.getArg(args, 0, 1, true), mColumns - mCursorCol),
+                    _cursorCol,
+                    _cursorRow,
+                    min(AnsiEscapeParser.getArg(args, 0, 1, true), columns - _cursorCol),
                     1,
                     ' '.code,
                     rendition.eraseFillStyle
@@ -528,11 +528,11 @@ internal class TerminalEmulator(
 
             'Z' -> {
                 var numberOfTabs = AnsiEscapeParser.getArg(args, 0, 1, true)
-                var newCol = mCursorCol
-                for (i in (mCursorCol - 1) downTo 0) {
+                var newCol = _cursorCol
+                for (i in (_cursorCol - 1) downTo 0) {
                     if (tabStops[i]) {
                         if (--numberOfTabs == 0) {
-                            newCol = max(i, mLeftMargin)
+                            newCol = max(i, leftMargin)
                             break
                         }
                     }
@@ -556,16 +556,16 @@ internal class TerminalEmulator(
                 ) == 0
             ) writeString("\u001b[?64;1;2;6;9;15;18;21;22c")
 
-            'd' -> this.cursorRow = AnsiEscapeParser.getArg(args, 0, 1, true).coerceIn(1, mRows) - 1
+            'd' -> this.cursorRow = AnsiEscapeParser.getArg(args, 0, 1, true).coerceIn(1, rows) - 1
             'e' -> {
                 setCursorPosition(
-                    mCursorCol,
-                    mCursorRow - originTop + AnsiEscapeParser.getArg(args, 0, 1, true)
+                    _cursorCol,
+                    _cursorRow - originTop + AnsiEscapeParser.getArg(args, 0, 1, true)
                 )
             }
 
             'g' -> when (AnsiEscapeParser.getArg(args, 0, 0, true)) {
-                0 -> tabStops[mCursorCol] = false
+                0 -> tabStops[_cursorCol] = false
                 3 -> tabStops.fill(false)
             }
 
@@ -575,37 +575,37 @@ internal class TerminalEmulator(
             'n' -> when (AnsiEscapeParser.getArg(args, 0, 0, true)) {
                 5 -> writeByteArray(DSR_STATUS_RESPONSE)
 
-                6 -> writeString("\u001b[${mCursorRow + 1};${mCursorCol + 1}R")
+                6 -> writeString("\u001b[${_cursorRow + 1};${_cursorCol + 1}R")
             }
 
             'r' -> {
-                mTopMargin = (AnsiEscapeParser.getArg(args, 0, 1, true) - 1).coerceIn(0, mRows - 2)
-                mBottomMargin = AnsiEscapeParser.getArg(args, 1, mRows, true).coerceIn(mTopMargin + 1, mRows)
+                topMargin = (AnsiEscapeParser.getArg(args, 0, 1, true) - 1).coerceIn(0, rows - 2)
+                bottomMargin = AnsiEscapeParser.getArg(args, 1, rows, true).coerceIn(topMargin + 1, rows)
                 setCursorPosition(0, 0)
             }
 
             's' -> if (isDecsetInternalBitSet(DECSET_BIT_LEFTRIGHT_MARGIN_MODE)) {
                 val pl = AnsiEscapeParser.getArg(args, 0, 1, true)
-                val pr = AnsiEscapeParser.getArg(args, 1, mColumns, true)
-                val leftMax = (mColumns - 2).coerceAtLeast(0)
+                val pr = AnsiEscapeParser.getArg(args, 1, columns, true)
+                val leftMax = (columns - 2).coerceAtLeast(0)
                 val lmCandidate = (pl - 1).coerceIn(0, leftMax)
-                var rmCandidate = pr.coerceIn(lmCandidate + 1, mColumns)
+                var rmCandidate = pr.coerceIn(lmCandidate + 1, columns)
                 if (rmCandidate <= lmCandidate) {
-                    rmCandidate = (lmCandidate + 1).coerceAtMost(mColumns)
+                    rmCandidate = (lmCandidate + 1).coerceAtMost(columns)
                 }
-                mLeftMargin = lmCandidate
-                mRightMargin = rmCandidate
+                leftMargin = lmCandidate
+                rightMargin = rmCandidate
                 setCursorPosition(0, 0)
             } else saveCursor()
 
             't' -> handleCsiT(args)
             'u' -> restoreCursor()
             '@' -> {
-                mAboutToAutoWrap = false
-                val columnsAfterCursor = mColumns - mCursorCol
+                aboutToAutoWrap = false
+                val columnsAfterCursor = columns - _cursorCol
                 val spacesToInsert =
                     min(AnsiEscapeParser.getArg(args, 0, 1, true), columnsAfterCursor)
-                screen.insertColumns(mCursorCol, mCursorRow, spacesToInsert, 1, mColumns, rendition.eraseFillStyle)
+                screen.insertColumns(_cursorCol, _cursorRow, spacesToInsert, 1, columns, rendition.eraseFillStyle)
             }
         }
     }
@@ -615,63 +615,63 @@ internal class TerminalEmulator(
      * ED0 光标起至屏末,ED1 屏首至光标(含光标行),ED2 全屏,ED3 清回滚区。
      */
     private fun handleCsiJ(args: IntArray) {
-        mAboutToAutoWrap = false
+        aboutToAutoWrap = false
         when (AnsiEscapeParser.getArg(args, 0, 0, true)) {
             0 -> {
-                blockClear(mCursorCol, mCursorRow, mColumns - mCursorCol)
+                blockClear(_cursorCol, _cursorRow, columns - _cursorCol)
                 blockClear(
                     0,
-                    mCursorRow + 1,
-                    mColumns,
-                    mRows - (mCursorRow + 1)
+                    _cursorRow + 1,
+                    columns,
+                    rows - (_cursorRow + 1)
                 )
             }
 
             1 -> {
-                blockClear(0, 0, mColumns, mCursorRow)
-                blockClear(0, mCursorRow, mCursorCol + 1)
+                blockClear(0, 0, columns, _cursorRow)
+                blockClear(0, _cursorRow, _cursorCol + 1)
             }
 
-            2 -> blockClear(0, 0, mColumns, mRows)
-            3 -> mMainBuffer.clearTranscript()
+            2 -> blockClear(0, 0, columns, rows)
+            3 -> mainBuffer.clearTranscript()
         }
     }
 
     private fun handleCsiK(args: IntArray) {
-        mAboutToAutoWrap = false
+        aboutToAutoWrap = false
         when (AnsiEscapeParser.getArg(args, 0, 0, true)) {
-            0 -> blockClear(mCursorCol, mCursorRow, mColumns - mCursorCol)
-            1 -> blockClear(0, mCursorRow, mCursorCol + 1)
-            2 -> blockClear(0, mCursorRow, mColumns)
+            0 -> blockClear(_cursorCol, _cursorRow, columns - _cursorCol)
+            1 -> blockClear(0, _cursorRow, _cursorCol + 1)
+            2 -> blockClear(0, _cursorRow, columns)
         }
     }
 
     private fun handleCsiL(args: IntArray) {
-        val linesAfterCursor = (mBottomMargin - mCursorRow).coerceAtLeast(0)
+        val linesAfterCursor = (bottomMargin - _cursorRow).coerceAtLeast(0)
         val linesToInsert = min(AnsiEscapeParser.getArg(args, 0, 1, true), linesAfterCursor)
-        screen.insertLines(mCursorRow, linesToInsert, mBottomMargin, rendition.eraseFillStyle)
+        screen.insertLines(_cursorRow, linesToInsert, bottomMargin, rendition.eraseFillStyle)
     }
 
     private fun handleCsiM(args: IntArray) {
-        val linesAfterCursor = (mBottomMargin - mCursorRow).coerceAtLeast(0)
+        val linesAfterCursor = (bottomMargin - _cursorRow).coerceAtLeast(0)
         val linesToDelete = min(AnsiEscapeParser.getArg(args, 0, 1, true), linesAfterCursor)
-        screen.deleteLines(mCursorRow, linesToDelete, mBottomMargin, rendition.eraseFillStyle)
+        screen.deleteLines(_cursorRow, linesToDelete, bottomMargin, rendition.eraseFillStyle)
     }
 
     private fun handleCsiP(args: IntArray) {
-        mAboutToAutoWrap = false
-        val cellsAfterCursor = mColumns - mCursorCol
+        aboutToAutoWrap = false
+        val cellsAfterCursor = columns - _cursorCol
         val cellsToDelete = min(AnsiEscapeParser.getArg(args, 0, 1, true), cellsAfterCursor)
-        screen.deleteColumns(mCursorCol, mCursorRow, cellsToDelete, 1, mColumns, rendition.eraseFillStyle)
+        screen.deleteColumns(_cursorCol, _cursorRow, cellsToDelete, 1, columns, rendition.eraseFillStyle)
     }
 
     private fun handleCsiT(args: IntArray) {
         when (AnsiEscapeParser.getArg(args, 0, 0, true)) {
             11 -> writeString("\u001b[1t")
             13 -> writeString("\u001b[3;0;0t")
-            14 -> writeString("\u001b[4;${mRows * mCellHeightPixels};${mColumns * mCellWidthPixels}t")
-            16 -> writeString("\u001b[6;${mRows * mCellHeightPixels};${mColumns * mCellWidthPixels}t")
-            18, 19 -> writeString("\u001b[9;${mRows};${mColumns}t") // 报告精确字符尺寸
+            14 -> writeString("\u001b[4;${rows * cellHeightPixels};${columns * cellWidthPixels}t")
+            16 -> writeString("\u001b[6;${rows * cellHeightPixels};${columns * cellWidthPixels}t")
+            18, 19 -> writeString("\u001b[9;${rows};${columns}t") // 报告精确字符尺寸
             20 -> writeString("\u001b]LIconLabel\u001b\\")
             21 -> writeString("\u001b]l\u001b\\")
             22 -> osc.pushTitle()
@@ -689,7 +689,7 @@ internal class TerminalEmulator(
     private fun handleCsiQuestionMark(b: Int, args: IntArray, argCount: Int) {
         when (b.toChar()) {
             'J', 'K' -> {
-                mAboutToAutoWrap = false
+                aboutToAutoWrap = false
                 val fillChar = ' '.code
                 var startCol = -1
                 var startRow = -1
@@ -698,24 +698,24 @@ internal class TerminalEmulator(
                 val justRow = (b == 'K'.code)
                 when (AnsiEscapeParser.getArg(args, 0, 0, true)) {
                     0 -> {
-                        startCol = mCursorCol
-                        startRow = mCursorRow
-                        endCol = mColumns
-                        endRow = if (justRow) (mCursorRow + 1) else mRows
+                        startCol = _cursorCol
+                        startRow = _cursorRow
+                        endCol = columns
+                        endRow = if (justRow) (_cursorRow + 1) else rows
                     }
 
                     1 -> {
                         startCol = 0
-                        startRow = if (justRow) mCursorRow else 0
-                        endCol = mCursorCol + 1
-                        endRow = mCursorRow + 1
+                        startRow = if (justRow) _cursorRow else 0
+                        endCol = _cursorCol + 1
+                        endRow = _cursorRow + 1
                     }
 
                     2 -> {
                         startCol = 0
-                        startRow = if (justRow) mCursorRow else 0
-                        endCol = mColumns
-                        endRow = if (justRow) (mCursorRow + 1) else mRows
+                        startRow = if (justRow) _cursorRow else 0
+                        endCol = columns
+                        endRow = if (justRow) (_cursorRow + 1) else rows
                     }
                 }
                 val style = rendition.eraseFillStyle
@@ -741,7 +741,7 @@ internal class TerminalEmulator(
                     -1,
                     true
                 ) == 6
-            ) writeString("\u001b[?${mCursorRow + 1};${mCursorCol + 1};1R")
+            ) writeString("\u001b[?${_cursorRow + 1};${_cursorCol + 1};1R")
 
             'r', 's' -> {
                 for (i in 0 until argCount) {
@@ -763,16 +763,16 @@ internal class TerminalEmulator(
     private fun handleCsiDollar(b: Int, args: IntArray, argCount: Int) {
         when (b.toChar()) {
             'v' -> {
-                val topSource = (AnsiEscapeParser.getArg(args, 0, 1, true) - 1 + originTop).coerceAtMost(mRows)
-                val leftSource = (AnsiEscapeParser.getArg(args, 1, 1, true) - 1 + originLeft).coerceAtMost(mColumns)
-                val bottomSource = (AnsiEscapeParser.getArg(args, 2, mRows, true) + originTop).coerceIn(topSource, mRows)
-                val rightSource = (AnsiEscapeParser.getArg(args, 3, mColumns, true) + originLeft).coerceIn(leftSource, mColumns)
+                val topSource = (AnsiEscapeParser.getArg(args, 0, 1, true) - 1 + originTop).coerceAtMost(rows)
+                val leftSource = (AnsiEscapeParser.getArg(args, 1, 1, true) - 1 + originLeft).coerceAtMost(columns)
+                val bottomSource = (AnsiEscapeParser.getArg(args, 2, rows, true) + originTop).coerceIn(topSource, rows)
+                val rightSource = (AnsiEscapeParser.getArg(args, 3, columns, true) + originLeft).coerceIn(leftSource, columns)
                 val destionationTop =
-                    min(AnsiEscapeParser.getArg(args, 5, 1, true) - 1 + originTop, mRows)
+                    min(AnsiEscapeParser.getArg(args, 5, 1, true) - 1 + originTop, rows)
                 val destinationLeft =
-                    min(AnsiEscapeParser.getArg(args, 6, 1, true) - 1 + originLeft, mColumns)
-                val heightToCopy = min(mRows - destionationTop, bottomSource - topSource)
-                val widthToCopy = min(mColumns - destinationLeft, rightSource - leftSource)
+                    min(AnsiEscapeParser.getArg(args, 6, 1, true) - 1 + originLeft, columns)
+                val heightToCopy = min(rows - destionationTop, bottomSource - topSource)
+                val widthToCopy = min(columns - destinationLeft, rightSource - leftSource)
                 screen.blockCopy(
                     leftSource,
                     topSource,
@@ -798,8 +798,8 @@ internal class TerminalEmulator(
             in 32..126, in 160..255 -> {
                 val top = (AnsiEscapeParser.getArg(args, argIdx++, 1, true) + originTop).coerceAtMost(originBottom + 1)
                 val left = (AnsiEscapeParser.getArg(args, argIdx++, 1, true) + originLeft).coerceAtMost(originRight + 1)
-                val bottom = (AnsiEscapeParser.getArg(args, argIdx++, mRows, true) + originTop).coerceAtMost(originBottom)
-                val right = (AnsiEscapeParser.getArg(args, argIdx, mColumns, true) + originLeft).coerceAtMost(originRight)
+                val bottom = (AnsiEscapeParser.getArg(args, argIdx++, rows, true) + originTop).coerceAtMost(originBottom)
+                val right = (AnsiEscapeParser.getArg(args, argIdx, columns, true) + originLeft).coerceAtMost(originRight)
                 val style = rendition.style
                 for (row in (top - 1) until bottom) {
                     for (col in (left - 1) until right) {
@@ -825,8 +825,8 @@ internal class TerminalEmulator(
         val reverse = b == 't'.code
         val topArg = AnsiEscapeParser.getArg(args, 0, 1, true)
         val leftArg = AnsiEscapeParser.getArg(args, 1, 1, true)
-        val bottomArg = AnsiEscapeParser.getArg(args, 2, mRows, true)
-        val rightArg = AnsiEscapeParser.getArg(args, 3, mColumns, true)
+        val bottomArg = AnsiEscapeParser.getArg(args, 2, rows, true)
+        val rightArg = AnsiEscapeParser.getArg(args, 3, columns, true)
         val top = (min(topArg, bottomArg) - 1 + originTop).coerceIn(originTop, originBottom - 1)
         val left = (min(leftArg, rightArg) - 1 + originLeft).coerceIn(originLeft, originRight - 1)
         val bottom = (max(topArg, bottomArg) + originTop).coerceIn(originTop, originBottom)
@@ -874,32 +874,32 @@ internal class TerminalEmulator(
     }
 
     private fun handleCsiSingleQuote(b: Int, args: IntArray) {
-        val columnsAfterCursor = (mRightMargin - mCursorCol).coerceAtLeast(0)
+        val columnsAfterCursor = (rightMargin - _cursorCol).coerceAtLeast(0)
         val columnsToChange = min(AnsiEscapeParser.getArg(args, 0, 1, true), columnsAfterCursor)
         val columnsToMove = columnsAfterCursor - columnsToChange
         when (b) {
             '}'.code -> {
                 screen.blockCopy(
-                    mCursorCol,
+                    _cursorCol,
                     0,
                     columnsToMove,
-                    mRows,
-                    mCursorCol + columnsToChange,
+                    rows,
+                    _cursorCol + columnsToChange,
                     0
                 )
-                blockClear(mCursorCol, 0, columnsToChange, mRows)
+                blockClear(_cursorCol, 0, columnsToChange, rows)
             }
 
             '~'.code -> {
                 screen.blockCopy(
-                    mCursorCol + columnsToChange,
+                    _cursorCol + columnsToChange,
                     0,
                     columnsToMove,
-                    mRows,
-                    mCursorCol,
+                    rows,
+                    _cursorCol,
                     0
                 )
-                blockClear(mCursorCol + columnsToMove, 0, columnsToChange, mRows)
+                blockClear(_cursorCol + columnsToMove, 0, columnsToChange, rows)
             }
         }
     }
@@ -970,8 +970,8 @@ internal class TerminalEmulator(
             buttonEventTracking = isDecsetInternalBitSet(DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT),
             anyEventTracking = isDecsetInternalBitSet(DECSET_BIT_MOUSE_TRACKING_ANY_EVENT),
             sgrProtocol = isDecsetInternalBitSet(DECSET_BIT_MOUSE_PROTOCOL_SGR),
-            columns = mColumns,
-            rows = mRows
+            columns = columns,
+            rows = rows
         )
     }
 
@@ -995,46 +995,46 @@ internal class TerminalEmulator(
         // 自动换行：行尾 + (预备换行 + 普通字符) 或 宽字符 → 换行
         val autoWrap = isDecsetInternalBitSet(DECSET_BIT_AUTOWRAP)
         val displayWidth = WcWidth.width(cp)
-        val cursorInLastColumn = mCursorCol == rightEdgeExclusive(mCursorCol) - 1
+        val cursorInLastColumn = _cursorCol == rightEdgeExclusive(_cursorCol) - 1
 
         if (autoWrap) {
-            if (cursorInLastColumn && ((mAboutToAutoWrap && displayWidth == 1) || displayWidth == 2)) {
-                screen.setLineWrap(mCursorRow)
-                this.cursorCol = mLeftMargin
-                if (mCursorRow + 1 < mBottomMargin) this.cursorRow++ else scrollDownOneLine()
+            if (cursorInLastColumn && ((aboutToAutoWrap && displayWidth == 1) || displayWidth == 2)) {
+                screen.setLineWrap(_cursorRow)
+                this.cursorCol = leftMargin
+                if (_cursorRow + 1 < bottomMargin) this.cursorRow++ else scrollDownOneLine()
             }
         } else if (cursorInLastColumn && displayWidth == 2) {
             return
         }
 
-        if (mInsertMode && displayWidth > 0) {
-            val destCol = mCursorCol + displayWidth
-            if (destCol < mRightMargin) screen.blockCopy(
-                mCursorCol,
-                mCursorRow,
-                mRightMargin - destCol,
+        if (isInsertMode && displayWidth > 0) {
+            val destCol = _cursorCol + displayWidth
+            if (destCol < rightMargin) screen.blockCopy(
+                _cursorCol,
+                _cursorRow,
+                rightMargin - destCol,
                 1,
                 destCol,
-                mCursorRow
+                _cursorRow
             )
         }
 
         val offsetDueToCombiningChar =
-            (if (displayWidth <= 0 && mCursorCol > 0 && !mAboutToAutoWrap) 1 else 0)
+            (if (displayWidth <= 0 && _cursorCol > 0 && !aboutToAutoWrap) 1 else 0)
         screen.setChar(
-            mCursorCol - offsetDueToCombiningChar,
-            mCursorRow,
+            _cursorCol - offsetDueToCombiningChar,
+            _cursorRow,
             cp,
             rendition.style,
             rendition.currentExtendedEffect
         )
 
-        val previousCol = mCursorCol
-        val wasAboutToAutoWrap = mAboutToAutoWrap
+        val previousCol = _cursorCol
+        val wasAboutToAutoWrap = aboutToAutoWrap
         // cursorCol setter 是 mAboutToAutoWrap 唯一清零属主：必须先经 setter 写列、再在此重建标志。
         // 顺序不可调换，否则换行标志被写入即清，自动换行失效（Ctrl+R 光标倒退覆盖的根因）。
         this.cursorCol = min(previousCol + displayWidth, rightEdgeExclusive(previousCol) - 1)
-        mAboutToAutoWrap = when {
+        aboutToAutoWrap = when {
             displayWidth <= 0 -> wasAboutToAutoWrap
             autoWrap -> previousCol == rightEdgeExclusive(previousCol) - displayWidth
             else -> false
@@ -1042,22 +1042,22 @@ internal class TerminalEmulator(
     }
 
     private fun doLinefeed() {
-        mAboutToAutoWrap = false
-        if (mCursorRow >= mBottomMargin) {
-            if (mCursorRow != mRows - 1) this.cursorRow = mCursorRow + 1
+        aboutToAutoWrap = false
+        if (_cursorRow >= bottomMargin) {
+            if (_cursorRow != rows - 1) this.cursorRow = _cursorRow + 1
         } else {
-            if (mCursorRow + 1 == mBottomMargin) scrollDownOneLine() else this.cursorRow =
-                mCursorRow + 1
+            if (_cursorRow + 1 == bottomMargin) scrollDownOneLine() else this.cursorRow =
+                _cursorRow + 1
         }
     }
 
     private fun scrollDownOneLine() {
         this.scrollCounter++
         screen.scrollRegionOneLine(
-            mTopMargin,
-            mBottomMargin,
-            mLeftMargin,
-            mRightMargin,
+            topMargin,
+            bottomMargin,
+            leftMargin,
+            rightMargin,
             rendition.eraseFillStyle
         )
     }
@@ -1067,44 +1067,44 @@ internal class TerminalEmulator(
         if (internalBit != -1) setDecsetInternalBit(internalBit, setting)
         when (externalBit) {
             3 -> {
-                mTopMargin = 0
-                mLeftMargin = 0
-                mBottomMargin = mRows
-                mRightMargin = mColumns
+                topMargin = 0
+                leftMargin = 0
+                bottomMargin = rows
+                rightMargin = columns
                 setDecsetInternalBit(DECSET_BIT_LEFTRIGHT_MARGIN_MODE, false)
-                blockClear(0, 0, mColumns, mRows)
+                blockClear(0, 0, columns, rows)
                 setCursorRowCol(0, 0)
             }
 
             6 -> if (setting) setCursorPosition(0, 0)
             69 -> if (!setting) {
-                mLeftMargin = 0
-                mRightMargin = mColumns
+                leftMargin = 0
+                rightMargin = columns
             }
 
             1048 -> if (setting) saveCursor() else restoreCursor()
             47, 1047, 1049 -> {
-                val newScreen = if (setting) mAltBuffer else mMainBuffer
+                val newScreen = if (setting) altBuffer else mainBuffer
                 if (newScreen != this.screen) {
                     val resized =
-                        !(newScreen.mColumns == mColumns && newScreen.mScreenRows == mRows)
+                        !(newScreen.columns == columns && newScreen.screenRows == rows)
                     if (setting) saveCursor()
                     this.screen = newScreen
                     if (!setting) {
-                        val col = mSavedStateMain.mSavedCursorCol
-                        val row = mSavedStateMain.mSavedCursorRow
+                        val col = savedStateMain.savedCursorCol
+                        val row = savedStateMain.savedCursorRow
                         restoreCursor()
                         if (resized) {
                             this.cursorCol = col
                             this.cursorRow = row
                         }
                     }
-                    if (resized) resize(mColumns, mRows, mCellWidthPixels, mCellHeightPixels)
-                    if (externalBit == 1049 && newScreen == mAltBuffer) newScreen.blockSet(
+                    if (resized) resize(columns, rows, cellWidthPixels, cellHeightPixels)
+                    if (externalBit == 1049 && newScreen == altBuffer) newScreen.blockSet(
                         0,
                         0,
-                        mColumns,
-                        mRows,
+                        columns,
+                        rows,
                         ' '.code,
                         rendition.eraseFillStyle
                     )
@@ -1114,13 +1114,13 @@ internal class TerminalEmulator(
     }
 
     private fun doSetMode(newValue: Boolean, modeBit: Int) {
-        if (modeBit == 4) mInsertMode = newValue
+        if (modeBit == 4) isInsertMode = newValue
     }
 
     private fun nextTabStop(numTabs: Int): Int {
         var n = numTabs
-        for (i in mCursorCol + 1 until mColumns) if (tabStops[i] && --n == 0) return min(i, mRightMargin - 1)
-        return mRightMargin - 1
+        for (i in _cursorCol + 1 until columns) if (tabStops[i] && --n == 0) return min(i, rightMargin - 1)
+        return rightMargin - 1
     }
 
     private fun blockClear(sx: Int, sy: Int, w: Int, h: Int = 1) =
@@ -1153,37 +1153,37 @@ internal class TerminalEmulator(
 
     private class SavedScreenState {
         @JvmField
-        var mSavedCursorRow: Int = 0
+        var savedCursorRow: Int = 0
         @JvmField
-        var mSavedCursorCol: Int = 0
+        var savedCursorCol: Int = 0
         @JvmField
-        var mSavedEffect: Int = 0
+        var savedEffect: Int = 0
         @JvmField
-        var mSavedForeColor: Int = 0
+        var savedForeColor: Int = 0
         @JvmField
-        var mSavedBackColor: Int = 0
+        var savedBackColor: Int = 0
         @JvmField
-        var mSavedDecFlags: Int = 0
+        var savedDecFlags: Int = 0
         @JvmField
-        var mSavedUnderlineStyle: Int = TextStyle.UNDERLINE_STYLE_NONE
+        var savedUnderlineStyle: Int = TextStyle.UNDERLINE_STYLE_NONE
         @JvmField
-        var mSavedUnderlineColor: Int = TextStyle.COLOR_INDEX_FOREGROUND
+        var savedUnderlineColor: Int = TextStyle.COLOR_INDEX_FOREGROUND
         @JvmField
-        var mUseLineDrawingG0: Boolean = false
+        var useLineDrawingG0: Boolean = false
         @JvmField
-        var mUseLineDrawingG1: Boolean = false
+        var useLineDrawingG1: Boolean = false
         @JvmField
-        var mUseLineDrawingUsesG0: Boolean = true
+        var useLineDrawingUsesG0: Boolean = true
 
         fun resetDefaults() {
-            mSavedCursorRow = 0
-            mSavedCursorCol = 0
-            mSavedEffect = 0
-            mSavedForeColor = TextStyle.COLOR_INDEX_FOREGROUND
-            mSavedBackColor = TextStyle.COLOR_INDEX_BACKGROUND
-            mSavedUnderlineStyle = TextStyle.UNDERLINE_STYLE_NONE
-            mSavedUnderlineColor = TextStyle.COLOR_INDEX_FOREGROUND
-            mSavedDecFlags = 0
+            savedCursorRow = 0
+            savedCursorCol = 0
+            savedEffect = 0
+            savedForeColor = TextStyle.COLOR_INDEX_FOREGROUND
+            savedBackColor = TextStyle.COLOR_INDEX_BACKGROUND
+            savedUnderlineStyle = TextStyle.UNDERLINE_STYLE_NONE
+            savedUnderlineColor = TextStyle.COLOR_INDEX_FOREGROUND
+            savedDecFlags = 0
         }
     }
 

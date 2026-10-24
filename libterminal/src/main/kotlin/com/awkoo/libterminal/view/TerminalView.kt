@@ -116,7 +116,7 @@ class TerminalView(
     internal val touchHandler = TerminalTouchHandler(this)
 
     // 剪贴板网关：系统剪贴板读写，粘贴时送入模拟器
-    private val clipboard = TerminalClipboard(context, { mEmulator }, { cursorBlinker.poke() })
+    private val clipboard = TerminalClipboard(context, { emulator }, { cursorBlinker.poke() })
 
     // IME 控制器：软键盘显隐切换
     private val imeController = ImeController(this)
@@ -124,7 +124,7 @@ class TerminalView(
     // 键盘输入处理器：按键到会话字节流的转换逻辑委托对象
     private val keyProcessor = KeyInputProcessor(
         sessionProvider = { currentSession },
-        emulatorProvider = { mEmulator },
+        emulatorProvider = { emulator },
         pokeCursor = { cursorBlinker.poke() },
         scrollRows = { scrollRows ->
             val time = SystemClock.uptimeMillis()
@@ -195,14 +195,14 @@ class TerminalView(
      */
     private var currentPalette: TerminalPaletteResolver? = null
 
-    internal val mEmulator: TerminalEmulator?
+    internal val emulator: TerminalEmulator?
         get() = currentSession?.emulator
 
     /** 终端字号（dp）。setter 自动约束在 4..100，修改后重建渲染器并更新尺寸。 */
     var textSize: Int = 12
         set(value) {
             field = value.coerceIn(4, 100)
-            mRenderer = TerminalRenderer(field.dp, typeface)
+            renderer = TerminalRenderer(field.dp, typeface)
             updateSize()
         }
 
@@ -210,12 +210,12 @@ class TerminalView(
     var typeface: Typeface = Typeface.MONOSPACE
         set(value) {
             field = value
-            mRenderer = TerminalRenderer(textSize.dp, field)
+            renderer = TerminalRenderer(textSize.dp, field)
             updateSize()
             invalidate()
         }
 
-    internal var mRenderer = TerminalRenderer(textSize.dp, typeface)
+    internal var renderer = TerminalRenderer(textSize.dp, typeface)
 
     /** 浮动工具栏定制器，用于本地化按钮文字或添加额外操作。 */
     var actionModeCustomizer: ActionModeCustomizer? = null
@@ -230,7 +230,7 @@ class TerminalView(
         set(value) {
             if (field == value) return
             field = value
-            mEmulator?.cursorStyle = value
+            emulator?.cursorStyle = value
             invalidate()
         }
 
@@ -243,7 +243,7 @@ class TerminalView(
         set(value) {
             if (field == value) return
             field = value
-            applyBlinker(cursorBlinker, mEmulator, value)
+            applyBlinker(cursorBlinker, emulator, value)
         }
 
     /**
@@ -255,7 +255,7 @@ class TerminalView(
         set(value) {
             if (field == value) return
             field = value
-            applyBlinker(textBlinker, mEmulator, value)
+            applyBlinker(textBlinker, emulator, value)
         }
 
     private fun applyBlinker(blinker: TerminalBlinker, emulator: TerminalEmulator?, enabled: Boolean) {
@@ -314,7 +314,7 @@ class TerminalView(
 
     /** 切换自动滚动的禁用状态（配合滚动锁定使用）。 */
     fun toggleAutoScrollDisabled() {
-        mEmulator?.toggleAutoScrollDisabled()
+        emulator?.toggleAutoScrollDisabled()
     }
 
     /** 距屏幕底部的回滚行数，0 表示跟随到底部。 */
@@ -322,7 +322,7 @@ class TerminalView(
 
     /** 当前可回滚的最大行数。 */
     private val maxScrollback: Int
-        get() = mEmulator?.screen?.activeTranscriptRows ?: 0
+        get() = emulator?.screen?.activeTranscriptRows ?: 0
 
     /** 当前顶行的外部行号，恒 ≤ 0；读取时按当前历史行数夹取，始终落在合法域内。 */
     internal val topRow: Int
@@ -333,15 +333,15 @@ class TerminalView(
         scrollbackOffset = (scrollbackOffset + deltaRows).coerceIn(0, maxScrollback)
     }
 
-    override fun computeVerticalScrollRange() = mEmulator?.screen?.activeRows ?: 1
-    override fun computeVerticalScrollExtent() = mEmulator?.mRows ?: 1
+    override fun computeVerticalScrollRange() = emulator?.screen?.activeRows ?: 1
+    override fun computeVerticalScrollExtent() = emulator?.rows ?: 1
     override fun computeVerticalScrollOffset(): Int {
-        val emulator = mEmulator ?: return 1
-        return emulator.screen.activeRows + this.topRow - emulator.mRows
+        val emulator = emulator ?: return 1
+        return emulator.screen.activeRows + this.topRow - emulator.rows
     }
 
     private fun onScreenUpdated(skipScrolling: Boolean = false) {
-        val emulator = mEmulator ?: return
+        val emulator = emulator ?: return
         var skipScrolling = skipScrolling
 
         synchronized(emulator) {
@@ -378,7 +378,7 @@ class TerminalView(
      * 合法范围由鼠标协议编码器在上报前裁决，避免在锁外读取模拟器尺寸。
      */
     internal fun viewportCellAt(x: Float, y: Float): CursorCoord {
-        val renderer = mRenderer
+        val renderer = renderer
         return CursorCoord.pack(
             CellPoint.xToColumn(x, renderer.fontWidth),
             CellPoint.yToRow(y, renderer.fontLineSpacing, renderer.baselineOffset)
@@ -391,22 +391,22 @@ class TerminalView(
      * 选区与手柄坐标必须落在缓冲区合法域内，夹取以缓冲区为唯一真源统一收口。
      */
     internal fun bufferCellAt(x: Float, y: Float): CursorCoord {
-        val renderer = mRenderer
+        val renderer = renderer
         val column = CellPoint.xToColumn(x, renderer.fontWidth)
         val row = CellPoint.yToRow(y, renderer.fontLineSpacing, renderer.baselineOffset) + topRow
-        val emulator = mEmulator ?: return CursorCoord.pack(column, row)
+        val emulator = emulator ?: return CursorCoord.pack(column, row)
         val screen = emulator.screen
         return CursorCoord.pack(screen.clampColumn(column), screen.clampRow(row))
     }
 
-    /** 单元格列 → 像素边界；末列之后的右边界传 `mColumns`。 */
+    /** 单元格列 → 像素边界；末列之后的右边界传 `columns`。 */
     internal fun getPointX(cx: Int): Int {
-        val columns = mEmulator?.mColumns ?: 0
+        val columns = emulator?.columns ?: 0
         val clamped = if (columns == 0) cx else cx.coerceAtMost(columns)
-        return CellPoint.columnToX(clamped, mRenderer.fontWidth)
+        return CellPoint.columnToX(clamped, renderer.fontWidth)
     }
 
-    internal fun getPointY(cy: Int) = CellPoint.rowToY(cy - topRow, mRenderer.fontLineSpacing)
+    internal fun getPointY(cy: Int) = CellPoint.rowToY(cy - topRow, renderer.fontLineSpacing)
 
     internal fun copyTextToClipboard() {
         copyTextToClipboard(textSelectionCursorController.selectedText)
@@ -461,7 +461,7 @@ class TerminalView(
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
-        if (mEmulator == null && keyCode != KeyEvent.KEYCODE_BACK) return true
+        if (emulator == null && keyCode != KeyEvent.KEYCODE_BACK) return true
         if (event.isSystem) return super.onKeyUp(keyCode, event)
         return true
     }
@@ -496,13 +496,13 @@ class TerminalView(
     override fun isOpaque() = true
 
     override fun onDraw(canvas: Canvas) {
-        val emulator = mEmulator ?: return
+        val emulator = emulator ?: return
         val resolver = currentPalette ?: return
         canvas.drawColor(resolver.background)
         val sel = selectionBoundsScratch
         textSelectionCursorController.getSelectors(sel)
         synchronized(emulator) {
-            mRenderer.render(emulator, resolver, canvas, this.topRow, sel[0], sel[1], sel[2], sel[3])
+            renderer.render(emulator, resolver, canvas, this.topRow, sel[0], sel[1], sel[2], sel[3])
         }
         textSelectionCursorController.render()
     }
@@ -518,11 +518,11 @@ class TerminalView(
         val viewHeight = height
         if (viewWidth == 0 || viewHeight == 0) return
 
-        val newColumns = max(4, (viewWidth / mRenderer.fontWidth).toInt())
-        val newRows = max(4, (viewHeight - mRenderer.baselineOffset) / mRenderer.fontLineSpacing)
+        val newColumns = max(4, (viewWidth / renderer.fontWidth).toInt())
+        val newRows = max(4, (viewHeight - renderer.baselineOffset) / renderer.fontLineSpacing)
 
-        if (newColumns != emulator.mColumns || newRows != emulator.mRows) {
-            currentSession.updateSize(newColumns, newRows, mRenderer.fontWidth.toInt(), mRenderer.fontLineSpacing)
+        if (newColumns != emulator.columns || newRows != emulator.rows) {
+            currentSession.updateSize(newColumns, newRows, renderer.fontWidth.toInt(), renderer.fontLineSpacing)
             scrollbackOffset = 0
             scrollTo(0, 0)
             invalidate()
@@ -531,7 +531,7 @@ class TerminalView(
 
     override fun onWindowFocusChanged(hasWindowFocus: Boolean) {
         super.onWindowFocusChanged(hasWindowFocus)
-        mEmulator?.onWindowFocusChanged(hasWindowFocus)
+        emulator?.onWindowFocusChanged(hasWindowFocus)
 
         // 当窗口失去焦点时，自动关闭文本选择
         if (!hasWindowFocus && isSelectingText) {

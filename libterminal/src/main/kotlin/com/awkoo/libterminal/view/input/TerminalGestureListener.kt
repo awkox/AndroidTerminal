@@ -23,7 +23,7 @@ internal class TerminalGestureListener(
         // 重置滚动状态
         view.touchHandler.resetScrollRemainder()
 
-        val emulator = view.mEmulator
+        val emulator = view.emulator
         if (emulator != null &&
             emulator.isMouseTrackingActive &&
             !e.isFromSource(InputDevice.SOURCE_MOUSE) &&
@@ -40,7 +40,7 @@ internal class TerminalGestureListener(
     }
 
     override fun onSingleTapUp(e: MotionEvent): Boolean {
-        val emulator = view.mEmulator ?: return true
+        val emulator = view.emulator ?: return true
 
         if (view.isSelectingText && !view.touchHandler.gestureRecognizer.isAfterLongPress) {
             view.stopTextSelectionMode()
@@ -58,7 +58,7 @@ internal class TerminalGestureListener(
     }
 
     override fun onScroll(e: MotionEvent, dx: Float, dy: Float): Boolean {
-        if (view.mEmulator == null) return true
+        if (view.emulator == null) return true
         // 鼠标移动事件已由 handleMouseEvent 统一上报追踪序列，手势层不再重复处理
         if (!e.isFromSource(InputDevice.SOURCE_MOUSE)) {
             scrolledWithFinger = true
@@ -68,7 +68,7 @@ internal class TerminalGestureListener(
     }
 
     override fun onScale(focusX: Float, focusY: Float, scale: Float): Boolean {
-        if (view.mEmulator == null || view.isSelectingText) return true
+        if (view.emulator == null || view.isSelectingText) return true
         view.touchHandler.scaleFactor *= scale
         if (view.touchHandler.scaleFactor !in 0.9f..1.1f) {
             val increase = view.touchHandler.scaleFactor > 1f
@@ -79,7 +79,7 @@ internal class TerminalGestureListener(
     }
 
     override fun onFling(e: MotionEvent, velocityX: Float, velocityY: Float): Boolean {
-        val emulator = view.mEmulator ?: return true
+        val emulator = view.emulator ?: return true
         val scroller = view.touchHandler.scroller
         // 上一次惯性滚动未结束时不启动新的滚动
         if (!scroller.isFinished) return true
@@ -87,7 +87,7 @@ internal class TerminalGestureListener(
         val mouseTrackingAtStartOfFling = emulator.isMouseTrackingActive
         val flingScale = 0.25f
         if (mouseTrackingAtStartOfFling) {
-            scroller.fling(0, 0, 0, -(velocityY * flingScale).toInt(), 0, 0, -emulator.mRows / 2, emulator.mRows / 2)
+            scroller.fling(0, 0, 0, -(velocityY * flingScale).toInt(), 0, 0, -emulator.rows / 2, emulator.rows / 2)
         } else {
             scroller.fling(0, view.topRow, 0, -(velocityY * flingScale).toInt(), 0, 0, -emulator.screen.activeTranscriptRows, 0)
         }
