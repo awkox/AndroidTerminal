@@ -430,7 +430,7 @@ internal class TerminalEmulator(
         when (state) {
             EscapeState.CSI -> handleCsiStandard(command, args, argCount, subParams)
             EscapeState.CSI_QUESTIONMARK -> handleCsiQuestionMark(command, args, argCount)
-            EscapeState.CSI_GREATER_THAN -> handleCsiBiggerThan(command)
+            EscapeState.CSI_GREATER_THAN -> handleCsiGreaterThan(command)
             EscapeState.CSI_DOLLAR -> handleCsiDollar(command, args, argCount)
             EscapeState.CSI_DOUBLE_QUOTE -> handleCsiDoubleQuote(command, args)
             EscapeState.CSI_SINGLE_QUOTE -> handleCsiSingleQuote(command, args)
@@ -756,7 +756,7 @@ internal class TerminalEmulator(
         }
     }
 
-    private fun handleCsiBiggerThan(b: Int) {
+    private fun handleCsiGreaterThan(b: Int) {
         if (b == 'c'.code) writeString("\u001b[>41;320;0c")
     }
 

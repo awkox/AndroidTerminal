@@ -47,7 +47,7 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
                     EscapeState.CSI_UNSUPPORTED_PARAMETER_BYTE,
                     EscapeState.CSI_UNSUPPORTED_INTERMEDIATE_BYTE -> doCsiUnsupportedParameterOrIntermediateByte(b)
                     EscapeState.CSI_QUESTIONMARK -> doCsiQuestionMark(b)
-                    EscapeState.CSI_GREATER_THAN -> doCsiBiggerThan(b)
+                    EscapeState.CSI_GREATER_THAN -> doCsiGreaterThan(b)
 
                     EscapeState.CSI_EXCLAMATION,
                     EscapeState.CSI_DOLLAR,
@@ -157,7 +157,7 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
         }
     }
 
-    private fun doCsiBiggerThan(b: Int) {
+    private fun doCsiGreaterThan(b: Int) {
         handleCsiCommonArgs(b) {
             handler.onCsiCommand(EscapeState.CSI_GREATER_THAN, b, args, argIndex + 1, subParamSeparatorMask)
         }
