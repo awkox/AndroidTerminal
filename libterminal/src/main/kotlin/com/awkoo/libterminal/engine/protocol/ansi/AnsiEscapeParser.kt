@@ -6,9 +6,9 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
     private var mEscapeState = EscapeState.NONE
     private val mArgs = IntArray(MAX_ESCAPE_PARAMETERS)
     private var mArgIndex = 0
-    private var mArgsSubParamsBitSet = 0
+    private var subParamSeparatorMask = 0
     private val mOSCOrDeviceControlArgs = StringBuilder()
-    private var mContinueSequence = false
+    private var isSequenceIncomplete = false
 
     fun processCodePoint(b: Int) {
         when (mEscapeState) {
@@ -36,7 +36,7 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
                 if (mEscapeState == EscapeState.OSC) doOsc(b) else startEscapeSequence()
             }
             else -> {
-                mContinueSequence = false
+                isSequenceIncomplete = false
                 when (mEscapeState) {
                     EscapeState.NONE -> if (b >= 32) handler.onCodePoint(b)
                     EscapeState.ESC -> doEsc(b)
@@ -56,7 +56,7 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
                     EscapeState.CSI_QUESTIONMARK_ARG_DOLLAR,
                     EscapeState.CSI_ARGS_SPACE,
                     EscapeState.CSI_ARGS_ASTERIX -> {
-                        handler.onCsiCommand(mEscapeState, b, mArgs, mArgIndex + 1, mArgsSubParamsBitSet)
+                        handler.onCsiCommand(mEscapeState, b, mArgs, mArgIndex + 1, subParamSeparatorMask)
                     }
 
                     EscapeState.PERCENT -> { handler.onEscCommand(EscapeState.PERCENT, b); finishSequence() }
@@ -64,7 +64,7 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
                     EscapeState.OSC_ESC -> doOscEsc(b)
                     else -> unknownSequence(b)
                 }
-                if (!mContinueSequence) finishSequence()
+                if (!isSequenceIncomplete) finishSequence()
             }
         }
     }
@@ -73,12 +73,12 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
         mEscapeState = EscapeState.ESC
         mArgIndex = 0
         mArgs.fill(-1)
-        mArgsSubParamsBitSet = 0
+        subParamSeparatorMask = 0
     }
 
     private fun continueSequence(state: EscapeState) {
         mEscapeState = state
-        mContinueSequence = true
+        isSequenceIncomplete = true
     }
 
     private fun finishSequence() {
@@ -102,7 +102,7 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
                 if (mArgIndex + 1 < mArgs.size) {
                     mArgIndex++
                     if (b == ':'.code) {
-                        mArgsSubParamsBitSet = mArgsSubParamsBitSet or (1 shl mArgIndex)
+                        subParamSeparatorMask = subParamSeparatorMask or (1 shl mArgIndex)
                     }
                 }
                 continueSequence(mEscapeState)
@@ -143,7 +143,7 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
             '<', '=' -> continueSequence(EscapeState.CSI_UNSUPPORTED_PARAMETER_BYTE)
             ' ' -> continueSequence(EscapeState.CSI_ARGS_SPACE)
             else -> handleCsiCommonArgs(b) {
-                handler.onCsiCommand(EscapeState.CSI, b, mArgs, mArgIndex + 1, mArgsSubParamsBitSet)
+                handler.onCsiCommand(EscapeState.CSI, b, mArgs, mArgIndex + 1, subParamSeparatorMask)
             }
         }
     }
@@ -152,14 +152,14 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
         when (b.toChar()) {
             '$' -> continueSequence(EscapeState.CSI_QUESTIONMARK_ARG_DOLLAR)
             else -> handleCsiCommonArgs(b) {
-                handler.onCsiCommand(EscapeState.CSI_QUESTIONMARK, b, mArgs, mArgIndex + 1, mArgsSubParamsBitSet)
+                handler.onCsiCommand(EscapeState.CSI_QUESTIONMARK, b, mArgs, mArgIndex + 1, subParamSeparatorMask)
             }
         }
     }
 
     private fun doCsiBiggerThan(b: Int) {
         handleCsiCommonArgs(b) {
-            handler.onCsiCommand(EscapeState.CSI_BIGGERTHAN, b, mArgs, mArgIndex + 1, mArgsSubParamsBitSet)
+            handler.onCsiCommand(EscapeState.CSI_BIGGERTHAN, b, mArgs, mArgIndex + 1, subParamSeparatorMask)
         }
     }
 
@@ -266,7 +266,7 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
     fun reset() {
         mEscapeState = EscapeState.NONE
         mArgIndex = 0
-        mContinueSequence = false
+        isSequenceIncomplete = false
         mArgs.fill(-1)
         mOSCOrDeviceControlArgs.setLength(0)
     }

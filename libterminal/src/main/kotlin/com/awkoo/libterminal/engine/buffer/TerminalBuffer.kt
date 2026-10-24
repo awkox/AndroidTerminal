@@ -269,7 +269,7 @@ internal class TerminalBuffer(
         val rowsToCopy = min(oldScreenRows, newRows)
         for (externalRow in 0 until rowsToCopy) {
             val src = oldLines[(oldScreenFirstRow + externalRow).mod(oldTotalRows)] ?: continue
-            mLines[externalRow] = if (oldColumns == newColumns) src else copyRow(src, oldColumns, newColumns)
+            mLines[externalRow] = if (oldColumns == newColumns) src else copyRowResizing(src, oldColumns, newColumns)
         }
 
         return CursorCoord.pack(
@@ -278,7 +278,7 @@ internal class TerminalBuffer(
         )
     }
 
-    private fun copyRow(src: TerminalRow, oldColumns: Int, newColumns: Int): TerminalRow {
+    private fun copyRowResizing(src: TerminalRow, oldColumns: Int, newColumns: Int): TerminalRow {
         val dst = TerminalRow(newColumns, TextStyle.NORMAL)
         dst.copyInterval(src, 0, min(oldColumns, newColumns), 0)
         dst.copyLineWrapFrom(src)
@@ -308,11 +308,11 @@ internal class TerminalBuffer(
         mScreenFirstRow = (mScreenFirstRow + 1) % mTotalRows
         if (this.activeTranscriptRows < mTotalRows - mScreenRows) this.activeTranscriptRows++
 
-        blankRowAt(bottomMargin - 1, style)
+        clearRow(bottomMargin - 1, style)
     }
 
     /** 把指定外行复位为空白行：行对象存在时就地 [TerminalRow.clear]，否则分配新行。 */
-    private fun blankRowAt(externalRow: Int, style: TextStyle) {
+    private fun clearRow(externalRow: Int, style: TextStyle) {
         val internal = externalToInternalRow(externalRow)
         mLines[internal]?.clear(style) ?: run { mLines[internal] = TerminalRow(mColumns, style) }
     }
@@ -480,7 +480,7 @@ internal class TerminalBuffer(
 
         if (up) repeat(n) { rotateRegionUp(top, bottom) } else repeat(n) { rotateRegionDown(top, bottom) }
         val firstBlank = if (up) bottom - n else top
-        for (k in 0 until n) blankRowAt(firstBlank + k, style)
+        for (k in 0 until n) clearRow(firstBlank + k, style)
     }
 
     /**

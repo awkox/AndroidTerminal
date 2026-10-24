@@ -37,7 +37,7 @@ internal class TerminalRow(
     private var mText = CharArray((SPARE_CAPACITY_FACTOR * mColumns).toInt()) { ' ' }
 
     /** 已使用的字符数（Java char 单位）。 */
-    private var mSpaceUsed = 0
+    private var usedCharCount = 0
 
     /**
      * 行末是否因输出而自动换行。
@@ -62,7 +62,7 @@ internal class TerminalRow(
     }
 
     /** 各列的样式位，交错存储：偶数索引=主样式，奇数索引=扩展特效。以原始 Long 存储以避免装箱。 */
-    private val mStyle = LongArray(mColumns * 2)
+    private val styleAndEffectBits = LongArray(mColumns * 2)
 
     /** 本行是否包含宽度 != 1 的字符或代理项对，用于禁用快速路径。 */
     var mHasNonOneWidthOrSurrogateChars: Boolean = false
@@ -86,7 +86,7 @@ internal class TerminalRow(
 
     /** 已使用的 char 数（Java char 单位），作为 [textChars] 的读取上界。 */
     val charLength: Int
-        get() = mSpaceUsed
+        get() = usedCharCount
 
     /**
      * 从源行复制 [sourceX1] 到 [sourceX2)（不含）的内容到本行 [destinationX] 位置。
@@ -104,7 +104,7 @@ internal class TerminalRow(
         var startingFromSecondHalfOfWideChar =
             (sourceX1 > 0 && line.wideDisplayCharacterStartingAt(sourceX1 - 1))
         val sourceChars = if (this == line) line.mText.copyOf(line.mText.size) else line.mText
-        val sourceStyle = if (this == line) line.mStyle.copyOf() else line.mStyle
+        val sourceStyle = if (this == line) line.styleAndEffectBits.copyOf() else line.styleAndEffectBits
         var latestNonCombiningWidth = 0
         var i = x1
         while (i < x2) {
@@ -141,17 +141,17 @@ internal class TerminalRow(
      * 需要从头扫描累加显示宽度来定位。无宽字符时直接返回列号（O(1) 快速路径）。
      */
     private fun findStartOfColumn(column: Int): Int {
-        if (column == mColumns) return mSpaceUsed
+        if (column == mColumns) return usedCharCount
         if (!mHasNonOneWidthOrSurrogateChars) return column
 
-        mText.forEachColumn(0, mSpaceUsed) { i, col, _, w, charCount ->
+        mText.forEachColumn(0, usedCharCount) { i, col, _, w, charCount ->
             if (w > 0) {
                 val currentColumn = col + w
                 if (currentColumn == column) {
                     var newCharIndex = i + charCount
-                    while (newCharIndex < mSpaceUsed) {
+                    while (newCharIndex < usedCharCount) {
                         if (WcWidth.width(mText, newCharIndex) <= 0) {
-                            newCharIndex += mText.charCountAtSafe(newCharIndex, mSpaceUsed)
+                            newCharIndex += mText.charCountAtSafe(newCharIndex, usedCharCount)
                         } else {
                             break
                         }
@@ -163,7 +163,7 @@ internal class TerminalRow(
             }
             true
         }
-        return mSpaceUsed
+        return usedCharCount
     }
 
     /**
@@ -191,7 +191,7 @@ internal class TerminalRow(
         ) -> Boolean
     ) {
         var carriedStyleColumn = -1
-        mText.forEachColumn(0, mSpaceUsed) { charStart, column, codePoint, width, charCount ->
+        mText.forEachColumn(0, usedCharCount) { charStart, column, codePoint, width, charCount ->
             val rawStyle: Long
             val extEffect: Long
             if (width > 0) {
@@ -225,8 +225,8 @@ internal class TerminalRow(
      */
     fun startCharOfColumn(column: Int): Int {
         if (column <= 0) return 0
-        if (column >= mColumns) return mSpaceUsed
-        return findStartOfColumn(column).coerceAtMost(mSpaceUsed)
+        if (column >= mColumns) return usedCharCount
+        return findStartOfColumn(column).coerceAtMost(usedCharCount)
     }
 
     /**
@@ -235,11 +235,11 @@ internal class TerminalRow(
      * 宽字符的两个半格返回同一区间；行尾之后返回 [charLength]。
      */
     fun endCharOfColumn(column: Int): Int {
-        if (column >= mColumns) return mSpaceUsed
+        if (column >= mColumns) return usedCharCount
         val start = startCharOfColumn(column)
         val next = findStartOfColumn(column + 1)
         val end = if (next > start) next else findStartOfColumn(column + 2)
-        return end.coerceAtMost(mSpaceUsed)
+        return end.coerceAtMost(usedCharCount)
     }
 
     /**
@@ -257,20 +257,6 @@ internal class TerminalRow(
     }
 
     /**
-     * 本行内容占用的显示列数（列语义，非 char 数）。
-     *
-     * 行末宽字符无后半格可用时仍按其显示宽度计入，结果可能等于列数 + 1。
-     */
-    fun getEffectiveTextLength(): Int {
-        var width = 0
-        mText.forEachColumn(0, mSpaceUsed) { _, _, _, w, _ ->
-            if (w > 0) width += w
-            true
-        }
-        return width
-    }
-
-    /**
      * 把列号校准到字符边界：落在宽字符后半格内的列号按 [align] 吸附。
      *
      * 扫描到 NUL 即视为无内容并返回原列号。
@@ -278,7 +264,7 @@ internal class TerminalRow(
     fun snapToColumn(column: Int, align: SnapAlign): Int {
         if (!mHasNonOneWidthOrSurrogateChars) return column
 
-        mText.forEachColumn(0, mSpaceUsed) { _, col, codePoint, width, _ ->
+        mText.forEachColumn(0, usedCharCount) { _, col, codePoint, width, _ ->
             if (codePoint == 0) return@forEachColumn false
             if (column in (col + 1)..<col + width) {
                 return if (align == SnapAlign.Start) col else col + width
@@ -289,7 +275,7 @@ internal class TerminalRow(
     }
 
     private fun wideDisplayCharacterStartingAt(column: Int): Boolean {
-        mText.forEachColumn(0, mSpaceUsed) { _, col, _, w, _ ->
+        mText.forEachColumn(0, usedCharCount) { _, col, _, w, _ ->
             if (w > 0) {
                 if (col == column && w == 2) return true
                 if (col + w > column) return false
@@ -303,10 +289,10 @@ internal class TerminalRow(
         val ext = normalizeExtendedEffect(style.value, extendedEffect)
         if (!isBlank) mText.fill(' ')
         for (i in 0 until mColumns) {
-            mStyle[i * 2] = style.value
-            mStyle[i * 2 + 1] = ext
+            styleAndEffectBits[i * 2] = style.value
+            styleAndEffectBits[i * 2 + 1] = ext
         }
-        mSpaceUsed = mColumns
+        usedCharCount = mColumns
         mHasNonOneWidthOrSurrogateChars = false
         mLineWrap = false
         // 扩展槽中下划线位关闭时不可见的残留（形状已归零、颜色独立）不影响空白判定
@@ -345,8 +331,8 @@ internal class TerminalRow(
         if (!mHasNonOneWidthOrSurrogateChars) {
             // 快速路径：全为 ASCII 单宽字符，直接替换
             if (isAsciiPrintable) {
-                mStyle[columnToSet * 2] = style.value
-                mStyle[columnToSet * 2 + 1] = ext
+                styleAndEffectBits[columnToSet * 2] = style.value
+                styleAndEffectBits[columnToSet * 2 + 1] = ext
                 mText[columnToSet] = codePoint.toChar()
                 if (codePoint != 0x20) isBlank = false
                 return
@@ -354,8 +340,8 @@ internal class TerminalRow(
             if (codePoint >= Character.MIN_SUPPLEMENTARY_CODE_POINT || newCodePointDisplayWidth != 1) {
                 mHasNonOneWidthOrSurrogateChars = true
             } else {
-                mStyle[columnToSet * 2] = style.value
-                mStyle[columnToSet * 2 + 1] = ext
+                styleAndEffectBits[columnToSet * 2] = style.value
+                styleAndEffectBits[columnToSet * 2 + 1] = ext
                 mText[columnToSet] = codePoint.toChar()
                 return
             }
@@ -377,8 +363,8 @@ internal class TerminalRow(
         }
 
         // 在 columnToSet 调整（组合字符合并）之后写入样式，确保写入正确的列
-        mStyle[columnToSet * 2] = style.value
-        mStyle[columnToSet * 2 + 1] = ext
+        styleAndEffectBits[columnToSet * 2] = style.value
+        styleAndEffectBits[columnToSet * 2 + 1] = ext
 
         var text = mText
         val oldStartOfColumnIndex = findStartOfColumn(columnToSet)
@@ -404,7 +390,7 @@ internal class TerminalRow(
         val newNextColumnIndex = oldStartOfColumnIndex + newCharactersUsedForColumn
 
         text = shiftTextBuffer(text, oldNextColumnIndex, newNextColumnIndex, newCharactersUsedForColumn - oldCharactersUsedForColumn)
-        mSpaceUsed += newCharactersUsedForColumn - oldCharactersUsedForColumn
+        usedCharCount += newCharactersUsedForColumn - oldCharactersUsedForColumn
 
         Character.toChars(
             codePoint,
@@ -425,15 +411,15 @@ internal class TerminalRow(
             val oldEndOfColumnIndex = findStartOfColumn(columnToSet + oldCodePointDisplayWidth)
             oldEndOfColumnIndex - oldStartOfColumnIndex
         } else {
-            mSpaceUsed - oldStartOfColumnIndex
+            usedCharCount - oldStartOfColumnIndex
         }
     }
 
     private fun shiftTextBuffer(text: CharArray, oldNextColumnIndex: Int, newNextColumnIndex: Int, charDifference: Int): CharArray {
         var text = text
         if (charDifference > 0) {
-            val oldCharactersAfterColumn = mSpaceUsed - oldNextColumnIndex
-            if (mSpaceUsed + charDifference > text.size) {
+            val oldCharactersAfterColumn = usedCharCount - oldNextColumnIndex
+            if (usedCharCount + charDifference > text.size) {
                 val newText = CharArray(text.size + mColumns)
                 text.copyInto(destination = newText, endIndex = oldNextColumnIndex)
                 text.copyInto(
@@ -457,7 +443,7 @@ internal class TerminalRow(
                 destination = text,
                 destinationOffset = newNextColumnIndex,
                 startIndex = oldNextColumnIndex,
-                endIndex = mSpaceUsed
+                endIndex = usedCharCount
             )
         }
         return text
@@ -477,14 +463,14 @@ internal class TerminalRow(
             // 且行末没有后半格内容需要保留，右移插入占位空格并 ++mSpaceUsed 会产出幽灵列。
             // 故行末只保留 setChar 已写入的单列降级结果，整个后半格调整跳过。
             if (columnToSet + 1 < mColumns) {
-                if (mSpaceUsed + 1 > text.size) {
+                if (usedCharCount + 1 > text.size) {
                     val newText = CharArray(text.size + mColumns)
                     text.copyInto(destination = newText, endIndex = newNextColumnIndex)
                     text.copyInto(
                         destination = newText,
                         destinationOffset = newNextColumnIndex + 1,
                         startIndex = newNextColumnIndex,
-                        endIndex = mSpaceUsed
+                        endIndex = usedCharCount
                     )
                     text = newText
                     mText = text
@@ -493,13 +479,13 @@ internal class TerminalRow(
                         destination = text,
                         destinationOffset = newNextColumnIndex + 1,
                         startIndex = newNextColumnIndex,
-                        endIndex = mSpaceUsed
+                        endIndex = usedCharCount
                     )
                 }
                 text[newNextColumnIndex] = ' '
-                mStyle[(columnToSet + 1) * 2] = style.value
-                mStyle[(columnToSet + 1) * 2 + 1] = extendedEffect
-                ++mSpaceUsed
+                styleAndEffectBits[(columnToSet + 1) * 2] = style.value
+                styleAndEffectBits[(columnToSet + 1) * 2 + 1] = extendedEffect
+                ++usedCharCount
             }
         } else if (oldCodePointDisplayWidth == 1 && newCodePointDisplayWidth == 2) {
             if (columnToSet == mColumns - 1) {
@@ -509,7 +495,7 @@ internal class TerminalRow(
                 }
                 text[newNextColumnIndex - 1] = ' '.code.toChar()
             } else if (columnToSet == mColumns - 2) {
-                mSpaceUsed = newNextColumnIndex
+                usedCharCount = newNextColumnIndex
             } else {
                 val newNextNextColumnIndex =
                     newNextColumnIndex + (if (mText[newNextColumnIndex].isHighSurrogate()) 2 else 1)
@@ -519,15 +505,15 @@ internal class TerminalRow(
                     destination = text,
                     destinationOffset = newNextColumnIndex,
                     startIndex = newNextNextColumnIndex,
-                    endIndex = mSpaceUsed
+                    endIndex = usedCharCount
                 )
-                mSpaceUsed -= nextLen
+                usedCharCount -= nextLen
             }
         }
     }
 
     inline fun getStyle(column: Int): TextStyle {
-        return TextStyle(mStyle[column * 2])
+        return TextStyle(styleAndEffectBits[column * 2])
     }
 
     /**
@@ -537,15 +523,15 @@ internal class TerminalRow(
      * 会在测试中立即暴露，而不是等渲染出错。
      */
     inline fun getRawStyle(column: Int): Long {
-        val raw = mStyle[column * 2]
+        val raw = styleAndEffectBits[column * 2]
         assert(
             raw and TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE.toLong() != 0L ||
-                (mStyle[column * 2 + 1] and TextStyle.EXT_UNDERLINE_STYLE_MASK) == 0L
-        ) { "下划线位关闭时扩展槽下划线形状必须为 0：column=$column raw=$raw ext=${mStyle[column * 2 + 1]}" }
+                (styleAndEffectBits[column * 2 + 1] and TextStyle.EXT_UNDERLINE_STYLE_MASK) == 0L
+        ) { "下划线位关闭时扩展槽下划线形状必须为 0：column=$column raw=$raw ext=${styleAndEffectBits[column * 2 + 1]}" }
         return raw
     }
 
-    inline fun getExtendedEffect(column: Int): Long = mStyle[column * 2 + 1]
+    inline fun getExtendedEffect(column: Int): Long = styleAndEffectBits[column * 2 + 1]
 
     /**
      * 修改指定列主样式的特效位，保证双槽位状态一致。
@@ -555,16 +541,16 @@ internal class TerminalRow(
      * @param reverse true=翻转 bits 中的位（bits 中原本置位的清零、清零的置位）
      */
     fun modifyEffect(column: Int, bits: Int, setOrClear: Boolean, reverse: Boolean) {
-        val raw = mStyle[column * 2]
+        val raw = styleAndEffectBits[column * 2]
         val effect = (raw and TextStyle.EFFECT_MASK).toInt()
         val newEffect = when {
             reverse -> (effect and bits.inv()) or (bits and effect.inv())
             setOrClear -> effect or bits
             else -> effect and bits.inv()
         }
-        mStyle[column * 2] =
+        styleAndEffectBits[column * 2] =
             (raw and TextStyle.EFFECT_MASK.inv()) or (newEffect.toLong() and TextStyle.EFFECT_MASK)
-        mStyle[column * 2 + 1] = normalizeExtendedEffect(mStyle[column * 2], mStyle[column * 2 + 1])
+        styleAndEffectBits[column * 2 + 1] = normalizeExtendedEffect(styleAndEffectBits[column * 2], styleAndEffectBits[column * 2 + 1])
         // 特效位非零即非默认样式，与 setChar 的空白判定口径一致；
         // 清位后无法在不扫描整行的前提下判定能否恢复空白，保守保持非空白
         if (newEffect != 0) isBlank = false
@@ -575,7 +561,7 @@ internal class TerminalRow(
      *
      * 颜色位（bit 3 及以上）独立于开关（SGR 58 可单独设色），予以保留。
      * 下划线形状是位布局上唯一跨槽位耦合的字段，收口在此处，
-     * 使 [mStyle] 恒满足「开关关闭 ⇒ 形状为 0」的不变量。
+     * 使 [styleAndEffectBits] 恒满足「开关关闭 ⇒ 形状为 0」的不变量。
      */
     private fun normalizeExtendedEffect(styleValue: Long, extendedEffect: Long): Long {
         val underlineOn = styleValue and TextStyle.CHARACTER_ATTRIBUTE_UNDERLINE.toLong() != 0L

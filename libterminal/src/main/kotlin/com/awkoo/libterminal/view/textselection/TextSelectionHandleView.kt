@@ -18,7 +18,7 @@ internal class TextSelectionHandleView(
     private val mInitialOrientation: Int
 ) : View(terminalView.context) {
     
-    private var mHandle: PopupWindow? = null
+    private var popup: PopupWindow? = null
     private lateinit var mHandleDrawable: Drawable
 
     var isDragging: Boolean = false
@@ -46,7 +46,7 @@ internal class TextSelectionHandleView(
     }
 
     private fun initHandle() {
-        mHandle = PopupWindow(
+        popup = PopupWindow(
             terminalView.context, null,
             android.R.attr.textSelectHandleWindowStyle
         ).also {
@@ -88,16 +88,16 @@ internal class TextSelectionHandleView(
         coords[0] += mPointX
         coords[1] += mPointY
 
-        mHandle?.showAtLocation(terminalView, 0, coords[0], coords[1])
+        popup?.showAtLocation(terminalView, 0, coords[0], coords[1])
     }
 
     fun hide() {
         this.isDragging = false
-        mHandle?.let {
+        popup?.let {
             it.dismiss()
             removeFromParent()
         }
-        mHandle = null
+        popup = null
         invalidate()
     }
 
@@ -122,7 +122,7 @@ internal class TextSelectionHandleView(
 
         if (this.isShowing) {
             val coords = windowCoords()
-            mHandle?.update(coords[0] + mPointX, coords[1] + mPointY, width, height)
+            popup?.update(coords[0] + mPointX, coords[1] + mPointY, width, height)
         } else {
             show()
         }
@@ -180,7 +180,7 @@ internal class TextSelectionHandleView(
         setMeasuredDimension(mHandleDrawable.intrinsicWidth, mHandleDrawable.intrinsicHeight)
     }
 
-    val isShowing: Boolean get() = mHandle?.isShowing ?: false
+    val isShowing: Boolean get() = popup?.isShowing ?: false
 
     companion object {
         const val LEFT: Int = 0

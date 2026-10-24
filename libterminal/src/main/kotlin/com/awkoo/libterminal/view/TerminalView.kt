@@ -126,10 +126,10 @@ class TerminalView(
         sessionProvider = { currentSession },
         emulatorProvider = { mEmulator },
         pokeCursor = { cursorBlinker.poke() },
-        scrollPages = { pages ->
+        scrollRows = { scrollRows ->
             val time = SystemClock.uptimeMillis()
             val motionEvent = MotionEvent.obtain(time, time, MotionEvent.ACTION_DOWN, 0f, 0f, 0)
-            touchHandler.doScroll(motionEvent, pages)
+            touchHandler.doScroll(motionEvent, scrollRows)
             motionEvent.recycle()
         },
         isSelectingText = { isSelectingText },
@@ -186,7 +186,7 @@ class TerminalView(
         synchronized(session.emulator) {
             session.emulator.colorScheme = colorScheme
         }
-        currentPalette = TerminalPaletteResolver(colorScheme, session.emulator.mPalette)
+        currentPalette = TerminalPaletteResolver(colorScheme, session.emulator.oscColorOverrides)
     }
 
     /**
@@ -267,7 +267,7 @@ class TerminalView(
     internal val isSelectingText: Boolean
         get() = textSelectionCursorController.isActive
 
-    private val mDefaultSelectors: IntArray = intArrayOf(-1, -1, -1, -1)
+    private val selectionBoundsScratch: IntArray = intArrayOf(-1, -1, -1, -1)
 
     internal fun startTextSelectionMode(event: MotionEvent) {
         if (!requestFocus()) return
@@ -281,13 +281,13 @@ class TerminalView(
     }
 
     private fun decrementYTextSelectionCursors(decrement: Int) {
-        textSelectionCursorController.decrementYTextSelectionCursors(decrement)
+        textSelectionCursorController.shiftSelectionRows(decrement)
     }
 
     private val textSelectionActionMode: ActionMode?
         get() = textSelectionCursorController.actionMode
 
-    private val mShowFloatingToolbar: Runnable = Runnable {
+    private val restoreToolbarAction: Runnable = Runnable {
         this@TerminalView.textSelectionActionMode?.hide(0)
     }
 
@@ -301,13 +301,13 @@ class TerminalView(
     private fun showFloatingToolbar() {
         textSelectionActionMode?.let {
             val delay = ViewConfiguration.getDoubleTapTimeout()
-            postDelayed(mShowFloatingToolbar, delay.toLong())
+            postDelayed(restoreToolbarAction, delay.toLong())
         }
     }
 
     private fun hideFloatingToolbar() {
         textSelectionActionMode?.let {
-            removeCallbacks(mShowFloatingToolbar)
+            removeCallbacks(restoreToolbarAction)
             it.hide(-1)
         }
     }
@@ -381,7 +381,7 @@ class TerminalView(
         val renderer = mRenderer
         return CursorCoord.pack(
             CellPoint.xToColumn(x, renderer.fontWidth),
-            CellPoint.yToRow(y, renderer.fontLineSpacing, renderer.mFontLineSpacingAndAscent)
+            CellPoint.yToRow(y, renderer.fontLineSpacing, renderer.baselineOffset)
         )
     }
 
@@ -393,7 +393,7 @@ class TerminalView(
     internal fun bufferCellAt(x: Float, y: Float): CursorCoord {
         val renderer = mRenderer
         val column = CellPoint.xToColumn(x, renderer.fontWidth)
-        val row = CellPoint.yToRow(y, renderer.fontLineSpacing, renderer.mFontLineSpacingAndAscent) + topRow
+        val row = CellPoint.yToRow(y, renderer.fontLineSpacing, renderer.baselineOffset) + topRow
         val emulator = mEmulator ?: return CursorCoord.pack(column, row)
         val screen = emulator.screen
         return CursorCoord.pack(screen.clampColumn(column), screen.clampRow(row))
@@ -499,7 +499,7 @@ class TerminalView(
         val emulator = mEmulator ?: return
         val resolver = currentPalette ?: return
         canvas.drawColor(resolver.background)
-        val sel = mDefaultSelectors
+        val sel = selectionBoundsScratch
         textSelectionCursorController.getSelectors(sel)
         synchronized(emulator) {
             mRenderer.render(emulator, resolver, canvas, this.topRow, sel[0], sel[1], sel[2], sel[3])
@@ -519,7 +519,7 @@ class TerminalView(
         if (viewWidth == 0 || viewHeight == 0) return
 
         val newColumns = max(4, (viewWidth / mRenderer.fontWidth).toInt())
-        val newRows = max(4, (viewHeight - mRenderer.mFontLineSpacingAndAscent) / mRenderer.fontLineSpacing)
+        val newRows = max(4, (viewHeight - mRenderer.baselineOffset) / mRenderer.fontLineSpacing)
 
         if (newColumns != emulator.mColumns || newRows != emulator.mRows) {
             currentSession.updateSize(newColumns, newRows, mRenderer.fontWidth.toInt(), mRenderer.fontLineSpacing)

@@ -1,6 +1,5 @@
 package com.awkoo.libterminal.engine
 
-import androidx.annotation.Keep
 import com.awkoo.libterminal.process.ITerminalProcess
 import com.awkoo.libterminal.text.Utf8Decoder
 import kotlinx.coroutines.CoroutineScope
@@ -233,7 +232,7 @@ class TerminalSession(
     }
 
     /** 将码点编码为 UTF-8 后写入进程输出的缓冲区。 */
-    private val mUtf8InputBuffer = ByteArray(5)
+    private val writeBuffer = ByteArray(5)
 
     /** 非法码点（超出 Unicode 范围或落在代理区）统一降级为替换字符。 */
     private fun sanitizeCodePoint(codePoint: Int): Int =
@@ -248,33 +247,33 @@ class TerminalSession(
         val codePoint = sanitizeCodePoint(rawCodePoint)
 
         var bufferPosition = 0
-        if (prependEscape) mUtf8InputBuffer[bufferPosition++] = 27
+        if (prependEscape) writeBuffer[bufferPosition++] = 27
 
         if (codePoint <=  /* 7 位 */127) {
-            mUtf8InputBuffer[bufferPosition++] = codePoint.toByte()
+            writeBuffer[bufferPosition++] = codePoint.toByte()
         } else if (codePoint <=  /* 11 位 */2047) {
             /* 110xxxxx 首字节，取高 5 位 */
-            mUtf8InputBuffer[bufferPosition++] = (192 or (codePoint shr 6)).toByte()
+            writeBuffer[bufferPosition++] = (192 or (codePoint shr 6)).toByte()
             /* 10xxxxxx 后续字节，取低 6 位 */
-            mUtf8InputBuffer[bufferPosition++] = (128 or (codePoint and 63)).toByte()
+            writeBuffer[bufferPosition++] = (128 or (codePoint and 63)).toByte()
         } else if (codePoint <=  /* 16 位 */65535) {
             /* 1110xxxx 首字节，取高 4 位 */
-            mUtf8InputBuffer[bufferPosition++] = (224 or (codePoint shr 12)).toByte()
+            writeBuffer[bufferPosition++] = (224 or (codePoint shr 12)).toByte()
             /* 10xxxxxx 后续字节，取次高 6 位 */
-            mUtf8InputBuffer[bufferPosition++] = (128 or ((codePoint shr 6) and 63)).toByte()
+            writeBuffer[bufferPosition++] = (128 or ((codePoint shr 6) and 63)).toByte()
             /* 10xxxxxx 后续字节，取低 6 位 */
-            mUtf8InputBuffer[bufferPosition++] = (128 or (codePoint and 63)).toByte()
+            writeBuffer[bufferPosition++] = (128 or (codePoint and 63)).toByte()
         } else { /* sanitizeCodePoint 已保证 codePoint <= 1114111，最多 21 位 = 0b111111111111111111111 */
             /* 11110xxx 首字节，取高 3 位 */
-            mUtf8InputBuffer[bufferPosition++] = (240 or (codePoint shr 18)).toByte()
+            writeBuffer[bufferPosition++] = (240 or (codePoint shr 18)).toByte()
             /* 10xxxxxx 后续字节，取第 12~17 位 */
-            mUtf8InputBuffer[bufferPosition++] = (128 or ((codePoint shr 12) and 63)).toByte()
+            writeBuffer[bufferPosition++] = (128 or ((codePoint shr 12) and 63)).toByte()
             /* 10xxxxxx 后续字节，取第 6~11 位 */
-            mUtf8InputBuffer[bufferPosition++] = (128 or ((codePoint shr 6) and 63)).toByte()
+            writeBuffer[bufferPosition++] = (128 or ((codePoint shr 6) and 63)).toByte()
             /* 10xxxxxx 后续字节，取低 6 位 */
-            mUtf8InputBuffer[bufferPosition++] = (128 or (codePoint and 63)).toByte()
+            writeBuffer[bufferPosition++] = (128 or (codePoint and 63)).toByte()
         }
-        write(mUtf8InputBuffer.copyOf(bufferPosition))
+        write(writeBuffer.copyOf(bufferPosition))
     }
 
     /** 屏幕变更通知事件流，供模块内 view 层订阅重绘。 */

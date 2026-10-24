@@ -18,7 +18,7 @@ internal class KeyInputProcessor(
     private val sessionProvider: () -> TerminalSession?,
     private val emulatorProvider: () -> TerminalEmulator?,
     private val pokeCursor: () -> Unit,
-    private val scrollPages: (Int) -> Unit,
+    private val scrollRows: (Int) -> Unit,
     private val isSelectingText: () -> Boolean,
     private val stopTextSelection: () -> Unit,
     private val modifierReader: () -> ExtraKeysModifierSnapshot
@@ -143,7 +143,7 @@ internal class KeyInputProcessor(
         val shiftDown = (keyMod and KeySequenceEncoder.KEYMOD_SHIFT) != 0
         val pageKey = keyCode == KeyEvent.KEYCODE_PAGE_UP || keyCode == KeyEvent.KEYCODE_PAGE_DOWN
         if (shiftDown && pageKey) {
-            scrollPages(if (keyCode == KeyEvent.KEYCODE_PAGE_UP) -emulator.mRows else emulator.mRows)
+            scrollRows(if (keyCode == KeyEvent.KEYCODE_PAGE_UP) -emulator.mRows else emulator.mRows)
             return true
         }
         return false

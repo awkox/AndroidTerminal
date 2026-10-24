@@ -30,7 +30,7 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
     val fontLineSpacing: Int
     private val mFontAscent: Int
     @JvmField
-    val mFontLineSpacingAndAscent: Int
+    val baselineOffset: Int
     private val asciiMeasures = FloatArray(127)
 
     // 非 ASCII 的 BMP 码点测量宽度缓存（-1=未测量）。测量仅依赖码点与恒定画笔，跨帧有效
@@ -54,7 +54,7 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
 
         this.fontLineSpacing = ceil(mTextPaint.fontSpacing.toDouble()).toInt()
         mFontAscent = ceil(mTextPaint.ascent().toDouble()).toInt()
-        mFontLineSpacingAndAscent = this.fontLineSpacing + mFontAscent
+        baselineOffset = this.fontLineSpacing + mFontAscent
         this.fontWidth = mTextPaint.measureText("X")
 
         val oneChar = CharArray(1)
@@ -125,7 +125,7 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
             PorterDuff.Mode.SRC
         )
 
-        var heightOffset = mFontLineSpacingAndAscent.toFloat()
+        var heightOffset = baselineOffset.toFloat()
         for (row in topRow..<endRow) {
             heightOffset += fontLineSpacing.toFloat()
             renderRow(canvas, mEmulator, row, heightOffset, columns, cursorCol, cursorRow, cursorVisible, selectionY1, selectionY2, selectionX1, selectionX2, reverseVideo, resolver, cursorShape, screen)
@@ -315,12 +315,12 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
 
         if (backColor != resolver.background) {
             mTextPaint.color = backColor
-            canvas.drawRect(left, y - mFontLineSpacingAndAscent + mFontAscent, right, y, mTextPaint)
+            canvas.drawRect(left, y - baselineOffset + mFontAscent, right, y, mTextPaint)
         }
 
         if (cursor != 0) {
             mTextPaint.color = cursor
-            var cursorHeight = (mFontLineSpacingAndAscent - mFontAscent).toFloat()
+            var cursorHeight = (baselineOffset - mFontAscent).toFloat()
             if (cursorStyle == TerminalCursorStyle.UNDERLINE) cursorHeight /= 4.0.toFloat()
             else if (cursorStyle == TerminalCursorStyle.BAR) right -= (((right - left) * 3) / 4.0).toFloat()
             canvas.drawRect(left, y - cursorHeight, right, y, mTextPaint)
@@ -343,7 +343,7 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
                 startCharIndex,
                 runWidthChars,
                 left,
-                y - mFontLineSpacingAndAscent,
+                y - baselineOffset,
                 false,
                 mTextPaint
             )
@@ -363,7 +363,7 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
             }
 
             // 矩阵已还原，使用绝对坐标绘制，避免字体宽度缩放导致线条粗细变形
-            val ulY = y - mFontLineSpacingAndAscent + mUnderlineOffset
+            val ulY = y - baselineOffset + mUnderlineOffset
             val absoluteLeft = startColumn * this.fontWidth
             val absoluteRight = absoluteLeft + runWidthColumns * this.fontWidth
 

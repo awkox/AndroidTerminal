@@ -89,9 +89,9 @@ internal class TerminalEmulator(
     private val mSavedStateMain = SavedScreenState()
     private val mSavedStateAlt = SavedScreenState()
 
-    private var mUseLineDrawingG0 = false
-    private var mUseLineDrawingG1 = false
-    private var mUseLineDrawingUsesG0 = true
+    private var g0IsLineDrawing = false
+    private var g1IsLineDrawing = false
+    private var isG0shiftedIn = true
 
     // DEC 私有模式位状态注册表（当前位 + 已保存位）
     private val decModes = DecModeRegistry()
@@ -101,7 +101,7 @@ internal class TerminalEmulator(
 
     /** shell 通过 OSC 动态改色的稀疏覆盖板（独立于主题基底，复位只清空本板）。 */
     @JvmField
-    val mPalette: SparsePalette = SparsePalette()
+    val oscColorOverrides: SparsePalette = SparsePalette()
 
     /** 当前主题基底（深/浅），构造默认深色，外观层可在绑定会话时按需替换为浅色基线。 */
     @JvmField
@@ -120,9 +120,9 @@ internal class TerminalEmulator(
         state.mSavedUnderlineStyle = rendition.underlineStyle
         state.mSavedUnderlineColor = rendition.underlineColor
         state.mSavedDecFlags = decModes.current
-        state.mUseLineDrawingG0 = mUseLineDrawingG0
-        state.mUseLineDrawingG1 = mUseLineDrawingG1
-        state.mUseLineDrawingUsesG0 = mUseLineDrawingUsesG0
+        state.mUseLineDrawingG0 = g0IsLineDrawing
+        state.mUseLineDrawingG1 = g1IsLineDrawing
+        state.mUseLineDrawingUsesG0 = isG0shiftedIn
     }
 
     private fun restoreCursor() {
@@ -134,13 +134,13 @@ internal class TerminalEmulator(
         rendition.underlineStyle = state.mSavedUnderlineStyle
         rendition.underlineColor = state.mSavedUnderlineColor
         decModes.restoreAutowrapAndOrigin(state.mSavedDecFlags)
-        mUseLineDrawingG0 = state.mUseLineDrawingG0
-        mUseLineDrawingG1 = state.mUseLineDrawingG1
-        mUseLineDrawingUsesG0 = state.mUseLineDrawingUsesG0
+        g0IsLineDrawing = state.mUseLineDrawingG0
+        g1IsLineDrawing = state.mUseLineDrawingG1
+        isG0shiftedIn = state.mUseLineDrawingUsesG0
     }
 
     private var mInsertMode = false
-    private var mTabStop = BooleanArray(mColumns)
+    private var tabStops = BooleanArray(mColumns)
 
     @Volatile @JvmField
     var isCursorBlinkingEnabled = false
@@ -152,10 +152,10 @@ internal class TerminalEmulator(
     @Volatile @JvmField
     var textBlinkState = false
 
-    private var mLastEmittedCodePoint = -1
+    private var lastPrintedCodePoint = -1
 
     // OSC 处理器：拥有标题状态与剪贴板事件流，依赖稀疏覆盖板、主题基底与写回回调
-    private val osc = OscHandler(mPalette, { colorScheme }, writeString)
+    private val osc = OscHandler(oscColorOverrides, { colorScheme }, writeString)
 
     // 输入序列编码器：将鼠标/焦点/粘贴事件编码为发往 shell 的转义序列
     private val inputEncoder = InputSequenceEncoder(writeString, writeByteArray)
@@ -181,15 +181,15 @@ internal class TerminalEmulator(
         mAboutToAutoWrap = false
         rendition.reset()
         setDefaultTabStops()
-        mUseLineDrawingG1 = false
-        mUseLineDrawingG0 = false
-        mUseLineDrawingUsesG0 = true
+        g1IsLineDrawing = false
+        g0IsLineDrawing = false
+        isG0shiftedIn = true
         mSavedStateMain.resetDefaults()
         mSavedStateAlt.resetDefaults()
         decModes.resetDefault()
         mSavedStateMain.mSavedDecFlags = decModes.current
         mSavedStateAlt.mSavedDecFlags = decModes.current
-        mPalette.resetAll()
+        oscColorOverrides.resetAll()
         utf8Decoder.reset()
         ansiParser.reset()
     }
@@ -208,11 +208,11 @@ internal class TerminalEmulator(
             }
             if (mColumns != columns) {
                 val oldColumns = mColumns
-                val oldTabStop = mTabStop
+                val oldTabStop = tabStops
                 mColumns = columns
-                mTabStop = BooleanArray(mColumns)
+                tabStops = BooleanArray(mColumns)
                 setDefaultTabStops()
-                oldTabStop.copyInto(mTabStop, endIndex = min(oldColumns, columns))
+                oldTabStop.copyInto(tabStops, endIndex = min(oldColumns, columns))
                 mLeftMargin = 0
                 mRightMargin = mColumns
             }
@@ -235,7 +235,7 @@ internal class TerminalEmulator(
     }
 
     private fun setDefaultTabStops() {
-        for (i in 0 until mColumns) mTabStop[i] = (i and 7) == 0 && i != 0
+        for (i in 0 until mColumns) tabStops[i] = (i and 7) == 0 && i != 0
     }
 
     private fun isDecsetInternalBitSet(bit: Int) = decModes.isSet(bit)
@@ -257,8 +257,8 @@ internal class TerminalEmulator(
 
     // 输入冻结状态：为真时 append 的字节只进缓存队列而不解码，
     // 用于文本选择期间冻结屏幕，解除后按序重放。全部字段仅在 synchronized(emulator) 内访问。
-    private var mInputPaused: Boolean = false
-    private val mFrozenInputQueue = ArrayDeque<ByteArray>()
+    private var isPaused: Boolean = false
+    private val pausedQueue = ArrayDeque<ByteArray>()
 
     val isReverseVideo: Boolean get() = isDecsetInternalBitSet(DECSET_BIT_REVERSE_VIDEO)
     val isCursorEnabled: Boolean get() = isDecsetInternalBitSet(DECSET_BIT_CURSOR_ENABLED)
@@ -286,9 +286,9 @@ internal class TerminalEmulator(
         get() = isDecsetInternalBitSet(DECSET_BIT_MOUSE_TRACKING_ANY_EVENT)
 
     fun append(buffer: ByteArray, length: Int) {
-        if (mInputPaused) {
+        if (isPaused) {
             // 文本选择期间冻结屏幕：仅缓存字节，不进入解码，整屏保持不变
-            mFrozenInputQueue.add(buffer.copyOf(length))
+            pausedQueue.add(buffer.copyOf(length))
             return
         }
         utf8Decoder.decode(buffer, length)
@@ -300,12 +300,12 @@ internal class TerminalEmulator(
      * frozen 为真时后续 [append] 的原始字节被缓存而不解码（屏幕完全静止）；
      * 为假时按序重放缓存并恢复实时。需在 synchronized(emulator) 内调用。
      */
-    fun setInputPaused(frozen: Boolean) {
-        if (frozen == mInputPaused) return
-        mInputPaused = frozen
-        if (!frozen) {
-            while (mFrozenInputQueue.isNotEmpty()) {
-                val bytes = mFrozenInputQueue.removeFirst()
+    fun setInputPaused(paused: Boolean) {
+        if (paused == isPaused) return
+        isPaused = paused
+        if (!paused) {
+            while (pausedQueue.isNotEmpty()) {
+                val bytes = pausedQueue.removeFirst()
                 utf8Decoder.decode(bytes, bytes.size)
             }
         }
@@ -345,11 +345,11 @@ internal class TerminalEmulator(
     }
 
     override fun onShiftIn() {
-        mUseLineDrawingUsesG0 = true
+        isG0shiftedIn = true
     }
 
     override fun onShiftOut() {
-        mUseLineDrawingUsesG0 = false
+        isG0shiftedIn = false
     }
 
     override fun onEscCommand(state: EscapeState, command: Int) {
@@ -359,8 +359,8 @@ internal class TerminalEmulator(
                 if (command == '8'.code) screen.blockSet(0, 0, mColumns, mRows, 'E'.code, rendition.style)
             }
 
-            EscapeState.SELECT_LEFT_PAREN -> mUseLineDrawingG0 = (command == '0'.code)
-            EscapeState.SELECT_RIGHT_PAREN -> mUseLineDrawingG1 = (command == '0'.code)
+            EscapeState.SELECT_LEFT_PAREN -> g0IsLineDrawing = (command == '0'.code)
+            EscapeState.SELECT_RIGHT_PAREN -> g1IsLineDrawing = (command == '0'.code)
             EscapeState.PERCENT -> {} // 字符集选择，当前忽略
             else -> {}
         }
@@ -398,7 +398,7 @@ internal class TerminalEmulator(
             }
 
             'F' -> {} // 仅 xterm 的 hpLowerleftBugCompat 资源（默认 false）开启时才移动光标，默认与其余桌面终端一致忽略
-            'H' -> mTabStop[mCursorCol] = true
+            'H' -> tabStops[mCursorCol] = true
             'M' -> if (mCursorRow <= mTopMargin) {
                 screen.shiftLines(
                     mTopMargin,
@@ -530,7 +530,7 @@ internal class TerminalEmulator(
                 var numberOfTabs = AnsiEscapeParser.getArg(args, 0, 1, true)
                 var newCol = mCursorCol
                 for (i in (mCursorCol - 1) downTo 0) {
-                    if (mTabStop[i]) {
+                    if (tabStops[i]) {
                         if (--numberOfTabs == 0) {
                             newCol = max(i, mLeftMargin)
                             break
@@ -542,9 +542,9 @@ internal class TerminalEmulator(
 
             '`' -> setCursorColRespectingOriginMode(AnsiEscapeParser.getArg(args, 0, 1, true) - 1)
             'b' -> {
-                if (mLastEmittedCodePoint != -1) {
+                if (lastPrintedCodePoint != -1) {
                     val numRepeat = AnsiEscapeParser.getArg(args, 0, 1, true)
-                    for (i in 0 until numRepeat) emitCodePoint(mLastEmittedCodePoint)
+                    for (i in 0 until numRepeat) emitCodePoint(lastPrintedCodePoint)
                 }
             }
 
@@ -565,8 +565,8 @@ internal class TerminalEmulator(
             }
 
             'g' -> when (AnsiEscapeParser.getArg(args, 0, 0, true)) {
-                0 -> mTabStop[mCursorCol] = false
-                3 -> mTabStop.fill(false)
+                0 -> tabStops[mCursorCol] = false
+                3 -> tabStops.fill(false)
             }
 
             'h' -> doSetMode(true, AnsiEscapeParser.getArg(args, 0, 0, true))
@@ -986,9 +986,9 @@ internal class TerminalEmulator(
      * 5. 更新光标位置和预备换行标志
      */
     private fun emitCodePoint(codePoint: Int) {
-        mLastEmittedCodePoint = codePoint
+        lastPrintedCodePoint = codePoint
         var cp = codePoint
-        if (if (mUseLineDrawingUsesG0) mUseLineDrawingG0 else mUseLineDrawingG1) {
+        if (if (isG0shiftedIn) g0IsLineDrawing else g1IsLineDrawing) {
             cp = mapSpecialCharacters(cp)
         }
 
@@ -1119,7 +1119,7 @@ internal class TerminalEmulator(
 
     private fun nextTabStop(numTabs: Int): Int {
         var n = numTabs
-        for (i in mCursorCol + 1 until mColumns) if (mTabStop[i] && --n == 0) return min(i, mRightMargin - 1)
+        for (i in mCursorCol + 1 until mColumns) if (tabStops[i] && --n == 0) return min(i, mRightMargin - 1)
         return mRightMargin - 1
     }
 

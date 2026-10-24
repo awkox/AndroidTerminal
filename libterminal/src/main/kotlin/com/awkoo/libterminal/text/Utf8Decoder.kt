@@ -14,7 +14,7 @@ internal class Utf8Decoder(private val onCodePoint: (Int) -> Unit) {
 
     private var mUtf8ToFollow = 0
     private var mUtf8Index = 0
-    private val mUtf8InputBuffer = ByteArray(4)
+    private val sequenceBuffer = ByteArray(4)
 
     fun decode(buffer: ByteArray, length: Int) {
         for (i in 0 until length) {
@@ -32,16 +32,16 @@ internal class Utf8Decoder(private val onCodePoint: (Int) -> Unit) {
         if (mUtf8ToFollow > 0) {
             if ((b and 192) == 128) {
                 // 10xxxxxx，UTF-8 后续字节
-                mUtf8InputBuffer[mUtf8Index++] = byteToProcess
+                sequenceBuffer[mUtf8Index++] = byteToProcess
                 if (--mUtf8ToFollow == 0) {
                     val firstByteMask = when (mUtf8Index) {
                         2 -> 31
                         3 -> 15
                         else -> 7
                     }.toByte()
-                    var codePoint = (mUtf8InputBuffer[0].toInt() and firstByteMask.toInt())
+                    var codePoint = (sequenceBuffer[0].toInt() and firstByteMask.toInt())
                     for (i in 1 until mUtf8Index)
-                        codePoint = ((codePoint shl 6) or (mUtf8InputBuffer[i].toInt() and 63))
+                        codePoint = ((codePoint shl 6) or (sequenceBuffer[i].toInt() and 63))
                     if ((codePoint <= 127 && mUtf8Index > 1) ||
                         (codePoint < 2048 && mUtf8Index > 2) ||
                         (codePoint < 65536 && mUtf8Index > 3)) {
@@ -84,7 +84,7 @@ internal class Utf8Decoder(private val onCodePoint: (Int) -> Unit) {
                     return
                 }
             }
-            mUtf8InputBuffer[mUtf8Index++] = byteToProcess
+            sequenceBuffer[mUtf8Index++] = byteToProcess
         }
     }
 
