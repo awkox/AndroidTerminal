@@ -239,7 +239,7 @@ internal class TerminalEmulator(
     }
 
     private fun isDecsetInternalBitSet(bit: Int) = decModes.isSet(bit)
-    private fun setDecsetinternalBit(internalBit: Int, set: Boolean) = decModes.set(internalBit, set)
+    private fun setDecsetInternalBit(internalBit: Int, set: Boolean) = decModes.set(internalBit, set)
 
     /** 窗口标题状态（门面转发，实际状态由 [osc] 持有）。 */
     val titleState get() = osc.titleState
@@ -414,8 +414,8 @@ internal class TerminalEmulator(
             }
 
             'N', '0' -> {} // 忽略
-            '=' -> setDecsetinternalBit(DECSET_BIT_APPLICATION_KEYPAD, true)
-            '>' -> setDecsetinternalBit(DECSET_BIT_APPLICATION_KEYPAD, false)
+            '=' -> setDecsetInternalBit(DECSET_BIT_APPLICATION_KEYPAD, true)
+            '>' -> setDecsetInternalBit(DECSET_BIT_APPLICATION_KEYPAD, false)
             else -> {}
         }
     }
@@ -430,13 +430,13 @@ internal class TerminalEmulator(
         when (state) {
             EscapeState.CSI -> handleCsiStandard(command, args, argCount, subParams)
             EscapeState.CSI_QUESTIONMARK -> handleCsiQuestionMark(command, args, argCount)
-            EscapeState.CSI_BIGGERTHAN -> handleCsiBiggerThan(command)
+            EscapeState.CSI_BIGGER_THAN -> handleCsiBiggerThan(command)
             EscapeState.CSI_DOLLAR -> handleCsiDollar(command, args, argCount)
             EscapeState.CSI_DOUBLE_QUOTE -> handleCsiDoubleQuote(command, args)
             EscapeState.CSI_SINGLE_QUOTE -> handleCsiSingleQuote(command, args)
             EscapeState.CSI_QUESTIONMARK_ARG_DOLLAR -> handleCsiQuestionMarkArgDollar(command, args)
-            EscapeState.CSI_ARGS_SPACE -> handleCsiArgsSpace(command, args)
-            EscapeState.CSI_ARGS_ASTERIX -> handleCsiArgsAsterix(command, args)
+            EscapeState.CSI_INTERMEDIATE_SPACE -> handleCsiArgsSpace(command, args)
+            EscapeState.CSI_INTERMEDIATE_ASTERISK -> handleCsiArgsAsterix(command, args)
             EscapeState.CSI_EXCLAMATION -> onSoftReset()
             else -> {}
         }
@@ -852,7 +852,7 @@ internal class TerminalEmulator(
                     bits,
                     setOrClear,
                     reverse,
-                    isDecsetInternalBitSet(DECSET_BIT_RECTANGULAR_CHANGEATTRIBUTE),
+                    isDecsetInternalBitSet(DECSET_BIT_RECTANGULAR_CHANGE_ATTRIBUTE),
                     originLeft,
                     originRight,
                     top,
@@ -932,7 +932,7 @@ internal class TerminalEmulator(
         if (b == 'x'.code) {
             val attrChangeExtent = AnsiEscapeParser.getArg(args, 0, 0, true)
             if (attrChangeExtent in 0..2) {
-                setDecsetinternalBit(DECSET_BIT_RECTANGULAR_CHANGEATTRIBUTE, attrChangeExtent == 2)
+                setDecsetInternalBit(DECSET_BIT_RECTANGULAR_CHANGE_ATTRIBUTE, attrChangeExtent == 2)
             }
         }
     }
@@ -1064,14 +1064,14 @@ internal class TerminalEmulator(
 
     private fun doDecSetOrReset(setting: Boolean, externalBit: Int) {
         val internalBit = decModes.mapExternalToInternal(externalBit)
-        if (internalBit != -1) setDecsetinternalBit(internalBit, setting)
+        if (internalBit != -1) setDecsetInternalBit(internalBit, setting)
         when (externalBit) {
             3 -> {
                 mTopMargin = 0
                 mLeftMargin = 0
                 mBottomMargin = mRows
                 mRightMargin = mColumns
-                setDecsetinternalBit(DECSET_BIT_LEFTRIGHT_MARGIN_MODE, false)
+                setDecsetInternalBit(DECSET_BIT_LEFTRIGHT_MARGIN_MODE, false)
                 blockClear(0, 0, mColumns, mRows)
                 setCursorRowCol(0, 0)
             }

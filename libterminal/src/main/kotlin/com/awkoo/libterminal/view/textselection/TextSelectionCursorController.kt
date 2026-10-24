@@ -47,7 +47,7 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
         mIsSelectingText = true
 
         render()
-        setActionModeCallBacks()
+        setSelectionActionMode()
     }
 
     override fun hide(): Boolean {
@@ -164,7 +164,7 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
         }
     }
 
-    fun setActionModeCallBacks() {
+    fun setSelectionActionMode() {
         this.actionMode = terminalView.startActionMode(object : ActionMode.Callback2() {
             override fun onCreateActionMode(mode: ActionMode?, menu: Menu): Boolean {
                 val show = MenuItem.SHOW_AS_ACTION_IF_ROOM or MenuItem.SHOW_AS_ACTION_WITH_TEXT

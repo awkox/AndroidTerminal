@@ -14,7 +14,7 @@ internal const val DECSET_BIT_SEND_FOCUS_EVENTS = 1 shl 8
 internal const val DECSET_BIT_MOUSE_PROTOCOL_SGR = 1 shl 9
 internal const val DECSET_BIT_BRACKETED_PASTE_MODE = 1 shl 10
 internal const val DECSET_BIT_LEFTRIGHT_MARGIN_MODE = 1 shl 11
-internal const val DECSET_BIT_RECTANGULAR_CHANGEATTRIBUTE = 1 shl 12
+internal const val DECSET_BIT_RECTANGULAR_CHANGE_ATTRIBUTE = 1 shl 12
 internal const val DECSET_BIT_REVERSE_WRAPAROUND = 1 shl 14
 
 /** 鼠标追踪三模式（1000/1002/1003）互斥所需的位集合。 */

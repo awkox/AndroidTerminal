@@ -47,15 +47,15 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
                     EscapeState.CSI_UNSUPPORTED_PARAMETER_BYTE,
                     EscapeState.CSI_UNSUPPORTED_INTERMEDIATE_BYTE -> doCsiUnsupportedParameterOrIntermediateByte(b)
                     EscapeState.CSI_QUESTIONMARK -> doCsiQuestionMark(b)
-                    EscapeState.CSI_BIGGERTHAN -> doCsiBiggerThan(b)
+                    EscapeState.CSI_BIGGER_THAN -> doCsiBiggerThan(b)
 
                     EscapeState.CSI_EXCLAMATION,
                     EscapeState.CSI_DOLLAR,
                     EscapeState.CSI_DOUBLE_QUOTE,
                     EscapeState.CSI_SINGLE_QUOTE,
                     EscapeState.CSI_QUESTIONMARK_ARG_DOLLAR,
-                    EscapeState.CSI_ARGS_SPACE,
-                    EscapeState.CSI_ARGS_ASTERIX -> {
+                    EscapeState.CSI_INTERMEDIATE_SPACE,
+                    EscapeState.CSI_INTERMEDIATE_ASTERISK -> {
                         handler.onCsiCommand(mEscapeState, b, mArgs, mArgIndex + 1, subParamSeparatorMask)
                     }
 
@@ -137,11 +137,11 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
             '"' -> continueSequence(EscapeState.CSI_DOUBLE_QUOTE)
             '\'' -> continueSequence(EscapeState.CSI_SINGLE_QUOTE)
             '$' -> continueSequence(EscapeState.CSI_DOLLAR)
-            '*' -> continueSequence(EscapeState.CSI_ARGS_ASTERIX)
+            '*' -> continueSequence(EscapeState.CSI_INTERMEDIATE_ASTERISK)
             '?' -> continueSequence(EscapeState.CSI_QUESTIONMARK)
-            '>' -> continueSequence(EscapeState.CSI_BIGGERTHAN)
+            '>' -> continueSequence(EscapeState.CSI_BIGGER_THAN)
             '<', '=' -> continueSequence(EscapeState.CSI_UNSUPPORTED_PARAMETER_BYTE)
-            ' ' -> continueSequence(EscapeState.CSI_ARGS_SPACE)
+            ' ' -> continueSequence(EscapeState.CSI_INTERMEDIATE_SPACE)
             else -> handleCsiCommonArgs(b) {
                 handler.onCsiCommand(EscapeState.CSI, b, mArgs, mArgIndex + 1, subParamSeparatorMask)
             }
@@ -159,7 +159,7 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
 
     private fun doCsiBiggerThan(b: Int) {
         handleCsiCommonArgs(b) {
-            handler.onCsiCommand(EscapeState.CSI_BIGGERTHAN, b, mArgs, mArgIndex + 1, subParamSeparatorMask)
+            handler.onCsiCommand(EscapeState.CSI_BIGGER_THAN, b, mArgs, mArgIndex + 1, subParamSeparatorMask)
         }
     }
 
