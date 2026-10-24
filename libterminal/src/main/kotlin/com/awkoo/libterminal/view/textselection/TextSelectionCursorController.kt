@@ -25,8 +25,8 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
     private val handleHeight: Int
         get() = max(startHandle.handleHeight, endHandle.handleHeight)
     private var selectionStartCol = -1
-    private var selectionStartRow = -1
     private var selectionEndCol = -1
+    private var selectionStartRow = -1
     private var selectionEndRow = -1
 
     var actionMode: ActionMode? = null
@@ -65,8 +65,8 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
         actionMode = null
 
         selectionEndRow = -1
-        selectionStartRow = -1
         selectionEndCol = -1
+        selectionStartRow = -1
         selectionStartCol = -1
         isSelectingText = false
 
@@ -108,8 +108,8 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
         }
 
         // 统一调用，消灭冗余代码
-        layoutHandle(startHandle, selectionStartCol, selectionEndCol, isStart = true)
-        layoutHandle(endHandle, selectionStartRow, selectionEndRow, isStart = false)
+        layoutHandle(startHandle, selectionStartCol, selectionStartRow, isStart = true)
+        layoutHandle(endHandle, selectionEndCol, selectionEndRow, isStart = false)
 
         actionMode?.invalidate()
     }
@@ -122,34 +122,34 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
 
             val coord = terminalView.bufferCellAt(event.x, event.y)
             selectionStartCol = coord.col
-            selectionEndCol = coord.row
-            selectionStartRow = coord.col
+            selectionStartRow = coord.row
+            selectionEndCol = coord.col
             selectionEndRow = coord.row
 
-            if (" " != screen.getSelectedText(selectionStartCol, selectionEndCol, selectionStartCol, selectionEndCol)) {
+            if (" " != screen.getSelectedText(selectionStartCol, selectionStartRow, selectionStartCol, selectionStartRow)) {
                 // 选中的不是空白字符，扩展为单词选择。
                 // 单词可能跨折行行续到下一行，且折行处无空格：扩展需跨越行边界。
                 // 左扩：
                 while (true) {
                     if (selectionStartCol > 0) {
                         // 用 isCellBlank 轻量检测，避免逐格构造字符串的性能开销
-                        if (!screen.isCellBlank(selectionStartCol - 1, selectionEndCol)) {
+                        if (!screen.isCellBlank(selectionStartCol - 1, selectionStartRow)) {
                             selectionStartCol--
                         } else break
-                    } else if (screen.getLineWrap(selectionEndCol - 1) &&
+                    } else if (screen.getLineWrap(selectionStartRow - 1) &&
                         // 上一行折行且行尾格非空白才跨行，避免把空白格兜进选区
-                        !screen.isCellBlank(emulator.columns - 1, selectionEndCol - 1)
+                        !screen.isCellBlank(emulator.columns - 1, selectionStartRow - 1)
                     ) {
                         // 当前行是上一行的折行继续行，跳回上一行行尾继续扩展
-                        selectionEndCol--
+                        selectionStartRow--
                         selectionStartCol = emulator.columns - 1
                     } else break
                 }
                 // 右扩：
                 while (true) {
-                    if (selectionStartRow < emulator.columns - 1) {
-                        if (!screen.isCellBlank(selectionStartRow + 1, selectionEndRow)) {
-                            selectionStartRow++
+                    if (selectionEndCol < emulator.columns - 1) {
+                        if (!screen.isCellBlank(selectionEndCol + 1, selectionEndRow)) {
+                            selectionEndCol++
                         } else break
                     } else if (screen.getLineWrap(selectionEndRow) &&
                         // 下一行折行起始格非空白才跨行，避免把空白格兜进选区
@@ -157,7 +157,7 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
                     ) {
                         // 当前行折行到下一行，跳到下一行列 0 继续扩展
                         selectionEndRow++
-                        selectionStartRow = 0
+                        selectionEndCol = 0
                     } else break
                 }
             }
@@ -224,8 +224,8 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
 
             override fun onGetContentRect(mode: ActionMode?, view: View?, outRect: Rect) {
                 var x1 = terminalView.getPointX(selectionStartCol)
-                var x2 = terminalView.getPointX(selectionStartRow + 1)
-                val top = terminalView.getPointY(selectionEndCol)
+                var x2 = terminalView.getPointX(selectionEndCol + 1)
+                val top = terminalView.getPointY(selectionStartRow)
                 var bottom = terminalView.getPointY(selectionEndRow + 1)
 
                 if (x1 > x2) {
@@ -255,19 +255,19 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
 
             // 2. 互斥检查与值更新 (将 mSelX1/mSelY1 和 mSelX2/mSelY2 的交叉修改进行精简)
             if (isStart) {
-                if (curY > selectionEndRow || (curY == selectionEndRow && curX > selectionStartRow)) {
+                if (curY > selectionEndRow || (curY == selectionEndRow && curX > selectionEndCol)) {
                     curY = selectionEndRow
-                    curX = selectionStartRow
+                    curX = selectionEndCol
                 }
-                selectionEndCol = curY
+                selectionStartRow = curY
                 selectionStartCol = curX
             } else {
-                if (curY < selectionEndCol || (curY == selectionEndCol && curX < selectionStartCol)) {
-                    curY = selectionEndCol
+                if (curY < selectionStartRow || (curY == selectionStartRow && curX < selectionStartCol)) {
+                    curY = selectionStartRow
                     curX = selectionStartCol
                 }
                 selectionEndRow = curY
-                selectionStartRow = curX
+                selectionEndCol = curX
             }
 
             // 3. 处理超出屏幕的滚动逻辑
@@ -281,9 +281,9 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
 
             // 4. 校准中文字符/宽字符对齐
             if (isStart) {
-                selectionStartCol = snapColumnToCharBoundary(screen, selectionEndCol, selectionStartCol, SnapAlign.Start)
+                selectionStartCol = snapColumnToCharBoundary(screen, selectionStartRow, selectionStartCol, SnapAlign.Start)
             } else {
-                selectionStartRow = snapColumnToCharBoundary(screen, selectionEndRow, selectionStartRow, SnapAlign.End)
+                selectionEndCol = snapColumnToCharBoundary(screen, selectionEndRow, selectionEndCol, SnapAlign.End)
             }
         }
 
@@ -299,7 +299,7 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
         screen.snapToColumn(cy, cx, align)
 
     fun shiftSelectionRows(rowShift: Int) {
-        selectionEndCol -= rowShift
+        selectionStartRow -= rowShift
         selectionEndRow -= rowShift
     }
 
@@ -311,17 +311,17 @@ internal class TextSelectionCursorController(private val terminalView: TerminalV
         get() = isSelectingText
 
     fun getSelectors(sel: IntArray) {
-        sel[0] = selectionEndCol
+        sel[0] = selectionStartRow
         sel[1] = selectionEndRow
         sel[2] = selectionStartCol
-        sel[3] = selectionStartRow
+        sel[3] = selectionEndCol
     }
 
     val selectedText: String
         get() {
             val emulator = terminalView.emulator ?: return ""
             synchronized(emulator) {
-                return emulator.getSelectedText(selectionStartCol, selectionEndCol, selectionStartRow, selectionEndRow)
+                return emulator.getSelectedText(selectionStartCol, selectionStartRow, selectionEndCol, selectionEndRow)
             }
         }
 
