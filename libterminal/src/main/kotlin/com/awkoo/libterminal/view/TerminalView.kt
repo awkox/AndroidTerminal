@@ -198,10 +198,10 @@ class TerminalView(
     internal val emulator: TerminalEmulator?
         get() = currentSession?.emulator
 
-    /** 终端字号（dp）。setter 自动约束在 4..100，修改后重建渲染器并更新尺寸。 */
+    /** 终端字号（dp）。setter 自动约束在 1..100，修改后重建渲染器并更新尺寸。 */
     var textSize: Int = 12
         set(value) {
-            field = value.coerceIn(4, 100)
+            field = value.coerceIn(1, 100)
             renderer = TerminalRenderer(field.dp, typeface)
             updateSize()
         }
