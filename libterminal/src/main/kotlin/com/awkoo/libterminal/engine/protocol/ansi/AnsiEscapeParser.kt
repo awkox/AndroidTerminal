@@ -62,7 +62,7 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
                     EscapeState.PERCENT -> { handler.onEscCommand(EscapeState.PERCENT, b); finishSequence() }
                     EscapeState.OSC -> doOsc(b)
                     EscapeState.OSC_ESC -> doOscEsc(b)
-                    else -> unknownSequence(b)
+                    else -> finishSequence()
                 }
                 if (!isSequenceIncomplete) finishSequence()
             }
@@ -86,8 +86,8 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
     }
 
     private fun parseArg(b: Int) {
-        when {
-            b in '0'.code..'9'.code -> {
+        when (b) {
+            in '0'.code..'9'.code -> {
                 if (argIndex < args.size) {
                     val oldValue = args[argIndex]
                     val thisDigit = b - '0'.code
@@ -98,7 +98,7 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
                 }
                 continueSequence(escapeState)
             }
-            b == ';'.code || b == ':'.code -> {
+            ';'.code, ':'.code -> {
                 if (argIndex + 1 < args.size) {
                     argIndex++
                     if (b == ':'.code) {
@@ -107,7 +107,7 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
                 }
                 continueSequence(escapeState)
             }
-            else -> unknownSequence(b)
+            else -> finishSequence()
         }
     }
 
@@ -168,7 +168,7 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
             escapeState == EscapeState.CSI_UNSUPPORTED_PARAMETER_BYTE && b in 0x30..0x3F -> continueSequence(EscapeState.CSI_UNSUPPORTED_PARAMETER_BYTE)
             b in 0x20..0x2F -> continueSequence(EscapeState.CSI_UNSUPPORTED_INTERMEDIATE_BYTE)
             b in 0x40..0x7E -> finishSequence()
-            else -> unknownSequence(b)
+            else -> finishSequence()
         }
     }
 
@@ -207,7 +207,7 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
         }
         val illegal = valuePart.firstOrNull { it !in '0'..'9' }
         if (illegal != null) {
-            unknownSequence(illegal.code)
+            finishSequence()
             return
         }
         val value = valuePart.toIntOrNull() ?: -1
@@ -248,10 +248,6 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
 
     private fun doApcEscape(b: Int) {
         if (b == '\\'.code) finishSequence() else continueSequence(EscapeState.APC)
-    }
-
-    private fun unknownSequence(b: Int) {
-        finishSequence()
     }
 
     private inline fun handleCsiCommonArgs(b: Int, fallback: () -> Unit) {
