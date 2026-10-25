@@ -147,4 +147,21 @@ class TerminalEmulatorResponseTest {
 
         assertEquals("\u001bP1+r436F=323536\u001b\\", f.writtenText)
     }
+
+    @Test
+    fun dcs_xtgettcap_injectionPayload_answeredWithoutEchoingPayload() {
+        // 回归（RCE 防护）：恶意 DCS 载荷仅换来规范的裸失败响应，原文绝不回写进程输入通道
+        f.feed("\u001bP+q41\nls\n\u001b\\")
+
+        assertEquals("\u001bP0+r\u001b\\", f.writtenText)
+        assertTrue(!f.writtenText.contains("\n"))
+        assertTrue(f.writtenBytes.isEmpty())
+    }
+
+    @Test
+    fun dcs_xtgettcap_invalidName_terminatesListProcessing() {
+        f.feed("\u001bP+q6B31;6161\u001b\\")
+
+        assertEquals("\u001bP1+r6B31=1B4F50\u001b\\\u001bP0+r\u001b\\", f.writtenText)
+    }
 }
