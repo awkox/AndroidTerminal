@@ -11,9 +11,14 @@ internal object TerminalReflower {
      * 执行文本重排：将旧布局的行内容重新填充到新宽度的缓冲区中。
      *
      * 遍历旧布局的每一行，处理行尾空格保留（带自定义背景色的空格不会被截断）、
-     * 宽字符跨行边界、组合字符偏移、光标位置追踪等边界情况。
+     * 宽字符跨行边界、组合字符偏移、跟随坐标追踪等边界情况。
      *
-     * @return 新的 (cursorColumn, cursorRow) 游标坐标对，未找到时为 (-1, -1)
+     * 空行（含未分配的 null 行）在无未落点坐标时跳过；其上有坐标时视同内容行参与落点，
+     * 坐标保持列号、随内容流落到新行——丢弃坐标所在行会把坐标压成 (0,0) 与内容脱锚。
+     *
+     * @param trackedCoords 需随内容重排的旧布局坐标（[CursorCoord] 打包），
+     *  与被重排内容同域，按内容落点就地写回新布局坐标，逐个追踪、互不影响；
+     *  行不在遍历域内时写回 (-1, -1)，由调用方统一夹取。
      */
     fun reflow(
         buffer: TerminalBuffer,
@@ -22,16 +27,34 @@ internal object TerminalReflower {
         oldScreenRows: Int,
         oldScreenFirstRow: Int,
         oldActiveTranscriptRows: Int,
-        oldCursorColumn: Int,
-        oldCursorRow: Int,
+        trackedCoords: LongArray,
         currentStyle: TextStyle
-    ): CursorCoord {
-        var newCursorRow = -1
-        var newCursorColumn = -1
-        var newCursorPlaced = false
+    ) {
+        val trackedCount = trackedCoords.size
+        val trackedOldRows = IntArray(trackedCount)
+        val trackedOldCols = IntArray(trackedCount)
+        for (t in 0 until trackedCount) {
+            val coord = CursorCoord(trackedCoords[t])
+            trackedOldRows[t] = coord.row
+            trackedOldCols[t] = coord.col
+        }
+        val trackedNewRows = IntArray(trackedCount) { -1 }
+        val trackedNewCols = IntArray(trackedCount) { -1 }
+        val placed = BooleanArray(trackedCount)
 
         var currentOutputExternalRow = 0
         var currentOutputExternalColumn = 0
+
+        /** 输出推进一行：内容整体上移时已落点坐标随之递减，列回行首。 */
+        fun advanceOutputRow() {
+            if (currentOutputExternalRow == buffer.screenRows - 1) {
+                decrementPlacedRows(trackedNewRows, placed)
+                buffer.scrollDownOneLine(0, buffer.screenRows, currentStyle)
+            } else {
+                currentOutputExternalRow++
+            }
+            currentOutputExternalColumn = 0
+        }
 
         var skippedBlankLines = 0
         for (externalOldRow in -oldActiveTranscriptRows..<oldScreenRows) {
@@ -39,23 +62,27 @@ internal object TerminalReflower {
             val internalOldRow = (oldScreenFirstRow + externalOldRow).mod(oldTotalRows)
 
             val oldLine: TerminalRow? = oldLines[internalOldRow]
-            val cursorAtThisRow = externalOldRow == oldCursorRow
-            val preserveCursorRow = !newCursorPlaced && cursorAtThisRow
-            // 跳过空行（但光标所在行即使为空也不跳过，除非光标已放置）
-            if (oldLine == null || (oldLine.isBlank && !preserveCursorRow)) {
+            // 跳过空行（未分配行视为空行），但未落点坐标所在行即使为空也不跳过
+            if ((oldLine == null || oldLine.isBlank) && !anyUnplacedOnRow(placed, trackedOldRows, externalOldRow)) {
                 skippedBlankLines++
                 continue
             } else if (skippedBlankLines > 0) {
                 // 输出之前跳过的空行（在输出中补回空白行）
-                for (i in 0..<skippedBlankLines) {
-                    if (currentOutputExternalRow == buffer.screenRows - 1) {
-                        buffer.scrollDownOneLine(0, buffer.screenRows, currentStyle)
-                    } else {
-                        currentOutputExternalRow++
-                    }
-                    currentOutputExternalColumn = 0
-                }
+                repeat(skippedBlankLines) { advanceOutputRow() }
                 skippedBlankLines = 0
+            }
+
+            if (oldLine == null) {
+                // 未分配空行无内容可重排：坐标沿空格行的逐列落点语义保持列号
+                for (t in 0 until trackedCount) {
+                    if (!placed[t] && trackedOldRows[t] == externalOldRow) {
+                        trackedNewCols[t] = trackedOldCols[t]
+                        trackedNewRows[t] = currentOutputExternalRow
+                        placed[t] = true
+                    }
+                }
+                if (externalOldRow != (oldScreenRows - 1)) advanceOutputRow()
+                continue
             }
 
             var lastNonSpaceIndex = 0
@@ -75,13 +102,14 @@ internal object TerminalReflower {
                     true
                 }
 
-                if (cursorAtThisRow) {
+                for (t in 0 until trackedCount) {
+                    if (trackedOldRows[t] != externalOldRow) continue
                     var colCursor = 0
                     var cursorIdx = 0
                     oldLine.forEachRun { _, _, charEnd, _, width, _, _ ->
                         if (width > 0) colCursor += width
                         cursorIdx = charEnd
-                        colCursor <= oldCursorColumn
+                        colCursor <= trackedOldCols[t]
                     }
                     if (cursorIdx > lastNonSpaceIndex) lastNonSpaceIndex = cursorIdx
                 }
@@ -92,13 +120,7 @@ internal object TerminalReflower {
 
                 if (currentOutputExternalColumn + width > buffer.columns) {
                     buffer.setLineWrap(currentOutputExternalRow)
-                    if (currentOutputExternalRow == buffer.screenRows - 1) {
-                        if (newCursorPlaced) newCursorRow--
-                        buffer.scrollDownOneLine(0, buffer.screenRows, currentStyle)
-                    } else {
-                        currentOutputExternalRow++
-                    }
-                    currentOutputExternalColumn = 0
+                    advanceOutputRow()
                 }
 
                 val offsetDueToCombiningChar =
@@ -107,31 +129,40 @@ internal object TerminalReflower {
                 buffer.setChar(outputColumn, currentOutputExternalRow, codePoint, TextStyle(rawStyle), extEffect)
 
                 if (width > 0) {
-                    if (oldCursorRow == externalOldRow && oldCursorColumn == column) {
-                        newCursorColumn = currentOutputExternalColumn
-                        newCursorRow = currentOutputExternalRow
-                        newCursorPlaced = true
+                    for (t in 0 until trackedCount) {
+                        if (!placed[t] && trackedOldRows[t] == externalOldRow && trackedOldCols[t] == column) {
+                            trackedNewCols[t] = currentOutputExternalColumn
+                            trackedNewRows[t] = currentOutputExternalRow
+                            placed[t] = true
+                        }
                     }
                     currentOutputExternalColumn += width
                 }
                 true
             }
-            if (!newCursorPlaced && oldCursorRow == externalOldRow) {
-                newCursorColumn = currentOutputExternalColumn
-                newCursorRow = currentOutputExternalRow
-                newCursorPlaced = true
-            }
-            if (externalOldRow != (oldScreenRows - 1) && !oldLine.isLineWrap) {
-                if (currentOutputExternalRow == buffer.screenRows - 1) {
-                    if (newCursorPlaced) newCursorRow--
-                    buffer.scrollDownOneLine(0, buffer.screenRows, currentStyle)
-                } else {
-                    currentOutputExternalRow++
+            for (t in 0 until trackedCount) {
+                if (!placed[t] && trackedOldRows[t] == externalOldRow) {
+                    trackedNewCols[t] = currentOutputExternalColumn
+                    trackedNewRows[t] = currentOutputExternalRow
+                    placed[t] = true
                 }
-                currentOutputExternalColumn = 0
             }
+            if (externalOldRow != (oldScreenRows - 1) && !oldLine.isLineWrap) advanceOutputRow()
         }
 
-        return CursorCoord.pack(newCursorColumn, newCursorRow)
+        for (t in 0 until trackedCount) {
+            trackedCoords[t] = CursorCoord.pack(trackedNewCols[t], trackedNewRows[t]).packed
+        }
+    }
+
+    /** 是否有未落点坐标位于 [externalOldRow]（该行即使为空也不可跳过）。 */
+    private fun anyUnplacedOnRow(placed: BooleanArray, trackedOldRows: IntArray, externalOldRow: Int): Boolean {
+        for (t in placed.indices) if (!placed[t] && trackedOldRows[t] == externalOldRow) return true
+        return false
+    }
+
+    /** 输出滚动使既有内容整体上移一行，已落点坐标随之递减。 */
+    private fun decrementPlacedRows(trackedNewRows: IntArray, placed: BooleanArray) {
+        for (t in placed.indices) if (placed[t]) trackedNewRows[t]--
     }
 }

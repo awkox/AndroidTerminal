@@ -147,7 +147,7 @@ class TerminalBufferLineWrapShiftTest {
         fill(buffer, listOf("aaaaaa", "bbbbbb", "cccccc"))
         buffer.setLineWrap(0)
 
-        buffer.resize(4, 3, 6, CursorCoord.pack(0, 0), TextStyle.NORMAL, altScreen = true)
+        buffer.resize(4, 3, 6, longArrayOf(CursorCoord.pack(0, 0).packed), TextStyle.NORMAL, altScreen = true)
 
         assertEquals(listOf("aaaa", "bbbb", "cccc"), textsOf(buffer, 3))
         assertTrue(wrapsOf(buffer, 3)[0])

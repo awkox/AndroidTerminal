@@ -219,19 +219,41 @@ internal class TerminalEmulator(
         }
 
         if (sizeChanged || screen.columns != this@TerminalEmulator.columns || screen.screenRows != this@TerminalEmulator.rows) {
-            val newTotalRows = if (isAlternateBufferActive) this@TerminalEmulator.rows else mainBuffer.totalRows
-            val newCursor = screen.resize(
-                this@TerminalEmulator.columns,
-                this@TerminalEmulator.rows,
-                newTotalRows,
-                CursorCoord.pack(_cursorCol, _cursorRow), // 传入打包的 Long
-                // 重排生成的空白行使用默认样式，避免把瞬态 SGR 特效/背景泄漏到新空行
-                TextStyle.NORMAL,
-                this.isAlternateBufferActive
+            // 当前光标与本屏保存的光标同域，必须同组重映射；只映射其一，另一个恢复时会与内容错位
+            val savedState = if (isAlternateBufferActive) savedStateAlt else savedStateMain
+            val tracked = longArrayOf(
+                CursorCoord.pack(_cursorCol, _cursorRow).packed,
+                CursorCoord.pack(savedState.savedCursorCol, savedState.savedCursorRow).packed
             )
+            resizeCurrentScreen(tracked)
+            val newCursor = CursorCoord(tracked[0])
             this.cursorCol = newCursor.col
             this.cursorRow = newCursor.row
+            val newSavedCursor = CursorCoord(tracked[1])
+            savedState.savedCursorCol = newSavedCursor.col
+            savedState.savedCursorRow = newSavedCursor.row
         }
+    }
+
+    /**
+     * 重排当前屏并把跟随坐标就地重映射为新几何坐标。
+     *
+     * 主屏路径按内容平移坐标，[trackedCoords]（[CursorCoord] 打包）必须与主屏同域，
+     * 即取自主屏几何的坐标；跨域坐标会被错误平移。
+     * 副屏路径是位置保持裁剪，不做平移：坐标按副屏坐标解释并夹取到新几何。
+     * 进副屏时光标位置按数字延续为副屏坐标，属预期的跨几何携带（例外）。
+     */
+    private fun resizeCurrentScreen(trackedCoords: LongArray) {
+        val altScreen = isAlternateBufferActive
+        screen.resize(
+            columns,
+            rows,
+            if (altScreen) rows else mainBuffer.totalRows,
+            trackedCoords,
+            // 重排生成的空白行使用默认样式，避免把瞬态 SGR 特效/背景泄漏到新空行
+            TextStyle.NORMAL,
+            altScreen
+        )
     }
 
     private fun setDefaultTabStops() {
@@ -1090,16 +1112,26 @@ internal class TerminalEmulator(
                         !(newScreen.columns == columns && newScreen.screenRows == rows)
                     if (setting) saveCursor()
                     this.screen = newScreen
-                    if (!setting) {
-                        val col = savedStateMain.savedCursorCol
-                        val row = savedStateMain.savedCursorRow
-                        restoreCursor()
+                    if (setting) {
+                        if (resized) resize(columns, rows, cellWidthPixels, cellHeightPixels)
+                    } else {
                         if (resized) {
-                            this.cursorCol = col
-                            this.cursorRow = row
+                            // 副屏期间积压的尺寸变化在切回时才重排主屏。保存的光标是主屏旧几何坐标，
+                            // 必须随主屏内容一起重映射后再恢复；restoreCursor 只接受当前几何坐标，
+                            // 先恢复会把旧坐标按新几何夹取压平，随后重排再平移一次，提示符整体偏高。
+                            val tracked = longArrayOf(
+                                CursorCoord.pack(
+                                    savedStateMain.savedCursorCol,
+                                    savedStateMain.savedCursorRow
+                                ).packed
+                            )
+                            resizeCurrentScreen(tracked)
+                            val restored = CursorCoord(tracked[0])
+                            savedStateMain.savedCursorCol = restored.col
+                            savedStateMain.savedCursorRow = restored.row
                         }
+                        restoreCursor()
                     }
-                    if (resized) resize(columns, rows, cellWidthPixels, cellHeightPixels)
                     if (externalBit == 1049 && newScreen == altBuffer) newScreen.blockSet(
                         0,
                         0,

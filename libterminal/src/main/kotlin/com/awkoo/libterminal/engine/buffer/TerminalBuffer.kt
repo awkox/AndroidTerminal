@@ -135,29 +135,42 @@ internal class TerminalBuffer(
     }
 
     /**
-     * 调整缓冲区尺寸。
+     * 调整缓冲区尺寸，并把跟随坐标就地重映射到新几何坐标。
      *
      * 备用屏不做 reflow，只做位置保持的裁剪与补白；
      * 主屏仅高度变化时执行简单垂直重排，宽度变化时委托给 [TerminalReflower] 执行文本重排。
+     *
+     * @param trackedCoords 需随内容重排的屏坐标组（[CursorCoord] 打包），必须与本缓冲区同域，
+     *  就地写回新几何坐标。保存的光标与当前光标须同组传入：几何变更只映射其一，
+     *  未映射坐标在恢复时会与内容错位；随后即被覆盖的坐标（如切屏时即将被 restoreCursor
+     *  改写的当前光标）无需参与追踪。收缩裁剪对全部坐标提供保护：
+     *  空白扣减只舍弃所有跟随坐标以下的行，任何跟随坐标行都不落入底部舍弃区；
+     *  映射结果统一夹取到新几何。
      */
     fun resize(
         newColumns: Int,
         newRows: Int,
         newTotalRows: Int,
-        cursor: CursorCoord,
+        trackedCoords: LongArray,
         currentStyle: TextStyle,
         altScreen: Boolean
-    ): CursorCoord {
-        val newCursor = if (altScreen) {
-            handleAltScreenResize(newColumns, newRows, newTotalRows, cursor)
+    ) {
+        if (altScreen) {
+            handleAltScreenResize(newColumns, newRows, newTotalRows)
         } else if (newColumns == columns && newRows <= totalRows) {
-            handleSimpleVerticalResize(newRows, newTotalRows, cursor, currentStyle)
+            handleSimpleVerticalResize(newRows, newTotalRows, trackedCoords, currentStyle)
         } else {
-            handleHorizontalResize(newColumns, newRows, newTotalRows, cursor, currentStyle)
+            handleHorizontalResize(newColumns, newRows, newTotalRows, trackedCoords, currentStyle)
         }
 
-        // 统一处理越界光标防护
-        return CursorCoord.pack(max(0, newCursor.col), max(0, newCursor.row))
+        // 统一夹取到新几何：坐标可能落在被舍弃的行（顶部入历史、底部被丢弃）或换行边界列上
+        for (t in trackedCoords.indices) {
+            val coord = CursorCoord(trackedCoords[t])
+            trackedCoords[t] = CursorCoord.pack(
+                coord.col.coerceIn(0, newColumns - 1),
+                coord.row.coerceIn(0, newRows - 1)
+            ).packed
+        }
     }
 
     /**
@@ -166,14 +179,20 @@ internal class TerminalBuffer(
     private fun handleSimpleVerticalResize(
         newRows: Int,
         newTotalRows: Int,
-        cursor: CursorCoord,
+        trackedCoords: LongArray,
         currentStyle: TextStyle
-    ): CursorCoord {
-        var cursorRow = cursor.row
+    ) {
+        // 空白扣减只舍弃所有跟随坐标以下的行：底部舍弃区是末尾连续若干行，
+        // 扣减量封顶在最靠下的跟随坐标之下，任何跟随坐标行都不会落入舍弃区
+        var lowestTrackedRow = Int.MIN_VALUE
+        for (t in trackedCoords.indices) {
+            val row = CursorCoord(trackedCoords[t]).row
+            if (row > lowestTrackedRow) lowestTrackedRow = row
+        }
         var shiftDownOfTopRow = screenRows - newRows
         if (shiftDownOfTopRow in 1..<screenRows) {
             for (i in screenRows - 1 downTo 1) {
-                if (cursorRow >= i) break
+                if (lowestTrackedRow >= i) break
                 val r = externalToInternalRow(i)
                 if (lines[r]?.isBlank ?: true) {
                     if (--shiftDownOfTopRow == 0) break
@@ -197,18 +216,20 @@ internal class TerminalBuffer(
         }
         totalRows = newTotalRows
         this.activeTranscriptRows = max(0, this.activeTranscriptRows + shiftDownOfTopRow)
-        cursorRow -= shiftDownOfTopRow
         screenRows = newRows
-        return CursorCoord.pack(cursor.col, cursorRow)
+        for (t in trackedCoords.indices) {
+            val coord = CursorCoord(trackedCoords[t])
+            trackedCoords[t] = CursorCoord.pack(coord.col, coord.row - shiftDownOfTopRow).packed
+        }
     }
 
     private fun handleHorizontalResize(
         newColumns: Int,
         newRows: Int,
         newTotalRows: Int,
-        cursor: CursorCoord,
+        trackedCoords: LongArray,
         currentStyle: TextStyle
-    ): CursorCoord {
+    ) {
         // 保存旧状态
         val oldLines = lines
         val oldActiveTranscriptRows = this.activeTranscriptRows
@@ -226,15 +247,14 @@ internal class TerminalBuffer(
         sharedBlankRow = TerminalRow(newColumns, TextStyle.NORMAL)
 
         // 执行委托排版（Reflow）操作
-        return TerminalReflower.reflow(
+        TerminalReflower.reflow(
             buffer = this,
             oldLines = oldLines,
             oldTotalRows = oldTotalRows,
             oldScreenRows = oldScreenRows,
             oldScreenFirstRow = oldScreenFirstRow,
             oldActiveTranscriptRows = oldActiveTranscriptRows,
-            oldCursorColumn = cursor.col,
-            oldCursorRow = cursor.row,
+            trackedCoords = trackedCoords,
             currentStyle = currentStyle
         )
     }
@@ -249,9 +269,8 @@ internal class TerminalBuffer(
     private fun handleAltScreenResize(
         newColumns: Int,
         newRows: Int,
-        newTotalRows: Int,
-        cursor: CursorCoord
-    ): CursorCoord {
+        newTotalRows: Int
+    ) {
         val oldLines = lines
         val oldScreenFirstRow = screenFirstRow
         val oldScreenRows = screenRows
@@ -272,10 +291,7 @@ internal class TerminalBuffer(
             lines[externalRow] = if (oldColumns == newColumns) src else copyRowResizing(src, oldColumns, newColumns)
         }
 
-        return CursorCoord.pack(
-            cursor.col.coerceAtMost(newColumns - 1),
-            cursor.row.coerceAtMost(newRows - 1)
-        )
+        // 位置保持裁剪：坐标不平移，越出新几何的部分由 resize 尾部统一夹取
     }
 
     private fun copyRowResizing(src: TerminalRow, oldColumns: Int, newColumns: Int): TerminalRow {
