@@ -51,6 +51,19 @@ jobs:
               exit 1
           fi
 
+      - name: 单元测试
+        # 在编译前拦截回归：测试失败即中止，不浪费后续构建
+        run: ./gradlew --build-cache :libterminal:testDebugUnitTest
+
+      - name: 上传测试报告
+        # 仅测试失败时上传，便于离线排查
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          archive: false
+          name: libterminal-test-report
+          path: libterminal/build/test-results/testDebugUnitTest
+
       - name: 编译
         env:
           KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
