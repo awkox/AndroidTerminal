@@ -144,8 +144,8 @@ internal class TerminalBuffer(
      *  就地写回新几何坐标。保存的光标与当前光标须同组传入：几何变更只映射其一，
      *  未映射坐标在恢复时会与内容错位；随后即被覆盖的坐标（如切屏时即将被 restoreCursor
      *  改写的当前光标）无需参与追踪。收缩裁剪对全部坐标提供保护：
-     *  空白扣减只舍弃所有跟随坐标以下的行，任何跟随坐标行都不落入底部舍弃区；
-     *  映射结果统一夹取到新几何。
+     *  空白扣减只舍弃底部连续空白段内、且在所有跟随坐标之下的行，
+     *  任何跟随坐标行与非空行都不落入底部舍弃区；映射结果统一夹取到新几何。
      */
     fun resize(
         newColumns: Int,
@@ -182,8 +182,9 @@ internal class TerminalBuffer(
         trackedCoords: LongArray,
         currentStyle: TextStyle
     ) {
-        // 空白扣减只舍弃所有跟随坐标以下的行：底部舍弃区是末尾连续若干行，
-        // 扣减量封顶在最靠下的跟随坐标之下，任何跟随坐标行都不会落入舍弃区
+        // 空白扣减只舍弃底部连续空白段内的行：底部舍弃区是末尾连续若干行，
+        // 自底向上遇首个非空行即终止扣减；扣减量同时封顶在最靠下的跟随坐标之下，
+        // 任何跟随坐标行都不会落入舍弃区
         var lowestTrackedRow = Int.MIN_VALUE
         for (t in trackedCoords.indices) {
             val row = CursorCoord(trackedCoords[t]).row
@@ -194,9 +195,9 @@ internal class TerminalBuffer(
             for (i in screenRows - 1 downTo 1) {
                 if (lowestTrackedRow >= i) break
                 val r = externalToInternalRow(i)
-                if (lines[r]?.isBlank ?: true) {
-                    if (--shiftDownOfTopRow == 0) break
-                }
+                // 非空行终止扣减：再扣减会把本行纳入底部舍弃区销毁
+                if (!(lines[r]?.isBlank ?: true)) break
+                if (--shiftDownOfTopRow == 0) break
             }
         } else if (shiftDownOfTopRow < 0) {
             val actualShift = max(shiftDownOfTopRow, -this.activeTranscriptRows)

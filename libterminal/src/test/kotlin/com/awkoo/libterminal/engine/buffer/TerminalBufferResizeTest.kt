@@ -163,6 +163,45 @@ class TerminalBufferResizeTest {
     }
 
     @Test
+    fun shrink_deductionStopsAtFirstNonBlankFromBottom() {
+        val buffer = TerminalBuffer(4, 8, 6)
+        fill(buffer, listOf("aaaa", "bbbb", "cccc", "dddd", "", "ffff"))
+        val coords = tracked(CursorCoord.pack(0, 1).packed)
+
+        buffer.resize(4, 4, 8, coords, TextStyle.NORMAL, altScreen = false)
+
+        // 底部尾段是 "ffff"：中间空白（行 5）不得计扣减，否则尾段舍弃会销毁 "ffff"
+        assertEquals(listOf("cccc", "dddd", "", "ffff"), textsOf(buffer, 4))
+        assertEquals(listOf("bbbb", "aaaa"), historyTextsOf(buffer))
+    }
+
+    @Test
+    fun shrink_deductionDropsTrailingBlankRunFromBottom() {
+        val buffer = TerminalBuffer(4, 8, 6)
+        fill(buffer, listOf("aaaa", "bbbb", "cccc", "dddd"))
+        val coords = tracked(CursorCoord.pack(0, 1).packed)
+
+        buffer.resize(4, 4, 8, coords, TextStyle.NORMAL, altScreen = false)
+
+        // 底部尾段全空：扣减照常生效，顶部内容保留在屏上而非全部推入历史
+        assertEquals(listOf("aaaa", "bbbb", "cccc", "dddd"), textsOf(buffer, 4))
+        assertEquals(0, buffer.activeTranscriptRows)
+    }
+
+    @Test
+    fun shrink_deductionIgnoresInterleavedBlankAboveNonBlank() {
+        val buffer = TerminalBuffer(4, 8, 6)
+        fill(buffer, listOf("aaaa", "bbbb", "cccc", "", "eeee", ""))
+        val coords = tracked(CursorCoord.pack(0, 1).packed)
+
+        buffer.resize(4, 4, 8, coords, TextStyle.NORMAL, altScreen = false)
+
+        // 尾段仅末行为空：行 4 的中间空白不得计扣减，"eeee" 不得丢弃
+        assertEquals(listOf("bbbb", "cccc", "", "eeee"), textsOf(buffer, 4))
+        assertEquals(listOf("aaaa"), historyTextsOf(buffer))
+    }
+
+    @Test
     fun reflow_keepsTrailingSpacesUnderCursor() {
         val buffer = TerminalBuffer(10, 10, 5)
         fill(buffer, listOf("ls   "))
