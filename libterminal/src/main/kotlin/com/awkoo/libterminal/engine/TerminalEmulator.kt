@@ -36,17 +36,22 @@ internal class TerminalEmulator(
 
     private var aboutToAutoWrap = false
 
+    /**
+     * 光标行/列的合法域由生产者保证：协议路径各自按边距推导，
+     * 几何变更经 [resizeCurrentScreen] 由缓冲区重排并夹取到新几何，保存光标同组映射。
+     * setter 不做二次夹取：夹取会把域错位从可见故障降级为静默错位。
+     */
     var cursorRow: Int
         get() = _cursorRow
         private set(row) {
-            _cursorRow = row.coerceIn(0, rows - 1)
+            _cursorRow = row
             aboutToAutoWrap = false
         }
 
     var cursorCol: Int
         get() = _cursorCol
         private set(col) {
-            _cursorCol = col.coerceIn(0, columns - 1)
+            _cursorCol = col
             aboutToAutoWrap = false
         }
 
