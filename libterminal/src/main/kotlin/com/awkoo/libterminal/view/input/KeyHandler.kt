@@ -15,14 +15,14 @@ internal object KeyHandler {
      *
      * @param codePoint 原始输入的 Unicode CodePoint
      * @param isCtrlDown 是否按下了 Ctrl 键
-     * @param isHardwareKeyboard 来源是否为物理硬件键盘（用于做特定硬件的修正）
+     * @param fromKeyEvent 字符是否来自框架 [android.view.KeyEvent] 的 `getUnicodeChar`
      * @return 最终终端接收的代码点
      */
     @JvmStatic
     fun processPrintableChar(
         codePoint: Int,
         isCtrlDown: Boolean,
-        isHardwareKeyboard: Boolean
+        fromKeyEvent: Boolean
     ): Int {
         var result = codePoint
         var finalCtrl = isCtrlDown
@@ -59,8 +59,9 @@ internal object KeyHandler {
             }
         }
 
-        // 3. 处理外部硬件键盘（如蓝牙键盘）的特殊字符映射修复
-        if (isHardwareKeyboard && result > -1) {
+        // 3. 修正 getUnicodeChar 产出的死键显示字符（外部硬件键盘如蓝牙键盘的字符映射）：
+        //    U+02DC/U+02CB/U+02C6 是 Android 死键显示字符（波浪/重音/抑扬），应还原为 ASCII
+        if (fromKeyEvent && result > -1) {
             result = when (result) {
                 0x02DC -> 0x007E // 蓝牙键盘输入的小波浪号转为标准的 ~
                 0x02CB -> 0x0060 // 修复 `

@@ -77,7 +77,7 @@ internal class KeyInputProcessor(
         if (result == 0) return KeyDownResult.NOT_HANDLED
 
         if ((result and KeyCharacterMap.COMBINING_ACCENT) != 0) {
-            if (combiningAccent != 0) inputCodePoint(event.deviceId, combiningAccent, controlDown, leftAltDown)
+            if (combiningAccent != 0) inputCodePoint(InputSource.KEY_EVENT, combiningAccent, controlDown, leftAltDown)
             combiningAccent = result and KeyCharacterMap.COMBINING_ACCENT_MASK
         } else {
             if (combiningAccent != 0) {
@@ -85,23 +85,23 @@ internal class KeyInputProcessor(
                 if (combinedChar > 0) result = combinedChar
                 combiningAccent = 0
             }
-            inputCodePoint(event.deviceId, result, controlDown, leftAltDown)
+            inputCodePoint(InputSource.KEY_EVENT, result, controlDown, leftAltDown)
         }
 
         return KeyDownResult.HANDLED
     }
 
     fun inputCodePoint(
-        eventSource: Int,
+        source: InputSource,
         codePoint: Int,
         controlDownFromEvent: Boolean,
         leftAltDownFromEvent: Boolean
     ) {
         val currentSession = sessionProvider() ?: return
 
-        // 按需获取键盘修饰符
-        // 只有软键盘输入需要单独获取 extraMods，物理按键和 ExtraKeys 在发送前已经在 onKeyDown 里获取并合并了
-        val extraMods = if (eventSource == TerminalImeConnection.KEY_EVENT_SOURCE_SOFT_KEYBOARD) {
+        // 只有 IME 软键盘文本需要单独获取 ExtraKeys 粘性修饰键：
+        // 框架按键已在 onKeyDown 里读取并合并，虚拟键栏由调用方显式传入
+        val extraMods = if (source == InputSource.SOFT_IME) {
             modifierReader()
         } else {
             ExtraKeysModifierSnapshot()
@@ -110,14 +110,11 @@ internal class KeyInputProcessor(
         val controlDown = controlDownFromEvent || extraMods.ctrl
         val leftAltDown = leftAltDownFromEvent || extraMods.alt
 
-        // 判断来源是否是真实的硬件键盘
-        val isHardwareKeyboard = eventSource > TerminalImeConnection.KEY_EVENT_SOURCE_SOFT_KEYBOARD
-
         // 委托给 KeyHandler 处理转换
         val finalCodePoint = KeyHandler.processPrintableChar(
             codePoint = codePoint,
             isCtrlDown = controlDown,
-            isHardwareKeyboard = isHardwareKeyboard
+            fromKeyEvent = source == InputSource.KEY_EVENT
         )
 
         pokeCursor()

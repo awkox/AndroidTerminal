@@ -71,13 +71,8 @@ internal class TerminalImeConnection(
     private fun sendTextToTerminal(text: CharSequence) {
         terminalView.stopTextSelectionMode()
         text.forEachColumn { _, _, codePoint, _, _ ->
-            terminalView.inputCodePoint(KEY_EVENT_SOURCE_SOFT_KEYBOARD, codePoint, false, false)
+            terminalView.inputCodePoint(InputSource.SOFT_IME, codePoint, false, false)
             true
         }
-    }
-
-    companion object {
-        /** 该 [KeyEvent] 来自非物理设备（如软键盘）。 */
-        const val KEY_EVENT_SOURCE_SOFT_KEYBOARD: Int = 0
     }
 }

@@ -19,6 +19,7 @@ import com.awkoo.libterminal.engine.TerminalCursorStyle
 import com.awkoo.libterminal.engine.TerminalSession
 import com.awkoo.libterminal.engine.buffer.CursorCoord
 import com.awkoo.libterminal.view.input.ImeController
+import com.awkoo.libterminal.view.input.InputSource
 import com.awkoo.libterminal.view.input.KeyInputProcessor
 import com.awkoo.libterminal.view.input.TerminalImeConnection
 import com.awkoo.libterminal.view.input.TerminalTouchHandler
@@ -84,10 +85,6 @@ inline fun ExtraKeysModifierSnapshot(
 class TerminalView(
     context: Context
 ) : View(context) {
-    companion object {
-        /** 虚拟 / 扩展按键键盘的事件来源标识，仅供模块内部使用。 */
-        internal const val KEY_EVENT_SOURCE_VIRTUAL_KEYBOARD = 2
-    }
 
     /**
      * 终端渲染配色的主题基底。
@@ -478,18 +475,18 @@ class TerminalView(
         leftAltDownFromEvent: Boolean = false
     ) =
         inputCodePoint(
-            KEY_EVENT_SOURCE_VIRTUAL_KEYBOARD,
+            InputSource.VIRTUAL_KEY_BAR,
             codePoint,
             controlDownFromEvent,
             leftAltDownFromEvent
         )
 
     internal fun inputCodePoint(
-        eventSource: Int,
+        source: InputSource,
         codePoint: Int,
         controlDownFromEvent: Boolean,
         leftAltDownFromEvent: Boolean
-    ) = keyProcessor.inputCodePoint(eventSource, codePoint, controlDownFromEvent, leftAltDownFromEvent)
+    ) = keyProcessor.inputCodePoint(source, codePoint, controlDownFromEvent, leftAltDownFromEvent)
 
     internal fun handleKeyCode(keyCode: Int, keyMod: Int): Boolean = keyProcessor.handleKeyCode(keyCode, keyMod)
 
