@@ -208,8 +208,6 @@ internal class TerminalEmulator(
         if (sizeChanged) {
             if (this@TerminalEmulator.rows != rows) {
                 this@TerminalEmulator.rows = rows
-                topMargin = 0
-                bottomMargin = this@TerminalEmulator.rows
             }
             if (this@TerminalEmulator.columns != columns) {
                 val oldColumns = this@TerminalEmulator.columns
@@ -218,9 +216,13 @@ internal class TerminalEmulator(
                 tabStops = BooleanArray(this@TerminalEmulator.columns)
                 setDefaultTabStops()
                 oldTabStop.copyInto(tabStops, endIndex = min(oldColumns, columns))
-                leftMargin = 0
-                rightMargin = this@TerminalEmulator.columns
             }
+            // xterm ScrnResize 口径：尺寸变更整体复位滚动区域并清原点模式
+            topMargin = 0
+            bottomMargin = this@TerminalEmulator.rows
+            leftMargin = 0
+            rightMargin = this@TerminalEmulator.columns
+            setDecsetInternalBit(DECSET_BIT_ORIGIN_MODE, false)
         }
 
         if (sizeChanged || screen.columns != this@TerminalEmulator.columns || screen.screenRows != this@TerminalEmulator.rows) {

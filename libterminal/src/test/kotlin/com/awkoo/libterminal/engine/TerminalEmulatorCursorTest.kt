@@ -245,6 +245,27 @@ class TerminalEmulatorCursorTest {
     }
 
     @Test
+    fun resize_resetsOriginMode() {
+        f.feed("\u001b[?6h\u001b[2;5r")
+        emulator.resize(8, 5, 8, 20)
+
+        f.clearWritten()
+        f.feed("\u001b[?6\$p")
+
+        assertEquals("\u001b[?6;2\$y", f.writtenText)
+    }
+
+    @Test
+    fun resize_resetsScrollRegionOnWidthChange() {
+        f.feed("\u001b[2;4r")
+        emulator.resize(8, 5, 8, 20)
+        f.feed("\u001b[5;1H\n")
+
+        // 滚动区已整体复位：底行换行走全屏滚动、离屏行进历史
+        assertEquals(1, emulator.screen.activeTranscriptRows)
+    }
+
+    @Test
     fun reset_returnsCursorHome() {
         f.feed("\u001b[3;4H\u001bc")
 
