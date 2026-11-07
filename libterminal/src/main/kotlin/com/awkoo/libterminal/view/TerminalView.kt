@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Rect
 import android.graphics.Typeface
-import android.os.SystemClock
 import android.text.InputType
 import android.view.ActionMode
 import android.view.KeyEvent
@@ -123,11 +122,10 @@ class TerminalView(
         sessionProvider = { currentSession },
         emulatorProvider = { emulator },
         pokeCursor = { cursorBlinker.poke() },
-        scrollRows = { scrollRows ->
-            val time = SystemClock.uptimeMillis()
-            val motionEvent = MotionEvent.obtain(time, time, MotionEvent.ACTION_DOWN, 0f, 0f, 0)
-            touchHandler.doScroll(motionEvent, scrollRows)
-            motionEvent.recycle()
+        scrollRows = { rows ->
+            // xterm scroll-back/scroll-forw 口径：翻页是本地回滚动作，不向应用发滚轮事件
+            scrollbackBy(rows)
+            if (!awakenScrollbars()) invalidate()
         },
         isSelectingText = { isSelectingText },
         stopTextSelection = { stopTextSelectionMode() },

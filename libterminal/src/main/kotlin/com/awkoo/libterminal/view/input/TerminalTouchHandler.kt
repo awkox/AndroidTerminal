@@ -61,7 +61,7 @@ internal class TerminalTouchHandler(
         return when (event.action) {
             MotionEvent.ACTION_SCROLL -> {
                 val up = event.getAxisValue(MotionEvent.AXIS_VSCROLL) > 0.0f
-                doScroll(event, if (up) -3 else 3)
+                scrollBy(if (up) -3 else 3, event.downTime, event.x, event.y)
                 true
             }
             // 1003 任意事件模式：无按钮的悬停移动也上报（悬停事件仅经此通道投递）
@@ -83,17 +83,23 @@ internal class TerminalTouchHandler(
         val distanceY = dy + scrollRemainder
         val deltaRows = (distanceY / view.renderer.fontLineSpacing).toInt()
         scrollRemainder = distanceY - deltaRows * view.renderer.fontLineSpacing
-        doScroll(event, deltaRows)
+        scrollBy(deltaRows, event.downTime, event.x, event.y)
     }
 
-    /** 执行滚动：移动终端历史、发送按键事件或转发鼠标滚轮事件。 */
-    fun doScroll(event: MotionEvent, rowsDown: Int) {
+    /**
+     * 执行滚动：转发鼠标滚轮（携带指针序列锚点坐标）、按键模拟或本地回滚。
+     *
+     * [pointerDownTime] 与 [pointerX]/[pointerY] 是真实指针序列的触点信息，
+     * 仅滚轮转发与序列锚点使用；非指针发起的滚动（如键盘翻页）不得伪造坐标，
+     * 应走本地回滚入口。
+     */
+    fun scrollBy(rowsDown: Int, pointerDownTime: Long, pointerX: Float, pointerY: Float) {
         val emulator = view.emulator ?: return
         val up = rowsDown < 0
         val amount = abs(rowsDown)
 
         // 在锁外计算鼠标坐标：视口空间只读渲染器字体度量，不触碰模拟器尺寸，无并发竞争
-        val coord = view.viewportCellAt(event.x, event.y)
+        val coord = view.viewportCellAt(pointerX, pointerY)
         var scrollX = coord.col
         var scrollY = coord.row
 
@@ -101,7 +107,7 @@ internal class TerminalTouchHandler(
             repeat(amount) {
                 if (emulator.isMouseTrackingActive) {
                     val button = if (up) TerminalEmulator.MOUSE_WHEELUP_BUTTON else TerminalEmulator.MOUSE_WHEELDOWN_BUTTON
-                    val anchor = anchorScroll(event.downTime, scrollX, scrollY)
+                    val anchor = anchorScroll(pointerDownTime, scrollX, scrollY)
                     scrollX = anchor.col
                     scrollY = anchor.row
                     emulator.sendMouseEvent(button, scrollX, scrollY, true)
