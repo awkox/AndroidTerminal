@@ -313,12 +313,19 @@ internal class TerminalBuffer(
         lines[(srcInternal) % totalRows] = lineToBeOverWritten
     }
 
-    fun scrollDownOneLine(topMargin: Int, bottomMargin: Int, style: TextStyle) {
-        require(!(topMargin > bottomMargin - 1 || topMargin < 0 || bottomMargin > screenRows)) {
-            "topMargin=$topMargin, bottomMargin=$bottomMargin, screenRows=$screenRows"
+    /**
+     * 把 [0, bottomMargin) 的内容整体上移一行并推进滚动历史，
+     * [bottomMargin, screenRows) 保持不动。
+     *
+     * 离区行（旧外行 0）离开屏幕顶、进入滚动历史——该语义仅在滚动区顶 == 屏幕顶时成立。
+     * 区域内滚动（top > 0）的离区行不出屏幕，必须走 [shiftLines]（经 [scrollRegionOneLine] 分派），
+     * 否则区域首行会以幻影行混入回滚区并逐出真历史。
+     */
+    fun scrollDownOneLine(bottomMargin: Int, style: TextStyle) {
+        require(!(bottomMargin < 1 || bottomMargin > screenRows)) {
+            "bottomMargin=$bottomMargin, screenRows=$screenRows"
         }
 
-        blockCopyLinesDown(screenFirstRow, topMargin)
         val rowsBelowScreen = screenRows - bottomMargin
         if (rowsBelowScreen > 0) blockCopyLinesDown(externalToInternalRow(bottomMargin), rowsBelowScreen)
 
@@ -469,7 +476,7 @@ internal class TerminalBuffer(
      * 列区间 [left, right) 覆盖整行时以行对象整体搬移，行级元数据（续行标记）随行走；
      * 收窄时只能搬矩形内容，行级元数据不参与。全宽与收窄的分派在此收口，调用方只报意图。
      *
-     * 本操作只改区间内容，不推进滚动历史；带滚动历史的滚动见 [scrollRegionOneLine]。
+     * 本操作只改区间内容，不推进滚动历史；带滚动历史的滚动见 [scrollDownOneLine]。
      */
     fun shiftLines(
         top: Int,
@@ -501,12 +508,14 @@ internal class TerminalBuffer(
     }
 
     /**
-     * 把行区间 [top, bottom) 的内容整体上移一行并推进滚动历史。
+     * 把外行区间 [top, bottom) 的内容整体上移一行。
      *
-     * 列区间收窄时该区间不参与滚动历史，退化为 [shiftLines] 的单行上移。
+     * 只有滚动区顶 == 屏幕顶的全宽滚动，离区行才离开屏幕、进入滚动历史（[scrollDownOneLine]）；
+     * 区域内滚动（top > 0）走 [shiftLines] 就地旋转，不触碰屏幕原点与滚动历史。
+     * 列区间收窄时同样不参与滚动历史。
      */
     fun scrollRegionOneLine(top: Int, bottom: Int, left: Int, right: Int, style: TextStyle) {
-        if (coversWholeRow(left, right)) scrollDownOneLine(top, bottom, style)
+        if (top == 0 && coversWholeRow(left, right)) scrollDownOneLine(bottom, style)
         else shiftLines(top, bottom, 1, left, right, up = true, style = style)
     }
 

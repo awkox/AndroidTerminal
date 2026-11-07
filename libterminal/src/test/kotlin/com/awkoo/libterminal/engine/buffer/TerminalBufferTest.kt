@@ -51,7 +51,7 @@ class TerminalBufferTest {
     fun rowInRange_coversHistoryAndScreen() {
         val buffer = bufferedBuffer()
         buffer.write(0, "aaaa")
-        buffer.scrollDownOneLine(0, 3, TextStyle.NORMAL)
+        buffer.scrollDownOneLine(3, TextStyle.NORMAL)
 
         assertTrue(buffer.rowInRange(-1))
         assertTrue(buffer.rowInRange(0))
@@ -64,7 +64,7 @@ class TerminalBufferTest {
     fun clampRow_andClampColumn_stayWithinDomain() {
         val buffer = bufferedBuffer()
         buffer.write(0, "aaaa")
-        buffer.scrollDownOneLine(0, 3, TextStyle.NORMAL)
+        buffer.scrollDownOneLine(3, TextStyle.NORMAL)
 
         assertEquals(-1, buffer.clampRow(-100))
         assertEquals(2, buffer.clampRow(100))
@@ -99,7 +99,7 @@ class TerminalBufferTest {
         buffer.write(1, "bbbb")
         buffer.write(2, "cccc")
 
-        buffer.scrollDownOneLine(0, 3, TextStyle.NORMAL)
+        buffer.scrollDownOneLine(3, TextStyle.NORMAL)
 
         assertEquals(1, buffer.activeTranscriptRows)
         assertEquals(listOf("bbbb", "cccc", ""), (0 until 3).map { buffer.rowText(it) })
@@ -107,23 +107,25 @@ class TerminalBufferTest {
     }
 
     @Test
-    fun scrollDownOneLine_withTopMargin_keepsRowsAboveRegionInPlace() {
+    fun scrollRegionOneLine_regionScroll_keepsHistoryUntouched() {
         val buffer = bufferedBuffer()
         buffer.write(0, "keep")
         buffer.write(1, "rrrr")
         buffer.write(2, "ssss")
 
-        buffer.scrollDownOneLine(1, 3, TextStyle.NORMAL)
+        buffer.scrollRegionOneLine(1, 3, 0, 4, TextStyle.NORMAL)
 
+        // 区域滚动的离区行不出屏幕：上方行与滚动历史都不受影响
+        assertEquals(0, buffer.activeTranscriptRows)
+        assertFalse(buffer.rowInRange(-1))
         assertEquals(listOf("keep", "ssss", ""), (0 until 3).map { buffer.rowText(it) })
-        assertEquals("rrrr", buffer.rowText(-1))
     }
 
     @Test
     fun activeRows_reflectsHistoryAndScreen() {
         val buffer = bufferedBuffer()
         buffer.write(0, "aaaa")
-        buffer.scrollDownOneLine(0, 3, TextStyle.NORMAL)
+        buffer.scrollDownOneLine(3, TextStyle.NORMAL)
 
         assertEquals(1, buffer.activeTranscriptRows)
         assertEquals(4, buffer.activeRows)
@@ -133,7 +135,7 @@ class TerminalBufferTest {
     fun clearTranscript_dropsHistoryWindow() {
         val buffer = bufferedBuffer()
         buffer.write(0, "aaaa")
-        buffer.scrollDownOneLine(0, 3, TextStyle.NORMAL)
+        buffer.scrollDownOneLine(3, TextStyle.NORMAL)
 
         buffer.clearTranscript()
 

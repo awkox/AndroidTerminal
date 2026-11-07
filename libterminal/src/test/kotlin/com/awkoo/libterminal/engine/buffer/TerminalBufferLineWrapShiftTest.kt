@@ -123,7 +123,7 @@ class TerminalBufferLineWrapShiftTest {
         fill(buffer, listOf("aaaa", "bbbb", "cccc"))
         buffer.setLineWrap(0)
 
-        buffer.scrollDownOneLine(0, 3, TextStyle.NORMAL)
+        buffer.scrollDownOneLine(3, TextStyle.NORMAL)
 
         assertEquals(listOf("bbbb", "cccc", ""), textsOf(buffer, 3))
         assertEquals(listOf(true), historyWrapsOf(buffer))

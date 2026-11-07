@@ -49,7 +49,7 @@ internal object TerminalReflower {
         fun advanceOutputRow() {
             if (currentOutputExternalRow == buffer.screenRows - 1) {
                 decrementPlacedRows(trackedNewRows, placed)
-                buffer.scrollDownOneLine(0, buffer.screenRows, currentStyle)
+                buffer.scrollDownOneLine(buffer.screenRows, currentStyle)
             } else {
                 currentOutputExternalRow++
             }

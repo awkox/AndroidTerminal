@@ -167,4 +167,15 @@ class TerminalEmulatorWrapScrollTest {
         assertEquals(1, emulator.screen.activeTranscriptRows)
         assertTrue(emulator.screen.getLineWrap(-1))
     }
+
+    @Test
+    fun regionalScroll_atBottomMargin_doesNotPushHistory() {
+        f.feed("aaa\r\nbbb\r\nccc\r\nddd\r\neee")
+        f.feed("\u001b[2;4r")
+        f.feed("\u001b[4;1H\n")
+
+        // 区域滚动的离区行不出屏幕，不得以幻影行混入回滚区
+        assertEquals(0, emulator.screen.activeTranscriptRows)
+        assertEquals(listOf("aaa", "ccc", "ddd", "", "eee"), f.screenText())
+    }
 }

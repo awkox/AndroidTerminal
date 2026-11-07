@@ -54,7 +54,7 @@ class TerminalBufferResizeTest {
     fun growRows_afterScroll_pullsHistoryBackIntoView() {
         val buffer = TerminalBuffer(4, 8, 3)
         fill(buffer, listOf("aaaa", "bbbb", "cccc"))
-        buffer.scrollDownOneLine(0, 3, TextStyle.NORMAL)
+        buffer.scrollDownOneLine(3, TextStyle.NORMAL)
 
         buffer.resize(4, 5, 8, tracked(CursorCoord.pack(0, 0).packed), TextStyle.NORMAL, altScreen = false)
 
