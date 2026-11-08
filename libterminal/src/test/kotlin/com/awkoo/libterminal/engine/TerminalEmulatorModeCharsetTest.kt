@@ -173,6 +173,50 @@ class TerminalEmulatorModeCharsetTest {
     }
 
     @Test
+    fun hardReset_fromAltScreen_returnsToClearedMainScreen() {
+        f.feed("main-content")
+        f.feed("\u001b[?1049h")
+        f.feed("alt-content")
+        f.feed("\u001bc")
+
+        assertFalse(emulator.isAlternateBufferActive)
+        assertEquals("", f.rowText(0))
+        assertEquals(0, emulator.cursorRow)
+        assertEquals(0, emulator.cursorCol)
+    }
+
+    @Test
+    fun hardReset_fromAltScreen_clearsScrollback() {
+        f.feed((1..8).joinToString("") { "line$it\r\n" })
+        f.feed("\u001b[?1049h")
+        f.feed("\u001bc")
+
+        assertEquals(0, emulator.screen.activeTranscriptRows)
+    }
+
+    @Test
+    fun hardReset_fromAltScreen_appliesPendingResize() {
+        f.feed("main")
+        f.feed("\u001b[?1049h")
+        emulator.resize(8, 3, 8, 20)
+        f.feed("\u001bc")
+
+        assertFalse(emulator.isAlternateBufferActive)
+        assertEquals(8, emulator.screen.columns)
+        assertEquals(3, emulator.screen.screenRows)
+        assertEquals("", f.rowText(0))
+    }
+
+    @Test
+    fun softReset_fromAltScreen_staysOnAltScreen() {
+        f.feed("\u001b[?1049h")
+        f.feed("keep\u001b[!p")
+
+        assertTrue(emulator.isAlternateBufferActive)
+        assertEquals("keep", f.rowText(0))
+    }
+
+    @Test
     fun bracketedPaste_toggledByDecset2004() {
         f.feed("\u001b[?2004h")
         f.clearWritten()

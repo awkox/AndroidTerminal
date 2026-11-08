@@ -416,6 +416,15 @@ internal class TerminalEmulator(
             'c' -> {
                 reset()
                 mainBuffer.clearTranscript()
+                // xterm RIS 口径（ReallyReset full 分支）：FromAlternate(clearFirst) 先清副屏再切回主屏，
+                // 随后 ClearScreen 清主屏；坐标已被 reset 归零且最终归 home，重排无需追踪
+                if (isAlternateBufferActive) {
+                    blockClear(0, 0, columns, rows)
+                    screen = mainBuffer
+                    if (mainBuffer.columns != columns || mainBuffer.screenRows != rows) {
+                        resizeCurrentScreen(LongArray(0))
+                    }
+                }
                 blockClear(0, 0, columns, rows)
                 setCursorPosition(0, 0)
             }
