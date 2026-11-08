@@ -1,0 +1,49 @@
+name: 发布 Maven Central
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  # 发布任务不可被后续事件取消
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-26.04
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v7
+        with:
+          submodules: recursive
+
+      - name: 配置 Gradle（依赖/构建缓存）
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: 校验 tag 与发布版本一致
+        # Maven Central 版本不可覆盖：打错 tag 会把错误版本永久占号，发布前从数据源（build 文件）拦截
+        run: |
+          VERSION=$(grep -oP 'coordinates\("[^"]+", "[^"]+", "\K[^"]+' libterminal/build.gradle.kts)
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          if [ "$VERSION" != "$TAG_VERSION" ]; then
+            echo "tag $GITHUB_REF_NAME 与 libterminal/build.gradle.kts 版本 $VERSION 不一致" >&2
+            exit 1
+          fi
+
+      - name: 单元测试
+        # 不发布带回归的版本
+        run: ./gradlew --build-cache :libterminal:testDebugUnitTest
+
+      - name: 发布并 release 到 Maven Central
+        # publishAndReleaseToMavenCentral：上传 deployment + 自动 release + 轮询校验终态（失败即中止）
+        run: ./gradlew --build-cache :libterminal:publishAndReleaseToMavenCentral
+        env:
+          ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
+          ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
+          ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.MAVEN_SIGNING_KEY }}
+          ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.MAVEN_SIGNING_PASSWORD }}
