@@ -6,7 +6,7 @@
 
 ```kotlin
 dependencies {
-    implementation("io.github.awkox:libterminal:4.0.2")
+    implementation("io.github.awkox:libterminal:4.1.2")
 }
 ```
 
@@ -100,7 +100,7 @@ fun TerminalScreen(session: TerminalSession?) {
 |------|------|------|
 | `TerminalView(context)` | 构造 | 渲染配色由 `colorScheme` 属性完全控制，默认深色（黑底白字） |
 | `currentSession` | `TerminalSession?`（var） | 切换当前会话；内部自动重绑定、重建配色 |
-| `textSize` | `Int`（var） | 字号（dp，自动约束在 4..100） |
+| `textSize` | `Int`（var） | 字号（dp，自动约束在 1..100） |
 | `typeface` | `Typeface`（var） | 等宽字体，例如 `Typeface.MONOSPACE` 或 Assets 中字体 |
 | `colorScheme` | `TerminalColorScheme`（var） | 渲染配色主题基底，见 §3.5；可在运行时修改，已绑定会话立即重建（OSC 动态改色仍作为覆盖生效） |
 | `cursorStyle` | `TerminalCursorStyle`（var） | 光标样式（`BLOCK`/`UNDERLINE`/`BAR`，默认 `BAR`）；立即应用并作用于新绑定会话，DECSET 主动切换优先于它 |
