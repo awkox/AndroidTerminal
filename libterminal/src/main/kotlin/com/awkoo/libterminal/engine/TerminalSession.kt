@@ -4,6 +4,7 @@ import com.awkoo.libterminal.process.ITerminalProcess
 import com.awkoo.libterminal.text.Utf8Decoder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
@@ -14,6 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.yield
 import java.io.IOException
 
@@ -41,7 +43,13 @@ class TerminalSession(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    private var inputReaderJob: Job? = null
+    private var outputWriterJob: Job? = null
+    private var emulatorProcessorJob: Job? = null
+    private var exitHandlerJob: Job? = null
+
     private class DataChunk(val buffer: ByteArray, var length: Int)
+
     private val terminalReadChannel: Channel<DataChunk> = Channel(Channel.UNLIMITED)
     private val terminalReadBufferPoolChannel = Channel<DataChunk>(POOL_SIZE)
     private val terminalWriteChannel: Channel<ByteArray> = Channel(Channel.BUFFERED)
@@ -92,119 +100,207 @@ class TerminalSession(
         this.process = p
         isRunning.value = true
 
-        launchInputReader(p)
-        launchOutputWriter(p)
-        launchEmulatorProcessor()
-        launchExitHandler(p)
+        // 先启动消费者，确保读取端发送数据时有人接收。
+        emulatorProcessorJob = launchEmulatorProcessor()
+
+        // 再启动读取端。
+        inputReaderJob = launchInputReader(p)
+
+        // 启动输入写入端。
+        outputWriterJob = launchOutputWriter(p)
+
+        // 最后启动退出监控。
+        exitHandlerJob = launchExitHandler(p)
     }
 
-    private fun launchInputReader(p: ITerminalProcess) {
-        scope.launch {
+    private fun launchInputReader(p: ITerminalProcess): Job {
+        return scope.launch {
             try {
                 p.inputStream.use { termIn ->
-                    while (isActive) {
+                    while (true) {
                         val chunk = terminalReadBufferPoolChannel.receive()
-                        val read = termIn.read(chunk.buffer)
-                        chunk.length = read
-                        if (read != -1) {
-                            terminalReadChannel.send(chunk)
-                        } else {
+
+                        val read = try {
+                            termIn.read(chunk.buffer)
+                        } catch (e: IOException) {
+                            // 读取异常时归还当前缓冲区。
+                            terminalReadBufferPoolChannel.trySend(chunk)
+                            throw e
+                        }
+
+                        if (read == -1) {
                             terminalReadBufferPoolChannel.trySend(chunk)
                             break
                         }
+
+                        chunk.length = read
+
+                        // 成功发送后，缓冲区所有权交给 Processor。
+                        terminalReadChannel.send(chunk)
                     }
                 }
             } catch (e: IOException) {
-                // 输入流关闭时静默忽略
+                // 输入流异常关闭或 SSH 断线。
+                // 由 finally 关闭 Channel，通知 Processor 结束。
             } finally {
+                // 只关闭读取 Channel，不关闭缓冲池。
+                //
+                // Channel.close() 后，已经成功发送的元素仍然可以被消费。
                 terminalReadChannel.close()
-                terminalReadBufferPoolChannel.close()
             }
         }
     }
 
-    private fun launchOutputWriter(p: ITerminalProcess) {
-        scope.launch {
+    private fun launchOutputWriter(p: ITerminalProcess): Job {
+        return scope.launch {
             try {
                 p.outputStream.use { termOut ->
                     stdin?.let { termOut.write(it) }
+
                     for (buffer in terminalWriteChannel) {
                         termOut.write(buffer, 0, buffer.size)
                     }
+
+                    termOut.flush()
                 }
             } catch (e: IOException) {
-                // 输出流关闭时静默忽略
+                // 进程退出或输入流关闭。
             } finally {
                 terminalWriteChannel.close()
             }
         }
     }
 
-    private fun launchEmulatorProcessor() {
-        scope.launch(Dispatchers.Default) {
-            for (chunk in terminalReadChannel) {
-                var bytesProcessed = chunk.length
+    private fun launchEmulatorProcessor(): Job {
+        return scope.launch(Dispatchers.Default) {
+            try {
+                for (chunk in terminalReadChannel) {
+                    try {
+                        var bytesProcessed = chunk.length
 
-                synchronized(emulator) {
-                    emulator.append(chunk.buffer, chunk.length)
+                        synchronized(emulator) {
+                            emulator.append(chunk.buffer, chunk.length)
 
-                    while (bytesProcessed < 32 * 1024) {
-                        val moreChunk = terminalReadChannel.tryReceive().getOrNull() ?: break
-                        emulator.append(moreChunk.buffer, moreChunk.length)
-                        bytesProcessed += moreChunk.length
-                        terminalReadBufferPoolChannel.trySend(moreChunk)
+                            // 批量处理，减少 UI 通知次数。
+                            while (bytesProcessed < 32 * 1024) {
+                                val moreChunk =
+                                    terminalReadChannel.tryReceive().getOrNull()
+                                        ?: break
+
+                                try {
+                                    emulator.append(
+                                        moreChunk.buffer,
+                                        moreChunk.length
+                                    )
+
+                                    bytesProcessed += moreChunk.length
+                                } finally {
+                                    // 当前 chunk 已经消费，归还缓冲区。
+                                    terminalReadBufferPoolChannel.trySend(
+                                        moreChunk
+                                    )
+                                }
+                            }
+                        }
+
+                        notifyScreenUpdate()
+                    } finally {
+                        // 当前 chunk 已经处理，归还缓冲区。
+                        terminalReadBufferPoolChannel.trySend(chunk)
                     }
+
+                    yield()
+                }
+            } finally {
+                // 这里不追加退出提示。
+                // 退出提示由 ExitHandler 在 Processor 完成之后追加。
+            }
+        }
+    }
+
+    private fun launchExitHandler(p: ITerminalProcess): Job {
+        return scope.launch {
+            var exitCode = -1
+            var exitReason: String? = null
+
+            try {
+                // 1. 等待子进程退出。
+                exitCode = p.waitFor()
+
+                // 2. 在释放进程资源之前保存退出原因。
+                exitReason = p.failureReason
+
+                // 3. 等待读取协程结束；Reader 结束时会关闭 terminalReadChannel。
+                //    进程已退出但流未 EOF（PTY 被孤儿进程占用）时 Reader 永不结束，
+                //    超时即放弃排空照常收尾，否则退出路径整体假死（提示不出、
+                //    isRunning 恒 true、会话无法关闭）。SSH 的 EOF 在 waitFor
+                //    返回前已发生，正常路径不受超时影响。
+                val drained = withTimeoutOrNull(DRAIN_TIMEOUT_MS) {
+                    inputReaderJob?.join()
+                } != null
+
+                // 4. Reader 已关通道时 Processor 必然排空后退出；
+                //    超时分支由步骤 10 的 scope.cancel() 在挂起点收尾。
+                if (drained) {
+                    emulatorProcessorJob?.join()
                 }
 
-                terminalReadBufferPoolChannel.trySend(chunk)
-                notifyScreenUpdate()
-                yield()
+            } finally {
+                // 5. 输出排空后释放进程资源。
+                try {
+                    p.close()
+                } catch (_: Exception) {
+                }
+
+                // 6. 关闭写入 Channel，通知 Writer 结束。
+                terminalWriteChannel.close()
+
+                // 7. 等待 Writer 退出；写端可能卡在满缓冲的 pty 输入上，同样限时。
+                withTimeoutOrNull(DRAIN_TIMEOUT_MS) {
+                    outputWriterJob?.join()
+                }
+
+                // 8. 最后追加退出提示。
+                withContext(Dispatchers.Main.immediate) {
+                    handleProcessExit(exitCode, exitReason)
+                    isRunning.value = false
+                }
+
+                // 9. 释放缓冲池。
+                terminalReadBufferPoolChannel.close()
+
+                // 10. 结束会话协程。
+                scope.cancel()
             }
         }
     }
 
-    private fun launchExitHandler(p: ITerminalProcess) {
-        scope.launch {
-            val exitCode = p.waitFor()
-
-            // waitFor 返回后快照，再 close（SSH close 会释放 native 会话）。
-            val exitReason = p.failureReason
-
-            p.close()
-
-            withContext(Dispatchers.Main.immediate) {
-                handleProcessExit(exitCode, exitReason)
-            }
-
-            scope.cancel()
-        }
-    }
-
-    private fun handleProcessExit(exitCode: Int, exitReason: String?) {
+    private fun handleProcessExit(
+        exitCode: Int,
+        exitReason: String?
+    ) {
         exitStatus = exitCode
-        isRunning.value = false
 
         synchronized(emulator) {
-            while (true) {
-                val pendingChunk = terminalReadChannel.tryReceive().getOrNull() ?: break
-                emulator.append(pendingChunk.buffer, pendingChunk.length)
-                terminalReadBufferPoolChannel.trySend(pendingChunk)
-            }
-
-            // SSH 等进程的非正常退出原因（结构化来源，不走 socket，无竞态）。
+            // SSH 等进程的非正常退出原因。
             if (!exitReason.isNullOrEmpty()) {
                 val reasonBytes = ("\r\n$exitReason\r\n").toByteArray()
-                emulator.append(reasonBytes, reasonBytes.size)
+
+                emulator.append(
+                    reasonBytes,
+                    reasonBytes.size
+                )
             }
 
             val status = when {
-                // 非零退出码
                 exitCode > 0 -> " (code $exitCode)"
-                // 负数表示信号编号
                 exitCode < 0 -> " (signal ${-exitCode})"
                 else -> ""
             }
-            val buffer = "\r\n[Process completed$status - press Enter]".toByteArray()
+
+            val buffer =
+                "\r\n[Process completed$status - press Enter]".toByteArray()
+
             emulator.append(buffer, buffer.size)
         }
 
@@ -220,7 +316,7 @@ class TerminalSession(
             terminalWriteChannel.trySend(data)
         } else if (
             data.size == 1 &&
-                (data[0] == '\n'.code.toByte() ||
+            (data[0] == '\n'.code.toByte() ||
                     data[0] == '\r'.code.toByte())
         ) {
             isRemove.update { true }
@@ -304,5 +400,8 @@ class TerminalSession(
     companion object {
         private const val POOL_SIZE = 64
         private const val CHUNK_SIZE = 4096
+
+        /** 退出汇合各 join 的排空期限：正常 EOF 毫秒级，超时视为流已不可结束。 */
+        private const val DRAIN_TIMEOUT_MS = 3_000L
     }
 }
