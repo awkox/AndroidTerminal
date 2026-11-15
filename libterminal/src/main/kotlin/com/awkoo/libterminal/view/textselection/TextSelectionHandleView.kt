@@ -16,7 +16,7 @@ internal class TextSelectionHandleView(
     private val terminalView: TerminalView,
     private val cursorController: CursorController,
     private val initialOrientation: Int
-) : View(terminalView.context) {
+) : View(terminalView.context), SelectionHandle {
     
     private var popup: PopupWindow? = null
     private lateinit var handleDrawable: Drawable
@@ -34,9 +34,9 @@ internal class TextSelectionHandleView(
     private var lastParentX = 0
     private var lastParentY = 0
 
-    var handleHeight: Int = 0
+    override var handleHeight: Int = 0
         private set
-    var handleWidth: Int = 0
+    override var handleWidth: Int = 0
         private set
 
     private var orientation = 0
@@ -91,7 +91,7 @@ internal class TextSelectionHandleView(
         popup?.showAtLocation(terminalView, 0, coords[0], coords[1])
     }
 
-    fun hide() {
+    override fun hide() {
         this.isDragging = false
         popup?.let {
             it.dismiss()
@@ -105,8 +105,7 @@ internal class TextSelectionHandleView(
         (parent as? ViewGroup)?.removeView(this)
     }
 
-    // [新增] 统一更新布局的方法，剥离计算逻辑，由外部直接控制
-    fun updateLayout(x: Int, y: Int, isVisible: Boolean, orientation: Int) {
+    override fun updateLayout(x: Int, y: Int, isVisible: Boolean, orientation: Int) {
         val oldHotspotX = hotspotX
         if (this@TextSelectionHandleView.orientation != orientation) {
             setOrientation(orientation)
