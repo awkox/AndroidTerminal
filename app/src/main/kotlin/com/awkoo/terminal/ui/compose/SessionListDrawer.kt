@@ -270,13 +270,12 @@ private fun MainActivity.SessionViewScreen(
 
                 it.actionModeCustomizer = actionModeCustomizer
 
-                // 物理键盘输入也遵守粘性 Ctrl/Alt/Shift/Fn 切换
+                // 物理键盘输入也遵守粘性 Ctrl/Alt/Shift 切换
                 it.extraKeysModifierReader = {
                     ExtraKeysModifierSnapshot(
                         ctrl = modifierState.readCtrl(),
                         alt = modifierState.readAlt(),
-                        shift = modifierState.readShift(),
-                        fn = modifierState.readFn()
+                        shift = modifierState.readShift()
                     )
                 }
 

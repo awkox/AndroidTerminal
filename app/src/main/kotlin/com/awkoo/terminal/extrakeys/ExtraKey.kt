@@ -53,7 +53,6 @@ enum class SpecialKeyType {
     CTRL,
     ALT,
     SHIFT,
-    FN,
     KEYBOARD,
     DRAWER,
     PASTE,

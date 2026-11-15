@@ -80,8 +80,7 @@ private fun ExtraKeyButtonItem(
     val isModifier = button.key is ExtraKey.SpecialKey &&
         (button.key.type == SpecialKeyType.CTRL ||
             button.key.type == SpecialKeyType.ALT ||
-            button.key.type == SpecialKeyType.SHIFT ||
-            button.key.type == SpecialKeyType.FN)
+            button.key.type == SpecialKeyType.SHIFT)
 
     val isRepetitive = button.key is ExtraKey.Key &&
         button.key.value in REPETITIVE_KEYS
@@ -173,6 +172,5 @@ private fun ExtraKeysModifierState.isSpecialLocked(type: SpecialKeyType): Boolea
     SpecialKeyType.CTRL -> ctrl.isLocked
     SpecialKeyType.ALT -> alt.isLocked
     SpecialKeyType.SHIFT -> shift.isLocked
-    SpecialKeyType.FN -> fn.isLocked
     else -> false
 }

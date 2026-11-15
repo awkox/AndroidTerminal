@@ -65,12 +65,13 @@ android {
         disable.add("ExpiredTargetSdkVersion")
     }
 
-    //testOptions {
-        //unitTests {
-            //isIncludeAndroidResources = true
-            //isReturnDefaultValues = true
-        //}
-    //}
+    testOptions {
+        unitTests {
+            // Dispatcher 测试需构造合成 KeyEvent（android.view），默认值模式下读不到字段
+            // 的断言已避免，仅依赖常量内联与构造不抛
+            isReturnDefaultValues = true
+        }
+    }
 
     buildFeatures {
         compose = true
@@ -85,7 +86,7 @@ dependencies {
     coreLibraryDesugaring(libs.android.desugar)
     implementation(libs.hilt.android)
     ksp(libs.hilt.android.compiler)
-    //testImplementation(libs.junit)
+    testImplementation(libs.junit)
     debugImplementation(libs.leakcanary)
     implementation(libs.google.material)
     implementation(libs.androidx.datastore.preferences)

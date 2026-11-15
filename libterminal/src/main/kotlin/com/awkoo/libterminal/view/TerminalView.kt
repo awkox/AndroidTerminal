@@ -46,8 +46,6 @@ value class ExtraKeysModifierSnapshot(val mask: Int) {
     val alt: Boolean get() = (mask and 2) != 0
     /** Shift 是否粘性按下（mask 位 2）。 */
     val shift: Boolean get() = (mask and 4) != 0
-    /** Fn 是否粘性按下（mask 位 3）。 */
-    val fn: Boolean get() = (mask and 8) != 0
 }
 
 /**
@@ -57,13 +55,11 @@ value class ExtraKeysModifierSnapshot(val mask: Int) {
 inline fun ExtraKeysModifierSnapshot(
     ctrl: Boolean = false,
     alt: Boolean = false,
-    shift: Boolean = false,
-    fn: Boolean = false
+    shift: Boolean = false
 ): ExtraKeysModifierSnapshot = ExtraKeysModifierSnapshot(
     (if (ctrl) 1 else 0) or
     (if (alt) 2 else 0) or
-    (if (shift) 4 else 0) or
-    (if (fn) 8 else 0)
+    (if (shift) 4 else 0)
 )
 
 /**

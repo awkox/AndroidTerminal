@@ -51,7 +51,6 @@ internal class KeyInputProcessor(
         val controlDown = event.isCtrlPressed || extraMods.ctrl
         val leftAltDown = (metaState and KeyEvent.META_ALT_LEFT_ON) != 0 || extraMods.alt
         val shiftDown = event.isShiftPressed || extraMods.shift
-        val fnDown = event.isFunctionPressed || extraMods.fn
         val rightAltDownFromEvent = (metaState and KeyEvent.META_ALT_RIGHT_ON) != 0
 
         var keyMod = 0
@@ -59,7 +58,7 @@ internal class KeyInputProcessor(
         if (event.isAltPressed || leftAltDown) keyMod = keyMod or KeySequenceEncoder.KEYMOD_ALT
         if (shiftDown) keyMod = keyMod or KeySequenceEncoder.KEYMOD_SHIFT
         if (event.isNumLockOn) keyMod = keyMod or KeySequenceEncoder.KEYMOD_NUM_LOCK
-        if (!fnDown && handleKeyCode(keyCode, keyMod)) {
+        if (handleKeyCode(keyCode, keyMod)) {
             return KeyDownResult.HANDLED
         }
 
