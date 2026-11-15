@@ -21,8 +21,29 @@ import kotlin.math.max
  *
  * 缓存字体度量信息，字体或字号变更时需重新创建。
  */
+internal class GlyphWidthCache(
+    private val asciiMeasures: FloatArray,
+    private val measureRange: (CharArray, Int, Int) -> Float
+) {
+    private val bmpMeasureCache = FloatArray(0x10000) { -1f }
+
+    fun measure(line: CharArray, charStart: Int, charsForCodePoint: Int, codePoint: Int): Float {
+        if (codePoint < asciiMeasures.size) return asciiMeasures[codePoint]
+        if (charsForCodePoint == 1 && codePoint < bmpMeasureCache.size) {
+            var cached = bmpMeasureCache[codePoint]
+            if (cached < 0f) {
+                cached = measureRange(line, charStart, charsForCodePoint)
+                bmpMeasureCache[codePoint] = cached
+            }
+            return cached
+        }
+        return measureRange(line, charStart, charsForCodePoint)
+    }
+}
+
 internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
     private val textPaint = Paint()
+    private val measurePaint = Paint()
 
     @JvmField
     val fontWidth: Float
@@ -32,9 +53,9 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
     @JvmField
     val baselineOffset: Int
     private val asciiMeasures = FloatArray(127)
-
-    // 非 ASCII 的 BMP 码点测量宽度缓存（-1=未测量）。测量仅依赖码点与恒定画笔，跨帧有效
-    private val bmpMeasureCache = FloatArray(0x10000) { -1f }
+    private val glyphWidthCache = GlyphWidthCache(asciiMeasures) { line, start, count ->
+        measurePaint.measureText(line, start, count)
+    }
 
     // 下划线独立画笔：描边模式，粗细随字号在 init 中设定，避免依赖 textPaint 状态被文本绘制覆盖
     private val underlinePaint = Paint().apply {
@@ -49,19 +70,23 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
 
     init {
         require(textSize > 0) { "textSize must be > 0, got $textSize" }
+        measurePaint.textSize = textSize.toFloat()
+        measurePaint.typeface = typeface
+        measurePaint.isAntiAlias = true
+
         textPaint.textSize = textSize.toFloat()
         textPaint.typeface = typeface
         textPaint.isAntiAlias = true
 
-        this.fontLineSpacing = max(1, ceil(textPaint.fontSpacing.toDouble()).toInt())
-        fontAscent = ceil(textPaint.ascent().toDouble()).toInt()
+        this.fontLineSpacing = max(1, ceil(measurePaint.fontSpacing.toDouble()).toInt())
+        fontAscent = ceil(measurePaint.ascent().toDouble()).toInt()
         baselineOffset = this.fontLineSpacing + fontAscent
-        this.fontWidth = max(1f, textPaint.measureText("X"))
+        this.fontWidth = max(1f, measurePaint.measureText("X"))
 
         val oneChar = CharArray(1)
         for (i in asciiMeasures.indices) {
             oneChar[0] = i.toChar()
-            asciiMeasures[i] = textPaint.measureText(oneChar, 0, 1)
+            asciiMeasures[i] = measurePaint.measureText(oneChar, 0, 1)
         }
 
         // 下划线几何参数随字号缩放，保证不同字号下视觉比例一致
@@ -190,15 +215,7 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
             val charsForCodePoint = charEnd - charStart
 
             val measuredCodePointWidth =
-                if (codePoint < asciiMeasures.size) asciiMeasures[codePoint]
-                else if (charsForCodePoint == 1 && codePoint < bmpMeasureCache.size) {
-                    var cached = bmpMeasureCache[codePoint]
-                    if (cached < 0f) {
-                        cached = textPaint.measureText(line, charStart, charsForCodePoint)
-                        bmpMeasureCache[codePoint] = cached
-                    }
-                    cached
-                } else textPaint.measureText(line, charStart, charsForCodePoint)
+                glyphWidthCache.measure(line, charStart, charsForCodePoint, codePoint)
 
             val fontWidthMismatch = abs(measuredCodePointWidth / this.fontWidth - codePointWcWidth) > 0.01
 
