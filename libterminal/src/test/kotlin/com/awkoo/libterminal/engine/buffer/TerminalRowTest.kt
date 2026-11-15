@@ -233,4 +233,67 @@ class TerminalRowTest {
     }
 
     private fun TerminalRow.extEffectAt(column: Int): Long = getExtendedEffect(column)
+
+    @Test
+    fun setChar_wideCharOverCellWithCombiningMark_removesEntireNextCell() {
+        val row = newBlankRow(5)
+        row.setChar(0, 'a'.code, TextStyle.NORMAL)
+        row.setChar(1, 'e'.code, TextStyle.NORMAL)
+        row.setChar(1, 0x0301, TextStyle.NORMAL)
+        row.setChar(2, 'b'.code, TextStyle.NORMAL)
+
+        row.setChar(0, 0x4E2D, TextStyle.NORMAL)
+
+        assertEquals("中b  ", row.text())
+        assertEquals(4, row.charLength)
+    }
+
+    @Test
+    fun setChar_supplementaryWideCharAtLastColumn_replacesBothSurrogatesWithSingleSpace() {
+        val row = newBlankRow(4)
+        row.write("abcd")
+
+        row.setChar(3, 0x1F600, TextStyle.NORMAL)
+
+        assertEquals("abc ", row.text())
+        assertEquals(4, row.charLength)
+    }
+
+    @Test
+    fun copyInterval_truncatingWideCharAtStartOrEnd_handlesCombiningAndPadding() {
+        val source = newBlankRow(4)
+        source.setChar(0, 0x4E2D, TextStyle.NORMAL)
+        source.setChar(0, 0x0301, TextStyle.NORMAL)
+        source.setChar(2, 'b'.code, TextStyle.NORMAL)
+
+        val destFromSecondHalf = newBlankRow(4)
+        destFromSecondHalf.write("xxxx")
+        destFromSecondHalf.copyInterval(source, 1, 3, 0)
+        assertEquals(" bxx", destFromSecondHalf.text())
+
+        val destTruncatedEnd = newBlankRow(4)
+        destTruncatedEnd.write("xxxx")
+        destTruncatedEnd.copyInterval(source, 0, 1, 0)
+        assertEquals(" xxx", destTruncatedEnd.text())
+
+        val selfCopy = newBlankRow(4)
+        selfCopy.setChar(0, 0x4E2D, TextStyle.NORMAL)
+        selfCopy.setChar(0, 0x0301, TextStyle.NORMAL)
+        selfCopy.setChar(2, 'b'.code, TextStyle.NORMAL)
+        selfCopy.copyInterval(selfCopy, 1, 3, 0)
+        assertEquals(" bb ", selfCopy.text())
+    }
+
+    @Test
+    fun setChar_nulThenClear_fillsRowWithSpaces() {
+        val row = newBlankRow(4)
+        row.setChar(1, 0, TextStyle.NORMAL)
+
+        assertFalse(row.isBlank)
+
+        row.clear(TextStyle.NORMAL)
+
+        assertTrue(row.isBlank)
+        assertEquals("    ", row.text())
+    }
 }

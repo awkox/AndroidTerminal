@@ -95,42 +95,61 @@ internal class TerminalRow(
      * 注意：[sourceX2] 为排他端点。
      */
     fun copyInterval(line: TerminalRow, sourceX1: Int, sourceX2: Int, destinationX: Int) {
-        var sourceX1 = sourceX1
-        var destinationX = destinationX
+        if (sourceX1 >= sourceX2) return
+        var srcCol = sourceX1
+        var dstCol = destinationX
         hasNonOneWidthOrSurrogateChars =
             hasNonOneWidthOrSurrogateChars or line.hasNonOneWidthOrSurrogateChars
-        val x1 = line.findStartOfColumn(sourceX1)
-        val x2 = line.findStartOfColumn(sourceX2)
-        var startingFromSecondHalfOfWideChar =
-            (sourceX1 > 0 && line.wideDisplayCharacterStartingAt(sourceX1 - 1))
-        val sourceChars = if (this == line) line.text.copyOf(line.text.size) else line.text
+
+        val sourceChars = if (this == line) line.text.copyOf(line.usedCharCount) else line.text
         val sourceStyle = if (this == line) line.styleAndEffectBits.copyOf() else line.styleAndEffectBits
+
+        val x2 = line.findStartOfColumn(sourceX2)
+        val startInSecondHalf = srcCol > 0 && line.wideDisplayCharacterStartingAt(srcCol - 1)
+        var i = if (startInSecondHalf) line.findStartOfColumn(srcCol + 1) else line.findStartOfColumn(srcCol)
+
+        if (startInSecondHalf) {
+            setChar(dstCol, ' '.code, TextStyle(sourceStyle[srcCol * 2]), sourceStyle[srcCol * 2 + 1])
+            dstCol++
+            srcCol++
+        }
+
         var latestNonCombiningWidth = 0
-        var i = x1
         while (i < x2) {
             val sourceChar = sourceChars[i]
-            var codePoint = if (sourceChar.isHighSurrogate()) Character.toCodePoint(
-                sourceChar,
-                sourceChars[++i]
-            ) else sourceChar.code
-            if (startingFromSecondHalfOfWideChar) {
-                // 宽字符后半部分的复制视同空白填充
-                codePoint = ' '.code
-                startingFromSecondHalfOfWideChar = false
+            val codePoint: Int
+            val charCount: Int
+            if (sourceChar.isHighSurrogate() && i + 1 < x2) {
+                codePoint = Character.toCodePoint(sourceChar, sourceChars[i + 1])
+                charCount = 2
+            } else {
+                codePoint = sourceChar.code
+                charCount = 1
             }
             val w = WcWidth.width(codePoint)
             if (w > 0) {
-                destinationX += latestNonCombiningWidth
-                sourceX1 += latestNonCombiningWidth
+                dstCol += latestNonCombiningWidth
+                srcCol += latestNonCombiningWidth
                 latestNonCombiningWidth = w
             }
 
-            // 从安全的快照中读取偶数位（主样式）和奇数位（扩展特效）
-            val styleValue = sourceStyle[sourceX1 * 2]
-            val extEffect = sourceStyle[sourceX1 * 2 + 1]
+            val styleValue = sourceStyle[srcCol * 2]
+            val extEffect = sourceStyle[srcCol * 2 + 1]
 
-            setChar(destinationX, codePoint, TextStyle(styleValue), extEffect)
-            i++
+            setChar(dstCol, codePoint, TextStyle(styleValue), extEffect)
+            i += charCount
+        }
+
+        val endCol = dstCol + latestNonCombiningWidth
+        val targetEndCol = destinationX + (sourceX2 - sourceX1)
+        if (endCol < targetEndCol) {
+            val truncSrcCol = sourceX2 - 1
+            setChar(
+                endCol,
+                ' '.code,
+                TextStyle(sourceStyle[truncSrcCol * 2]),
+                sourceStyle[truncSrcCol * 2 + 1]
+            )
         }
     }
 
@@ -317,7 +336,7 @@ internal class TerminalRow(
 
         val ext = normalizeExtendedEffect(style.value, extendedEffect)
 
-        if (codePoint != ' '.code && codePoint != 0) {
+        if (codePoint != ' '.code) {
             isBlank = false
         } else if (style.foreColor != TextStyle.COLOR_INDEX_FOREGROUND ||
                    style.backColor != TextStyle.COLOR_INDEX_BACKGROUND ||
@@ -489,16 +508,32 @@ internal class TerminalRow(
             }
         } else if (oldCodePointDisplayWidth == 1 && newCodePointDisplayWidth == 2) {
             if (columnToSet == columns - 1) {
-                val oldCharCount = if (text[newNextColumnIndex - 1].isHighSurrogate() && newNextColumnIndex - 2 >= 0 && !text[newNextColumnIndex - 2].isHighSurrogate()) 2 else 1
-                if (oldCharCount == 2) {
-                    text[newNextColumnIndex - 2] = ' '.code.toChar()
+                val newCharCount =
+                    if (newNextColumnIndex >= 2 &&
+                        text[newNextColumnIndex - 1].isLowSurrogate() &&
+                        text[newNextColumnIndex - 2].isHighSurrogate()
+                    ) 2 else 1
+                val cellStart = newNextColumnIndex - newCharCount
+                text[cellStart] = ' '
+                if (newCharCount == 2) {
+                    if (newNextColumnIndex < usedCharCount) {
+                        text.copyInto(
+                            destination = text,
+                            destinationOffset = cellStart + 1,
+                            startIndex = newNextColumnIndex,
+                            endIndex = usedCharCount
+                        )
+                    }
+                    usedCharCount--
                 }
-                text[newNextColumnIndex - 1] = ' '.code.toChar()
             } else if (columnToSet == columns - 2) {
                 usedCharCount = newNextColumnIndex
-            } else {
-                val newNextNextColumnIndex =
-                    newNextColumnIndex + (if (this@TerminalRow.text[newNextColumnIndex].isHighSurrogate()) 2 else 1)
+            } else if (newNextColumnIndex < usedCharCount) {
+                var newNextNextColumnIndex =
+                    newNextColumnIndex + text.charCountAtSafe(newNextColumnIndex, usedCharCount)
+                while (newNextNextColumnIndex < usedCharCount && WcWidth.width(text, newNextNextColumnIndex) <= 0) {
+                    newNextNextColumnIndex += text.charCountAtSafe(newNextNextColumnIndex, usedCharCount)
+                }
                 val nextLen = newNextNextColumnIndex - newNextColumnIndex
 
                 text.copyInto(
