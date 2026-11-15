@@ -305,7 +305,7 @@ internal class TextSelectionCursorController internal constructor(
         }, ActionMode.TYPE_FLOATING)
     }
 
-    override fun updatePosition(handle: TextSelectionHandleView, x: Int, y: Int) {
+    override fun updatePosition(handle: SelectionHandle, x: Int, y: Int) {
         val emulator = host.emulator ?: return
 
         synchronized(emulator) {

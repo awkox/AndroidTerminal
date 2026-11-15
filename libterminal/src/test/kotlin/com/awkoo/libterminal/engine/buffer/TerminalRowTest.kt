@@ -99,11 +99,15 @@ class TerminalRowTest {
     @Test
     fun snapToColumn_halfOfWideCharSnapsPerDirection() {
         val row = newBlankRow(4)
-        row.write("中")
+        row.setChar(0, 0x4E2D, TextStyle.NORMAL)
+        row.setChar(2, 'a'.code, TextStyle.NORMAL)
 
-        assertEquals(0, row.snapToColumn(1, SnapAlign.Start))
-        assertEquals(2, row.snapToColumn(1, SnapAlign.End))
         assertEquals(0, row.snapToColumn(0, SnapAlign.Start))
+        assertEquals(0, row.snapToColumn(1, SnapAlign.Start))
+        assertEquals(1, row.snapToColumn(0, SnapAlign.End))
+        assertEquals(1, row.snapToColumn(1, SnapAlign.End))
+        assertEquals(2, row.snapToColumn(2, SnapAlign.Start))
+        assertEquals(2, row.snapToColumn(2, SnapAlign.End))
     }
 
     @Test

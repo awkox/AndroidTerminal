@@ -26,7 +26,7 @@ internal interface CursorController : OnTouchModeChangeListener {
     fun render()
 
     /** 更新光标手柄位置。 */
-    fun updatePosition(handle: TextSelectionHandleView, x: Int, y: Int)
+    fun updatePosition(handle: SelectionHandle, x: Int, y: Int)
 
     /** 光标是否处于激活状态。 */
     val isActive: Boolean

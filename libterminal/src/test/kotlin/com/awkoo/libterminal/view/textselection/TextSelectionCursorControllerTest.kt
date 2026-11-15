@@ -156,4 +156,25 @@ class TextSelectionCursorControllerTest {
         assertFalse(controller.isActive)
         assertEquals("xyz123", f.rowText(0))
     }
+
+    @Test
+    fun dragEndHandleOntoWideChar_selectsExactWideCharWithoutNeighbor() {
+        val f = EmulatorFixture()
+        f.feed("中a")
+        val (controller, _, handles) = createController(f.emulator)
+
+        controller.showAt(0f, 0f)
+        controller.updatePosition(handles.second, 10, 0)
+
+        val sel = IntArray(4)
+        controller.getSelectors(sel)
+        assertEquals(0, sel[2])
+        assertEquals(1, sel[3])
+        assertEquals("中", controller.selectedText)
+
+        controller.updatePosition(handles.second, 0, 0)
+        controller.getSelectors(sel)
+        assertEquals(1, sel[3])
+        assertEquals("中", controller.selectedText)
+    }
 }

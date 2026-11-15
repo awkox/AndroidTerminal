@@ -6,15 +6,15 @@ import com.awkoo.libterminal.text.charCountAtSafe
 import com.awkoo.libterminal.text.forEachColumn
 
 /**
- * 列吸附方向。
+ * 列吸附方向（闭区间语义）。
  *
- * 列号落在宽字符后半格内时没有唯一归属，选区两端需要相反的吸附方向：
- * 起点向字符起始吸，否则该宽字符被漏选；终点向字符之后吸，否则该半格无归属。
+ * 宽字符占据 `[col, col + width - 1]` 多列时，选区起止列号分别吸附到该字符占用的首列或末列，
+ * 避免漏选宽字符或把终点切在宽字符中间。
  */
 internal enum class SnapAlign {
-    /** 吸附到字符起始列（floor）。 */
+    /** 吸附到字符占用的起始列（inclusive start）。 */
     Start,
-    /** 吸附到字符之后（ceil）。 */
+    /** 吸附到字符占用的结束列（inclusive end）。 */
     End
 }
 
@@ -257,7 +257,7 @@ internal class TerminalRow(
     }
 
     /**
-     * 把列号校准到字符边界：落在宽字符后半格内的列号按 [align] 吸附。
+     * 把列号校准到所属字符的闭区间边界（首列或末列）。
      *
      * 扫描到 NUL 即视为无内容并返回原列号。
      */
@@ -266,8 +266,8 @@ internal class TerminalRow(
 
         text.forEachColumn(0, usedCharCount) { _, col, codePoint, width, _ ->
             if (codePoint == 0) return@forEachColumn false
-            if (column in (col + 1)..<col + width) {
-                return if (align == SnapAlign.Start) col else col + width
+            if (column in col until col + width) {
+                return if (align == SnapAlign.Start) col else col + width - 1
             }
             true
         }

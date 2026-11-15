@@ -258,12 +258,15 @@ class TerminalBufferTest {
     fun snapToColumn_clampsAndDelegates() {
         val buffer = smallBuffer()
         buffer.setChar(0, 0, 0x4E2D, TextStyle.NORMAL)
+        buffer.setChar(2, 0, 'a'.code, TextStyle.NORMAL)
 
         assertEquals(0, buffer.snapToColumn(0, -5, SnapAlign.Start))
         assertEquals(3, buffer.snapToColumn(0, 99, SnapAlign.Start))
         assertEquals(0, buffer.snapToColumn(0, 1, SnapAlign.Start))
-        assertEquals(2, buffer.snapToColumn(0, 1, SnapAlign.End))
+        assertEquals(1, buffer.snapToColumn(0, 0, SnapAlign.End))
+        assertEquals(1, buffer.snapToColumn(0, 1, SnapAlign.End))
         assertEquals(1, buffer.snapToColumn(-1, 1, SnapAlign.Start))
+        assertEquals("中", buffer.getSelectedText(0, 0, buffer.snapToColumn(0, 1, SnapAlign.End), 0))
     }
 
     @Test
