@@ -197,7 +197,7 @@ internal class TextSelectionCursorController internal constructor(
             selectionEndCol = coord.col
             selectionEndRow = coord.row
 
-            if (" " != screen.getSelectedText(selectionStartCol, selectionStartRow, selectionStartCol, selectionStartRow)) {
+            if (!screen.isCellBlank(selectionStartCol, selectionStartRow)) {
                 // 左扩：
                 while (true) {
                     if (selectionStartCol > 0) {

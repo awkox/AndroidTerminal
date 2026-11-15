@@ -177,4 +177,34 @@ class TextSelectionCursorControllerTest {
         assertEquals(1, sel[3])
         assertEquals("中", controller.selectedText)
     }
+
+    @Test
+    fun longPressOnSpaceBetweenWords_doesNotMergeAdjacentWords() {
+        val f = EmulatorFixture()
+        f.feed("hello wor")
+        val (controller, _, _) = createController(f.emulator)
+
+        controller.showAt(50f, 0f)
+
+        val sel = IntArray(4)
+        controller.getSelectors(sel)
+        assertEquals(5, sel[2])
+        assertEquals(5, sel[3])
+        assertEquals("", controller.selectedText)
+    }
+
+    @Test
+    fun longPressOnWord_expandsOnlyWithinWord() {
+        val f = EmulatorFixture()
+        f.feed("hello wor")
+        val (controller, _, _) = createController(f.emulator)
+
+        controller.showAt(20f, 0f)
+
+        val sel = IntArray(4)
+        controller.getSelectors(sel)
+        assertEquals(0, sel[2])
+        assertEquals(4, sel[3])
+        assertEquals("hello", controller.selectedText)
+    }
 }
