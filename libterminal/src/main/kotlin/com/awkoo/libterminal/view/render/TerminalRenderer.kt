@@ -48,14 +48,15 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
     private val curlyEffect: PathEffect
 
     init {
+        require(textSize > 0) { "textSize must be > 0, got $textSize" }
         textPaint.textSize = textSize.toFloat()
         textPaint.typeface = typeface
         textPaint.isAntiAlias = true
 
-        this.fontLineSpacing = ceil(textPaint.fontSpacing.toDouble()).toInt()
+        this.fontLineSpacing = max(1, ceil(textPaint.fontSpacing.toDouble()).toInt())
         fontAscent = ceil(textPaint.ascent().toDouble()).toInt()
         baselineOffset = this.fontLineSpacing + fontAscent
-        this.fontWidth = textPaint.measureText("X")
+        this.fontWidth = max(1f, textPaint.measureText("X"))
 
         val oneChar = CharArray(1)
         for (i in asciiMeasures.indices) {

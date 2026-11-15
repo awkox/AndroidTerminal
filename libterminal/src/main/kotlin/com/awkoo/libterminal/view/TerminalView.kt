@@ -566,5 +566,10 @@ class TerminalView(
     }
 
     private val Int.dp: Int
-        get() = (this * resources.displayMetrics.density).roundToInt().and(-2)
+        get() = dpToEvenPx(this, resources.displayMetrics.density)
+
+    internal companion object {
+        internal fun dpToEvenPx(dp: Int, density: Float): Int =
+            ((dp * density).roundToInt() and -2).coerceAtLeast(2)
+    }
 }
