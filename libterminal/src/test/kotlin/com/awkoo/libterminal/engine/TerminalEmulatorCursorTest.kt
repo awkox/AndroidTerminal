@@ -272,4 +272,52 @@ class TerminalEmulatorCursorTest {
         assertEquals(0, emulator.cursorRow)
         assertEquals(0, emulator.cursorCol)
     }
+
+    @Test
+    fun originMode_hpaAndCha_preserveRowAndRespectLeftRightMargins() {
+        f.feed("\u001b[2;5r\u001b[?69h\u001b[3;8s\u001b[?6h")
+        f.feed("\u001b[2;2H")
+        assertEquals(2, emulator.cursorRow)
+        assertEquals(3, emulator.cursorCol)
+
+        f.feed("\u001b[4`")
+        assertEquals(2, emulator.cursorRow)
+        assertEquals(5, emulator.cursorCol)
+
+        f.feed("\u001b[99`")
+        assertEquals(2, emulator.cursorRow)
+        assertEquals(7, emulator.cursorCol)
+
+        f.feed("\u001b[2G")
+        assertEquals(2, emulator.cursorRow)
+        assertEquals(3, emulator.cursorCol)
+
+        f.feed("\u001b[99G")
+        assertEquals(2, emulator.cursorRow)
+        assertEquals(7, emulator.cursorCol)
+    }
+
+    @Test
+    fun originMode_vpaAndVpr_preserveColAndRespectTopBottomMargins() {
+        f.feed("\u001b[2;5r\u001b[?69h\u001b[3;8s\u001b[?6h")
+        f.feed("\u001b[1;3H")
+        assertEquals(1, emulator.cursorRow)
+        assertEquals(4, emulator.cursorCol)
+
+        f.feed("\u001b[2d")
+        assertEquals(2, emulator.cursorRow)
+        assertEquals(4, emulator.cursorCol)
+
+        f.feed("\u001b[99d")
+        assertEquals(4, emulator.cursorRow)
+        assertEquals(4, emulator.cursorCol)
+
+        f.feed("\u001b[1;3H\u001b[2e")
+        assertEquals(3, emulator.cursorRow)
+        assertEquals(4, emulator.cursorCol)
+
+        f.feed("\u001b[99e")
+        assertEquals(4, emulator.cursorRow)
+        assertEquals(4, emulator.cursorCol)
+    }
 }

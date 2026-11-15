@@ -60,13 +60,17 @@ internal class TerminalEmulator(
         if (col >= rightMargin) columns else rightMargin
 
     private fun setCursorPosition(x: Int, y: Int) {
-        val newRow = (originTop + y).coerceIn(originTop, originBottom - 1)
-        val newCol = (originLeft + x).coerceIn(originLeft, originRight - 1)
-        setCursorRowCol(newRow, newCol)
+        setCursorRowRespectingOriginMode(y)
+        setCursorColRespectingOriginMode(x)
     }
 
-    private fun setCursorColRespectingOriginMode(col: Int) =
-        setCursorPosition(col, _cursorRow)
+    private fun setCursorRowRespectingOriginMode(row: Int) {
+        this.cursorRow = (originTop + row).coerceIn(originTop, originBottom - 1)
+    }
+
+    private fun setCursorColRespectingOriginMode(col: Int) {
+        this.cursorCol = (originLeft + col).coerceIn(originLeft, originRight - 1)
+    }
 
     private fun setCursorRowCol(row: Int, col: Int) {
         this.cursorRow = row
@@ -493,7 +497,7 @@ internal class TerminalEmulator(
                     max(originTop, _cursorRow - AnsiEscapeParser.getArg(args, 0, 1, true))
             }
 
-            'B' -> this.cursorRow =
+            'B', 'e' -> this.cursorRow =
                 min(originBottom - 1, _cursorRow + AnsiEscapeParser.getArg(args, 0, 1, true))
 
             'C', 'a' -> this.cursorCol =
@@ -516,8 +520,7 @@ internal class TerminalEmulator(
                 )
             }
 
-            'G' -> this.cursorCol =
-                AnsiEscapeParser.getArg(args, 0, 1, true).coerceIn(1, columns) - 1
+            'G', '`' -> setCursorColRespectingOriginMode(AnsiEscapeParser.getArg(args, 0, 1, true) - 1)
 
             'H', 'f' -> setCursorPosition(
                 AnsiEscapeParser.getArg(args, 1, 1, true) - 1,
@@ -578,7 +581,6 @@ internal class TerminalEmulator(
                 this.cursorCol = newCol
             }
 
-            '`' -> setCursorColRespectingOriginMode(AnsiEscapeParser.getArg(args, 0, 1, true) - 1)
             'b' -> {
                 if (lastPrintedCodePoint != -1) {
                     val numRepeat = AnsiEscapeParser.getArg(args, 0, 1, true)
@@ -594,13 +596,7 @@ internal class TerminalEmulator(
                 ) == 0
             ) writeString("\u001b[?64;1;2;6;9;15;18;21;22c")
 
-            'd' -> this.cursorRow = AnsiEscapeParser.getArg(args, 0, 1, true).coerceIn(1, rows) - 1
-            'e' -> {
-                setCursorPosition(
-                    _cursorCol,
-                    _cursorRow - originTop + AnsiEscapeParser.getArg(args, 0, 1, true)
-                )
-            }
+            'd' -> setCursorRowRespectingOriginMode(AnsiEscapeParser.getArg(args, 0, 1, true) - 1)
 
             'g' -> when (AnsiEscapeParser.getArg(args, 0, 0, true)) {
                 0 -> tabStops[_cursorCol] = false
