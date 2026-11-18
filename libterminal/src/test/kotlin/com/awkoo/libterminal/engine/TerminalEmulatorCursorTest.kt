@@ -166,10 +166,70 @@ class TerminalEmulatorCursorTest {
     }
 
     @Test
-    fun tabBackward_withoutMoreStops_keepsColumn() {
+    fun tabBackward_withoutMoreStops_movesToLeftEdge() {
         f.feed("\u001b[9C\u001b[2Z")
 
+        assertEquals(0, emulator.cursorCol)
+    }
+
+    @Test
+    fun tabBackward_withLeftMargin_respectsMarginAndIgnoresOuterStops() {
+        f.feed("\u001b[3G\u001bH")
+        f.feed("\u001b[?69h\u001b[4;10s")
+        f.feed("\u001b[1;10H\u001b[2Z")
+
+        assertEquals(3, emulator.cursorCol)
+    }
+
+    @Test
+    fun tabForward_pastRightMargin_doesNotJumpBackwards() {
+        f.feed("\u001b[?69h\u001b[1;6s")
+        f.feed("\u001b[1;8H\t")
+
+        assertEquals(8, emulator.cursorCol)
+
+        f.feed("\t")
         assertEquals(9, emulator.cursorCol)
+    }
+
+    @Test
+    fun cubAndCr_leftOfLeftMargin_doNotJumpRightToMargin() {
+        f.feed("\u001b[?69h\u001b[5;9s")
+        f.feed("\u001b[1;3H\u001b[1D")
+        assertEquals(1, emulator.cursorCol)
+
+        f.feed("\r")
+        assertEquals(0, emulator.cursorCol)
+    }
+
+    @Test
+    fun decstbmAndDecslrm_invalidOrSingleCellRegions_areIgnored() {
+        f.feed("\u001b[2;4r\u001b[?69h\u001b[3;8s")
+        f.feed("\u001b[3;5H")
+
+        f.feed("\u001b[4;4r")
+        assertEquals(2, emulator.cursorRow)
+        assertEquals(4, emulator.cursorCol)
+
+        f.feed("\u001b[5;2r")
+        assertEquals(2, emulator.cursorRow)
+        assertEquals(4, emulator.cursorCol)
+
+        f.feed("\u001b[99r")
+        assertEquals(2, emulator.cursorRow)
+        assertEquals(4, emulator.cursorCol)
+
+        f.feed("\u001b[5;5s")
+        assertEquals(2, emulator.cursorRow)
+        assertEquals(4, emulator.cursorCol)
+
+        f.feed("\u001b[6;3s")
+        assertEquals(2, emulator.cursorRow)
+        assertEquals(4, emulator.cursorCol)
+
+        val singleRow = EmulatorFixture(columns = 10, rows = 1)
+        singleRow.feed("\u001b[r")
+        assertEquals(0, singleRow.emulator.cursorRow)
     }
 
     @Test
@@ -319,5 +379,15 @@ class TerminalEmulatorCursorTest {
         f.feed("\u001b[99e")
         assertEquals(4, emulator.cursorRow)
         assertEquals(4, emulator.cursorCol)
+    }
+
+    @Test
+    fun originMode_resetHomesCursor() {
+        f.feed("\u001b[2;5r\u001b[?6h")
+        f.feed("\u001b[3;4H")
+        f.feed("\u001b[?6l")
+
+        assertEquals(0, emulator.cursorRow)
+        assertEquals(0, emulator.cursorCol)
     }
 }

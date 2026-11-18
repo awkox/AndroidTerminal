@@ -41,6 +41,17 @@ class TerminalEmulatorResponseTest {
     }
 
     @Test
+    fun deviceStatusReport_cursorPosition_respectsOriginMode() {
+        f.feed("\u001b[2;5r\u001b[?69h\u001b[3;8s\u001b[?6h")
+        f.feed("\u001b[2;4H")
+        f.clearWritten()
+
+        f.feed("\u001b[6n\u001b[?6n")
+
+        assertEquals("\u001b[2;4R\u001b[?2;4;1R", f.writtenText)
+    }
+
+    @Test
     fun deviceStatusReport_ok() {
         f.feed("\u001b[5n")
 
@@ -60,6 +71,13 @@ class TerminalEmulatorResponseTest {
     @Test
     fun windowReport_textAreaSizeInChars() {
         f.feed("\u001b[18t")
+
+        assertEquals("\u001b[8;5;10t", f.writtenText)
+    }
+
+    @Test
+    fun windowReport_screenSizeInChars() {
+        f.feed("\u001b[19t")
 
         assertEquals("\u001b[9;5;10t", f.writtenText)
     }

@@ -127,6 +127,31 @@ class TerminalEmulatorWrapScrollTest {
     }
 
     @Test
+    fun reverseIndex_aboveTopMargin_movesUpWithoutScrolling() {
+        f.feed("0000\r\n1111\r\n2222\r\n3333")
+        f.feed("\u001b[3;5r")
+        f.feed("\u001b[2;1H\u001bM")
+
+        assertEquals(0, emulator.cursorRow)
+        assertEquals(listOf("0000", "1111", "2222", "3333", ""), f.screenText())
+
+        f.feed("\u001bM")
+        assertEquals(0, emulator.cursorRow)
+        assertEquals(listOf("0000", "1111", "2222", "3333", ""), f.screenText())
+    }
+
+    @Test
+    fun reverseIndex_clearsPendingAutoWrap() {
+        f.feed("\u001b[2;1H0123456789\u001bMX")
+
+        assertEquals("         X", f.rowText(0))
+        assertEquals("0123456789", f.rowText(1))
+        assertFalse(emulator.screen.getLineWrap(0))
+        assertEquals(0, emulator.cursorRow)
+        assertEquals(9, emulator.cursorCol)
+    }
+
+    @Test
     fun scrollCounter_accumulatesAndIsDrained() {
         f.feed("aaaa\r\nbbbb\r\ncccc\r\ndddd\r\neeee\n\n")
 

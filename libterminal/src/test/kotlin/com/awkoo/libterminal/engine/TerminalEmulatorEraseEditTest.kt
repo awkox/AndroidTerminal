@@ -153,4 +153,79 @@ class TerminalEmulatorEraseEditTest {
         assertEquals(4, emulator.cursorCol)
         assertEquals(0, emulator.cursorRow)
     }
+
+    @Test
+    fun insertDeleteLines_respectLeftRightMargins_homeCol_andNoOpOutside() {
+        fillRow(0, "0000000000")
+        fillRow(1, "11aaaa1111")
+        fillRow(2, "22bbbb2222")
+        fillRow(3, "33cccc3333")
+        fillRow(4, "4444444444")
+
+        f.feed("\u001b[2;4r\u001b[?69h\u001b[3;6s")
+        f.feed("\u001b[2;5H\u001b[1L")
+
+        assertEquals(2, emulator.cursorCol)
+        assertEquals(
+            listOf("0000000000", "11    1111", "22aaaa2222", "33bbbb3333", "4444444444"),
+            f.screenText()
+        )
+
+        f.feed("\u001b[2;5H\u001b[1M")
+        assertEquals(2, emulator.cursorCol)
+        assertEquals(
+            listOf("0000000000", "11aaaa1111", "22bbbb2222", "33    3333", "4444444444"),
+            f.screenText()
+        )
+
+        f.feed("\u001b[1;4H\u001b[1L")
+        f.feed("\u001b[2;1H\u001b[1M")
+        assertEquals(
+            listOf("0000000000", "11aaaa1111", "22bbbb2222", "33    3333", "4444444444"),
+            f.screenText()
+        )
+    }
+
+    @Test
+    fun insertDeleteChars_respectRightMargin_andNoOpOutside() {
+        fillRow(0, "abcdefghij")
+        f.feed("\u001b[?69h\u001b[3;7s")
+
+        f.feed("\u001b[1;4H\u001b[2@")
+        assertEquals("abc  dehij", f.rowText(0))
+
+        f.feed("\u001b[1;4H\u001b[1P")
+        assertEquals("abc de hij", f.rowText(0))
+
+        f.feed("\u001b[1;2H\u001b[2@\u001b[1;9H\u001b[2P")
+        assertEquals("abc de hij", f.rowText(0))
+    }
+
+    @Test
+    fun decicAndDecdc_respectTopBottomMargins_andNoOpOutside() {
+        fillRow(0, "0123456789")
+        fillRow(1, "abcdefghij")
+        fillRow(2, "klmnopqrst")
+        fillRow(3, "uvwxyzABCD")
+
+        f.feed("\u001b[2;3r\u001b[?69h\u001b[2;7s")
+        f.feed("\u001b[2;4H\u001b[2'}")
+
+        assertEquals(
+            listOf("0123456789", "abc  dehij", "klm  norst", "uvwxyzABCD", ""),
+            f.screenText()
+        )
+
+        f.feed("\u001b[3;4H\u001b[2'~")
+        assertEquals(
+            listOf("0123456789", "abcde  hij", "klmno  rst", "uvwxyzABCD", ""),
+            f.screenText()
+        )
+
+        f.feed("\u001b[1;4H\u001b[1'}\u001b[2;1H\u001b[1'~")
+        assertEquals(
+            listOf("0123456789", "abcde  hij", "klmno  rst", "uvwxyzABCD", ""),
+            f.screenText()
+        )
+    }
 }

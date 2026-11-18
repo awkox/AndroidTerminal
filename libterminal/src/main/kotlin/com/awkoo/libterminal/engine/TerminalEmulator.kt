@@ -55,9 +55,16 @@ internal class TerminalEmulator(
             aboutToAutoWrap = false
         }
 
+    /** 光标列 [col] 的包含左边界：已越过左边距时左边距失效，退回 0。 */
+    private fun leftEdgeInclusive(col: Int): Int =
+        if (col < leftMargin) 0 else leftMargin
+
     /** 光标列 [col] 的排他右边界：已越过右边距时右边距失效，退回屏宽。 */
     private fun rightEdgeExclusive(col: Int): Int =
         if (col >= rightMargin) columns else rightMargin
+
+    private fun isCursorWithinMargins(): Boolean =
+        _cursorRow in topMargin until bottomMargin && _cursorCol in leftMargin until rightMargin
 
     private fun setCursorPosition(x: Int, y: Int) {
         setCursorRowRespectingOriginMode(y)
@@ -353,7 +360,7 @@ internal class TerminalEmulator(
     }
 
     override fun onBackspace() {
-        if (_cursorCol > leftMargin) {
+        if (_cursorCol > leftEdgeInclusive(_cursorCol)) {
             this.cursorCol = _cursorCol - 1
         } else if (isDecsetInternalBitSet(DECSET_BIT_REVERSE_WRAPAROUND)
             && isDecsetInternalBitSet(DECSET_BIT_AUTOWRAP)
@@ -374,7 +381,7 @@ internal class TerminalEmulator(
     }
 
     override fun onCarriageReturn() {
-        this.cursorCol = leftMargin
+        this.cursorCol = leftEdgeInclusive(_cursorCol)
     }
 
     override fun onShiftIn() {
@@ -401,20 +408,20 @@ internal class TerminalEmulator(
 
     private fun handleEscStandard(b: Int) {
         when (b.toChar()) {
-            '6' -> if (_cursorCol > leftMargin) {
+            '6' -> if (_cursorCol > leftEdgeInclusive(_cursorCol)) {
                 this.cursorCol = _cursorCol - 1
-            } else {
-                val rows = bottomMargin - topMargin
-                screen.insertColumns(leftMargin, topMargin, 1, rows, rightMargin, rendition.styleWithoutEffect)
+            } else if (_cursorCol == leftMargin && _cursorRow in topMargin until bottomMargin) {
+                val height = bottomMargin - topMargin
+                screen.insertColumns(leftMargin, topMargin, 1, height, rightMargin, rendition.styleWithoutEffect)
             }
 
             '7' -> saveCursor()
             '8' -> restoreCursor()
-            '9' -> if (_cursorCol < rightMargin - 1) {
+            '9' -> if (_cursorCol < rightEdgeExclusive(_cursorCol) - 1) {
                 this.cursorCol = _cursorCol + 1
-            } else {
-                val rows = bottomMargin - topMargin
-                screen.deleteColumns(leftMargin, topMargin, 1, rows, rightMargin, rendition.styleWithoutEffect)
+            } else if (_cursorCol == rightMargin - 1 && _cursorRow in topMargin until bottomMargin) {
+                val height = bottomMargin - topMargin
+                screen.deleteColumns(leftMargin, topMargin, 1, height, rightMargin, rendition.styleWithoutEffect)
             }
 
             'c' -> {
@@ -435,24 +442,27 @@ internal class TerminalEmulator(
 
             'D' -> doLinefeed()
             'E' -> {
-                this.cursorCol = originLeft
+                this.cursorCol = leftEdgeInclusive(_cursorCol)
                 doLinefeed()
             }
 
             'F' -> {} // 仅 xterm 的 hpLowerleftBugCompat 资源（默认 false）开启时才移动光标，默认与其余桌面终端一致忽略
             'H' -> tabStops[_cursorCol] = true
-            'M' -> if (_cursorRow <= topMargin) {
-                screen.shiftLines(
-                    topMargin,
-                    bottomMargin,
-                    1,
-                    leftMargin,
-                    rightMargin,
-                    up = false,
-                    style = rendition.eraseFillStyle
-                )
-            } else {
-                _cursorRow--
+            'M' -> {
+                aboutToAutoWrap = false
+                if (_cursorRow == topMargin) {
+                    screen.shiftLines(
+                        topMargin,
+                        bottomMargin,
+                        1,
+                        leftMargin,
+                        rightMargin,
+                        up = false,
+                        style = rendition.eraseFillStyle
+                    )
+                } else if (_cursorRow > 0) {
+                    this.cursorRow = _cursorRow - 1
+                }
             }
 
             'N', '0' -> {} // 忽略
@@ -504,7 +514,7 @@ internal class TerminalEmulator(
                 min(rightEdgeExclusive(_cursorCol) - 1, _cursorCol + AnsiEscapeParser.getArg(args, 0, 1, true))
 
             'D' -> this.cursorCol =
-                max(leftMargin, _cursorCol - AnsiEscapeParser.getArg(args, 0, 1, true))
+                max(leftEdgeInclusive(_cursorCol), _cursorCol - AnsiEscapeParser.getArg(args, 0, 1, true))
 
             'E' -> {
                 setCursorPosition(
@@ -569,13 +579,12 @@ internal class TerminalEmulator(
 
             'Z' -> {
                 var numberOfTabs = AnsiEscapeParser.getArg(args, 0, 1, true)
-                var newCol = _cursorCol
-                for (i in (_cursorCol - 1) downTo 0) {
-                    if (tabStops[i]) {
-                        if (--numberOfTabs == 0) {
-                            newCol = max(i, leftMargin)
-                            break
-                        }
+                val leftEdge = leftEdgeInclusive(_cursorCol)
+                var newCol = leftEdge
+                for (i in (_cursorCol - 1) downTo leftEdge) {
+                    if (tabStops[i] && --numberOfTabs == 0) {
+                        newCol = i
+                        break
                     }
                 }
                 this.cursorCol = newCol
@@ -609,37 +618,36 @@ internal class TerminalEmulator(
             'n' -> when (AnsiEscapeParser.getArg(args, 0, 0, true)) {
                 5 -> writeByteArray(DSR_STATUS_RESPONSE)
 
-                6 -> writeString("\u001b[${_cursorRow + 1};${_cursorCol + 1}R")
+                6 -> writeString("\u001b[${_cursorRow - originTop + 1};${_cursorCol - originLeft + 1}R")
             }
 
             'r' -> {
-                topMargin = (AnsiEscapeParser.getArg(args, 0, 1, true) - 1).coerceIn(0, rows - 2)
-                bottomMargin = AnsiEscapeParser.getArg(args, 1, rows, true).coerceIn(topMargin + 1, rows)
-                setCursorPosition(0, 0)
+                val top = (AnsiEscapeParser.getArg(args, 0, 1, true) - 1).coerceAtLeast(0)
+                val bottom = AnsiEscapeParser.getArg(args, 1, rows, true).coerceAtMost(rows)
+                if (top < bottom - 1) {
+                    topMargin = top
+                    bottomMargin = bottom
+                    setCursorPosition(0, 0)
+                }
             }
 
             's' -> if (isDecsetInternalBitSet(DECSET_BIT_LEFTRIGHT_MARGIN_MODE)) {
-                val pl = AnsiEscapeParser.getArg(args, 0, 1, true)
-                val pr = AnsiEscapeParser.getArg(args, 1, columns, true)
-                val leftMax = (columns - 2).coerceAtLeast(0)
-                val lmCandidate = (pl - 1).coerceIn(0, leftMax)
-                var rmCandidate = pr.coerceIn(lmCandidate + 1, columns)
-                if (rmCandidate <= lmCandidate) {
-                    rmCandidate = (lmCandidate + 1).coerceAtMost(columns)
+                val left = (AnsiEscapeParser.getArg(args, 0, 1, true) - 1).coerceAtLeast(0)
+                val right = AnsiEscapeParser.getArg(args, 1, columns, true).coerceAtMost(columns)
+                if (left < right - 1) {
+                    leftMargin = left
+                    rightMargin = right
+                    setCursorPosition(0, 0)
                 }
-                leftMargin = lmCandidate
-                rightMargin = rmCandidate
-                setCursorPosition(0, 0)
             } else saveCursor()
 
             't' -> handleCsiT(args)
             'u' -> restoreCursor()
-            '@' -> {
+            '@' -> if (_cursorCol in leftMargin until rightMargin) {
                 aboutToAutoWrap = false
-                val columnsAfterCursor = columns - _cursorCol
-                val spacesToInsert =
-                    min(AnsiEscapeParser.getArg(args, 0, 1, true), columnsAfterCursor)
-                screen.insertColumns(_cursorCol, _cursorRow, spacesToInsert, 1, columns, rendition.eraseFillStyle)
+                val columnsAfterCursor = rightMargin - _cursorCol
+                val spacesToInsert = min(AnsiEscapeParser.getArg(args, 0, 1, true), columnsAfterCursor)
+                screen.insertColumns(_cursorCol, _cursorRow, spacesToInsert, 1, rightMargin, rendition.eraseFillStyle)
             }
         }
     }
@@ -681,22 +689,43 @@ internal class TerminalEmulator(
     }
 
     private fun handleCsiL(args: IntArray) {
-        val linesAfterCursor = (bottomMargin - _cursorRow).coerceAtLeast(0)
+        if (!isCursorWithinMargins()) return
+        val linesAfterCursor = bottomMargin - _cursorRow
         val linesToInsert = min(AnsiEscapeParser.getArg(args, 0, 1, true), linesAfterCursor)
-        screen.insertLines(_cursorRow, linesToInsert, bottomMargin, rendition.eraseFillStyle)
+        screen.shiftLines(
+            _cursorRow,
+            bottomMargin,
+            linesToInsert,
+            leftMargin,
+            rightMargin,
+            up = false,
+            style = rendition.eraseFillStyle
+        )
+        this.cursorCol = leftMargin
     }
 
     private fun handleCsiM(args: IntArray) {
-        val linesAfterCursor = (bottomMargin - _cursorRow).coerceAtLeast(0)
+        if (!isCursorWithinMargins()) return
+        val linesAfterCursor = bottomMargin - _cursorRow
         val linesToDelete = min(AnsiEscapeParser.getArg(args, 0, 1, true), linesAfterCursor)
-        screen.deleteLines(_cursorRow, linesToDelete, bottomMargin, rendition.eraseFillStyle)
+        screen.shiftLines(
+            _cursorRow,
+            bottomMargin,
+            linesToDelete,
+            leftMargin,
+            rightMargin,
+            up = true,
+            style = rendition.eraseFillStyle
+        )
+        this.cursorCol = leftMargin
     }
 
     private fun handleCsiP(args: IntArray) {
+        if (_cursorCol !in leftMargin until rightMargin) return
         aboutToAutoWrap = false
-        val cellsAfterCursor = columns - _cursorCol
+        val cellsAfterCursor = rightMargin - _cursorCol
         val cellsToDelete = min(AnsiEscapeParser.getArg(args, 0, 1, true), cellsAfterCursor)
-        screen.deleteColumns(_cursorCol, _cursorRow, cellsToDelete, 1, columns, rendition.eraseFillStyle)
+        screen.deleteColumns(_cursorCol, _cursorRow, cellsToDelete, 1, rightMargin, rendition.eraseFillStyle)
     }
 
     private fun handleCsiT(args: IntArray) {
@@ -705,7 +734,8 @@ internal class TerminalEmulator(
             13 -> writeString("\u001b[3;0;0t")
             14 -> writeString("\u001b[4;${rows * cellHeightPixels};${columns * cellWidthPixels}t")
             16 -> writeString("\u001b[6;${rows * cellHeightPixels};${columns * cellWidthPixels}t")
-            18, 19 -> writeString("\u001b[9;${rows};${columns}t") // 报告精确字符尺寸
+            18 -> writeString("\u001b[8;${rows};${columns}t")
+            19 -> writeString("\u001b[9;${rows};${columns}t")
             20 -> writeString("\u001b]LIconLabel\u001b\\")
             21 -> writeString("\u001b]l\u001b\\")
             22 -> osc.pushTitle()
@@ -775,7 +805,7 @@ internal class TerminalEmulator(
                     -1,
                     true
                 ) == 6
-            ) writeString("\u001b[?${_cursorRow + 1};${_cursorCol + 1};1R")
+            ) writeString("\u001b[?${_cursorRow - originTop + 1};${_cursorCol - originLeft + 1};1R")
 
             'r', 's' -> {
                 for (i in 0 until argCount) {
@@ -908,32 +938,32 @@ internal class TerminalEmulator(
     }
 
     private fun handleCsiSingleQuote(b: Int, args: IntArray) {
-        val columnsAfterCursor = (rightMargin - _cursorCol).coerceAtLeast(0)
-        val columnsToChange = min(AnsiEscapeParser.getArg(args, 0, 1, true), columnsAfterCursor)
-        val columnsToMove = columnsAfterCursor - columnsToChange
         when (b) {
-            '}'.code -> {
-                screen.blockCopy(
-                    _cursorCol,
-                    0,
-                    columnsToMove,
-                    rows,
-                    _cursorCol + columnsToChange,
-                    0
-                )
-                blockClear(_cursorCol, 0, columnsToChange, rows)
-            }
-
-            '~'.code -> {
-                screen.blockCopy(
-                    _cursorCol + columnsToChange,
-                    0,
-                    columnsToMove,
-                    rows,
-                    _cursorCol,
-                    0
-                )
-                blockClear(_cursorCol + columnsToMove, 0, columnsToChange, rows)
+            '}'.code, '~'.code -> {
+                if (!isCursorWithinMargins()) return
+                aboutToAutoWrap = false
+                val columnsAfterCursor = rightMargin - _cursorCol
+                val columnsToChange = min(AnsiEscapeParser.getArg(args, 0, 1, true), columnsAfterCursor)
+                val marginHeight = bottomMargin - topMargin
+                if (b == '}'.code) {
+                    screen.insertColumns(
+                        _cursorCol,
+                        topMargin,
+                        columnsToChange,
+                        marginHeight,
+                        rightMargin,
+                        rendition.eraseFillStyle
+                    )
+                } else {
+                    screen.deleteColumns(
+                        _cursorCol,
+                        topMargin,
+                        columnsToChange,
+                        marginHeight,
+                        rightMargin,
+                        rendition.eraseFillStyle
+                    )
+                }
             }
         }
     }
@@ -1110,7 +1140,7 @@ internal class TerminalEmulator(
                 setCursorRowCol(0, 0)
             }
 
-            6 -> if (setting) setCursorPosition(0, 0)
+            6 -> setCursorPosition(0, 0)
             69 -> if (!setting) {
                 leftMargin = 0
                 rightMargin = columns
@@ -1163,8 +1193,11 @@ internal class TerminalEmulator(
 
     private fun nextTabStop(numTabs: Int): Int {
         var n = numTabs
-        for (i in _cursorCol + 1 until columns) if (tabStops[i] && --n == 0) return min(i, rightMargin - 1)
-        return rightMargin - 1
+        val rightEdge = rightEdgeExclusive(_cursorCol)
+        for (i in (_cursorCol + 1) until rightEdge) {
+            if (tabStops[i] && --n == 0) return i
+        }
+        return rightEdge - 1
     }
 
     private fun blockClear(sx: Int, sy: Int, w: Int, h: Int = 1) =
