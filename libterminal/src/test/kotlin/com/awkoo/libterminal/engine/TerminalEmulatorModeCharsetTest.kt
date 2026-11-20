@@ -1,7 +1,9 @@
 package com.awkoo.libterminal.engine
 
+import com.awkoo.libterminal.text.TextStyle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -416,6 +418,100 @@ class TerminalEmulatorModeCharsetTest {
 
         assertTrue(emulator.isAlternateBufferActive)
         assertEquals("keep", f.rowText(0))
+    }
+
+    @Test
+    fun softReset_preservesOscColorOverrides() {
+        f.feed("\u001b]4;1;#FF0000\u0007")
+        f.feed("\u001b]10;#112233\u0007\u001b]11;#445566\u0007\u001b]12;#778899\u0007")
+        f.feed("\u001b[!p")
+
+        assertTrue(emulator.oscColorOverrides.isOverridden(1))
+        assertEquals(0xFFFF0000.toInt(), emulator.oscColorOverrides.value(1))
+        assertTrue(emulator.oscColorOverrides.isOverridden(TextStyle.COLOR_INDEX_FOREGROUND))
+        assertTrue(emulator.oscColorOverrides.isOverridden(TextStyle.COLOR_INDEX_BACKGROUND))
+        assertTrue(emulator.oscColorOverrides.isOverridden(TextStyle.COLOR_INDEX_CURSOR))
+    }
+
+    @Test
+    fun hardReset_clearsOscColorOverrides() {
+        f.feed("\u001b]4;1;#FF0000\u0007")
+        f.feed("\u001b]10;#112233\u0007\u001b]11;#445566\u0007\u001b]12;#778899\u0007")
+        f.feed("\u001bc")
+
+        assertFalse(emulator.oscColorOverrides.isOverridden(1))
+        assertFalse(emulator.oscColorOverrides.isOverridden(TextStyle.COLOR_INDEX_FOREGROUND))
+        assertFalse(emulator.oscColorOverrides.isOverridden(TextStyle.COLOR_INDEX_BACKGROUND))
+        assertFalse(emulator.oscColorOverrides.isOverridden(TextStyle.COLOR_INDEX_CURSOR))
+    }
+
+    @Test
+    fun softReset_preservesTitleAndTitleStack() {
+        emulator.isTitleQueryEnabled = true
+        f.feed("\u001b]0;base\u0007\u001b[22t\u001b]0;top\u0007")
+        f.feed("\u001b[!p")
+
+        assertEquals("top", emulator.titleState.value)
+
+        f.feed("\u001b[23t\u001b[20t\u001b[21t")
+        assertEquals("base", emulator.titleState.value)
+        assertEquals("\u001b]Lbase\u001b\\\u001b]lbase\u001b\\", f.writtenText)
+    }
+
+    @Test
+    fun hardReset_clearsTitleAndTitleStack() {
+        emulator.isTitleQueryEnabled = true
+        f.feed("\u001b]0;base\u0007\u001b[22t\u001b]0;top\u0007")
+        f.feed("\u001bc")
+
+        assertNull(emulator.titleState.value)
+
+        f.feed("\u001b[23t\u001b[20t\u001b[21t")
+        assertNull(emulator.titleState.value)
+        assertEquals("\u001b]L\u001b\\\u001b]l\u001b\\", f.writtenText)
+    }
+
+    @Test
+    fun softReset_resetsLastPrintedCharForRep() {
+        f.feed("A\u001b[!p\u001b[3b")
+
+        assertEquals("A", f.rowText(0))
+    }
+
+    @Test
+    fun hardReset_resetsLastPrintedCharForRep() {
+        f.feed("A\u001bc\u001b[3b")
+
+        assertEquals("", f.rowText(0))
+    }
+
+    @Test
+    fun softReset_nonPFinalByte_doesNotTriggerSoftReset() {
+        f.feed("\u001b[?5h\u001b[!q")
+
+        assertTrue(emulator.isReverseVideo)
+    }
+
+    @Test
+    fun softReset_resetsMarginsSgrAndSavedCursor_withoutClearingScreen() {
+        f.feed("hello\u001b[4h\u001b[31m\u001b[2;4r\u001b[?69h\u001b[2;6s")
+        f.feed("\u001b[3;4H\u001b(0\u001b7")
+        f.feed("\u001b[!p")
+
+        // 保留屏幕内容
+        assertEquals("hello", f.rowText(0))
+        // SGR 与插入模式已复位：在首行末尾写入应覆盖空白并采用默认前景色
+        f.feed("\u001b[1;6HX")
+        assertEquals("helloX", f.rowText(0))
+        assertEquals(TextStyle.COLOR_INDEX_FOREGROUND, emulator.screen.getStyleAt(0, 5).foreColor)
+
+        // 左右边距已清除（不再受 2..6 限制）
+        f.feed("\u001b[1;1HY")
+        assertEquals("YelloX", f.rowText(0))
+
+        // DECSC 保存的光标与线绘字符集已复位到初始 (0,0) 与 ASCII
+        f.feed("\u001b8q")
+        assertEquals('q', emulator.screen.getRowForRead(0).textChars()[0])
     }
 
     @Test

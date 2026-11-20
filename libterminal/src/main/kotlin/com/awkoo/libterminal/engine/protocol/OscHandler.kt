@@ -59,6 +59,14 @@ internal class OscHandler(
         }
     }
 
+    /** 复位标题文本与标题栈（供硬复位调用；软复位不调用）。 */
+    fun reset() {
+        titleStack.clear()
+        iconTitleStack.clear()
+        titleState.value = null
+        iconTitle = null
+    }
+
     fun onOscCommand(value: Int, textParameter: String, bellOrStringTerminator: String) {
         when (value) {
             0 -> {

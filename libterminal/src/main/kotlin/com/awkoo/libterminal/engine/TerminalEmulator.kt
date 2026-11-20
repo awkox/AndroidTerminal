@@ -190,7 +190,7 @@ internal class TerminalEmulator(
         reset()
     }
 
-    fun reset() {
+    private fun resetSoftState() {
         cursorStyle = TerminalCursorStyle.BAR
         isInsertMode = false
         leftMargin = 0
@@ -198,6 +198,7 @@ internal class TerminalEmulator(
         bottomMargin = rows
         rightMargin = columns
         aboutToAutoWrap = false
+        lastPrintedCodePoint = -1
         rendition.reset()
         setDefaultTabStops()
         g1IsLineDrawing = false
@@ -208,7 +209,12 @@ internal class TerminalEmulator(
         decModes.resetDefault()
         savedStateMain.savedDecFlags = decModes.current
         savedStateAlt.savedDecFlags = decModes.current
+    }
+
+    fun reset() {
+        resetSoftState()
         oscColorOverrides.resetAll()
+        osc.reset()
         utf8Decoder.reset()
         ansiParser.reset()
     }
@@ -492,7 +498,7 @@ internal class TerminalEmulator(
             EscapeState.CSI_QUESTIONMARK_ARG_DOLLAR -> handleCsiQuestionMarkArgDollar(command, args)
             EscapeState.CSI_INTERMEDIATE_SPACE -> handleCsiArgsSpace(command, args)
             EscapeState.CSI_INTERMEDIATE_ASTERISK -> handleCsiArgsAsterix(command, args)
-            EscapeState.CSI_EXCLAMATION -> onSoftReset()
+            EscapeState.CSI_EXCLAMATION -> if (command == 'p'.code) onSoftReset()
             else -> {}
         }
     }
@@ -1020,7 +1026,7 @@ internal class TerminalEmulator(
     }
 
     override fun onSoftReset() {
-        reset()
+        resetSoftState()
     }
 
     /**
@@ -1275,6 +1281,9 @@ internal class TerminalEmulator(
             savedUnderlineStyle = TextStyle.UNDERLINE_STYLE_NONE
             savedUnderlineColor = TextStyle.COLOR_INDEX_FOREGROUND
             savedDecFlags = 0
+            useLineDrawingG0 = false
+            useLineDrawingG1 = false
+            useLineDrawingUsesG0 = true
         }
     }
 

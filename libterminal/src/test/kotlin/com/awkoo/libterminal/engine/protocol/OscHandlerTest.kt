@@ -146,6 +146,23 @@ class OscHandlerTest {
     }
 
     @Test
+    fun reset_clearsTitlesAndStacks() {
+        handler.onOscCommand(0, "base", "\u0007")
+        handler.pushTitle(0)
+        handler.onOscCommand(1, "icon-2", "\u0007")
+        handler.onOscCommand(2, "win-2", "\u0007")
+
+        handler.reset()
+
+        assertNull(handler.titleState.value)
+        assertNull(handler.iconTitle)
+
+        handler.popTitle(0)
+        assertNull(handler.titleState.value)
+        assertNull(handler.iconTitle)
+    }
+
+    @Test
     fun setColor_hexNotation_writesOverride() {
         handler.onOscCommand(4, "1;#FF0000", "\u0007")
 
