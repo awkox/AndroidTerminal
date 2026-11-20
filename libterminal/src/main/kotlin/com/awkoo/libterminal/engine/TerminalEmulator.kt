@@ -207,6 +207,7 @@ internal class TerminalEmulator(
         savedStateMain.resetDefaults()
         savedStateAlt.resetDefaults()
         decModes.resetDefault()
+        if (isAlternateBufferActive) setDecsetInternalBit(DECSET_BIT_ALTERNATE_SCREEN, true)
         savedStateMain.savedDecFlags = decModes.current
         savedStateAlt.savedDecFlags = decModes.current
     }
@@ -445,6 +446,7 @@ internal class TerminalEmulator(
                         resizeCurrentScreen(LongArray(0))
                     }
                 }
+                setDecsetInternalBit(DECSET_BIT_ALTERNATE_SCREEN, false)
                 blockClear(0, 0, columns, rows)
                 setCursorPosition(0, 0)
             }
@@ -980,13 +982,8 @@ internal class TerminalEmulator(
     private fun handleCsiQuestionMarkArgDollar(b: Int, args: IntArray) {
         if (b == 'p'.code) {
             val mode = AnsiEscapeParser.getArg(args, 0, 0, true)
-            val value = when (mode) {
-                47, 1047, 1049 -> if (isAlternateBufferActive) 1 else 2
-                else -> {
-                    val internalBit = decModes.mapExternalToInternal(mode)
-                    if (internalBit != -1) (if (isDecsetInternalBitSet(internalBit)) 1 else 2) else 0
-                }
-            }
+            val internalBit = decModes.mapExternalToInternal(mode)
+            val value = if (internalBit != -1) (if (isDecsetInternalBitSet(internalBit)) 1 else 2) else 0
             writeString("\u001b[?$mode;$value\$y")
         }
     }

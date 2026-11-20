@@ -48,6 +48,7 @@ class DecModeRegistryTest {
         assertEquals(DECSET_BIT_ORIGIN_MODE, registry.mapExternalToInternal(6))
         assertEquals(DECSET_BIT_AUTOWRAP, registry.mapExternalToInternal(7))
         assertEquals(DECSET_BIT_REVERSE_WRAPAROUND, registry.mapExternalToInternal(45))
+        assertEquals(DECSET_BIT_ALTERNATE_SCREEN, registry.mapExternalToInternal(47))
         assertEquals(DECSET_BIT_CURSOR_ENABLED, registry.mapExternalToInternal(25))
         assertEquals(DECSET_BIT_APPLICATION_KEYPAD, registry.mapExternalToInternal(66))
         assertEquals(DECSET_BIT_LEFTRIGHT_MARGIN_MODE, registry.mapExternalToInternal(69))
@@ -56,6 +57,8 @@ class DecModeRegistryTest {
         assertEquals(DECSET_BIT_MOUSE_TRACKING_ANY_EVENT, registry.mapExternalToInternal(1003))
         assertEquals(DECSET_BIT_SEND_FOCUS_EVENTS, registry.mapExternalToInternal(1004))
         assertEquals(DECSET_BIT_MOUSE_PROTOCOL_SGR, registry.mapExternalToInternal(1006))
+        assertEquals(DECSET_BIT_ALTERNATE_SCREEN, registry.mapExternalToInternal(1047))
+        assertEquals(DECSET_BIT_ALTERNATE_SCREEN, registry.mapExternalToInternal(1049))
         assertEquals(DECSET_BIT_BRACKETED_PASTE_MODE, registry.mapExternalToInternal(2004))
     }
 

@@ -610,6 +610,36 @@ class TerminalEmulatorModeCharsetTest {
     }
 
     @Test
+    fun xtsaveAndXtrestore_altScreenModes47And1049_saveAndRestoreBufferState() {
+        f.feed("main\u001b[2;3H")
+        // 主屏状态下保存 1049=关，随后切入副屏再恢复应切回主屏并恢复光标
+        f.feed("\u001b[?1049s\u001b[?1049h")
+        assertTrue(emulator.isAlternateBufferActive)
+        f.feed("\u001b[?1049r")
+        assertFalse(emulator.isAlternateBufferActive)
+        assertEquals("main", f.rowText(0))
+        assertEquals(1, emulator.cursorRow)
+        assertEquals(2, emulator.cursorCol)
+
+        // 副屏状态下保存 47=开，退出副屏再恢复应重入副屏且保留内容
+        f.feed("\u001b[?47h\u001b[1;1Hkept\u001b[?47s\u001b[?47l")
+        assertFalse(emulator.isAlternateBufferActive)
+        f.feed("\u001b[?47r")
+        assertTrue(emulator.isAlternateBufferActive)
+        assertEquals("kept", f.rowText(0))
+
+        // 副屏软复位 (!p) 后仍处于副屏，XTSAVE 1049 应准确快照为开；硬复位 (\ec) 后应清为关
+        f.feed("\u001b[!p\u001b[?1049s\u001b[?1049l")
+        assertFalse(emulator.isAlternateBufferActive)
+        f.feed("\u001b[?1049r")
+        assertTrue(emulator.isAlternateBufferActive)
+
+        f.feed("\u001bc\u001b[?1049\$p")
+        assertFalse(emulator.isAlternateBufferActive)
+        assertEquals("\u001b[?1049;2\$y", f.writtenText)
+    }
+
+    @Test
     fun cursorStyle_decscusr_coversDefaultEvenAndResetArgs() {
         f.feed("\u001b[ q")
         assertEquals(TerminalCursorStyle.BLOCK, emulator.cursorStyle)
