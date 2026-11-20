@@ -114,7 +114,9 @@ class TerminalBufferResizeTest {
         buffer.resize(4, 5, 8, coords, TextStyle.NORMAL, altScreen = false)
 
         val cursor = CursorCoord(coords[0])
-        assert(cursor.col >= 0 && cursor.row >= 0)
+        assertTrue(cursor.col >= 0 && cursor.row >= 0)
+        assertEquals(1, cursor.col)
+        assertEquals(1, cursor.row)
     }
 
     @Test

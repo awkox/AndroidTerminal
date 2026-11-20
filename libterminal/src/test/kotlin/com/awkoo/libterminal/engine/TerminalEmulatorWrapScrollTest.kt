@@ -49,6 +49,8 @@ class TerminalEmulatorWrapScrollTest {
         assertEquals(1, emulator.cursorRow)
         assertEquals(2, emulator.cursorCol)
         assertTrue(emulator.screen.getLineWrap(0))
+        assertEquals("012345678", f.rowText(0))
+        assertEquals("\u4e2d", f.rowText(1))
     }
 
     @Test
@@ -64,7 +66,9 @@ class TerminalEmulatorWrapScrollTest {
     fun combiningMark_overPreviousCell_doesNotAdvanceCursor() {
         f.feed("e\u0301")
 
+        assertEquals(0, emulator.cursorRow)
         assertEquals(1, emulator.cursorCol)
+        assertEquals("e\u0301", f.rowText(0))
         assertEquals('e'.code, emulator.screen.getRowForRead(0).textChars()[0].code)
         assertEquals(0x0301, emulator.screen.getRowForRead(0).textChars()[1].code)
     }

@@ -76,7 +76,7 @@ class KeySequenceEncoderTest {
 
     @Test
     fun shiftedTermcapCapability_modifiesSequence() {
-        // "%i"（kdch1 的 shifted 变体）带 SHIFT 修饰
+        // "%i"（右方向键 / terminfo=kRIT 的 shifted 变体）带 SHIFT 修饰
         val sequence = KeySequenceEncoder.getCodeFromTermcap(
             "%i",
             cursorKeysApplication = false,
