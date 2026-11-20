@@ -83,10 +83,64 @@ class TerminalEmulatorResponseTest {
     }
 
     @Test
+    fun windowReport_stateAndPosition() {
+        f.feed("\u001b[11t\u001b[13t")
+
+        assertEquals("\u001b[1t\u001b[3;0;0t", f.writtenText)
+    }
+
+    @Test
     fun windowReport_textAreaSizeInPixels() {
         f.feed("\u001b[14t")
 
         assertEquals("\u001b[4;100;100t", f.writtenText)
+    }
+
+    @Test
+    fun windowReport_cellSizeInPixels() {
+        f.feed("\u001b[16t")
+        assertEquals("\u001b[6;20;10t", f.writtenText)
+
+        f.clearWritten()
+        emulator.resize(12, 6, 14, 28)
+        f.feed("\u001b[16t")
+        assertEquals("\u001b[6;28;14t", f.writtenText)
+    }
+
+    @Test
+    fun windowReport_windowTitle_reportsCurrentTitleAndEmptyWhenUnset() {
+        f.feed("\u001b[21t")
+        assertEquals("\u001b]l\u001b\\", f.writtenText)
+
+        f.clearWritten()
+        f.feed("\u001b]2;vim - main.kt\u0007\u001b[21t")
+        assertEquals("\u001b]lvim - main.kt\u001b\\", f.writtenText)
+
+        f.clearWritten()
+        f.feed("\u001b]1;only-icon\u0007\u001b[21t")
+        assertEquals("\u001b]lvim - main.kt\u001b\\", f.writtenText)
+    }
+
+    @Test
+    fun windowReport_iconLabel_reportsCurrentIconAndEmptyWhenUnset() {
+        f.feed("\u001b[20t")
+        assertEquals("\u001b]L\u001b\\", f.writtenText)
+
+        f.clearWritten()
+        f.feed("\u001b]1;my-icon\u0007\u001b[20t")
+        assertEquals("\u001b]Lmy-icon\u001b\\", f.writtenText)
+
+        f.clearWritten()
+        f.feed("\u001b]0;shared\u0007\u001b[20t\u001b[21t")
+        assertEquals("\u001b]Lshared\u001b\\\u001b]lshared\u001b\\", f.writtenText)
+    }
+
+    @Test
+    fun windowReport_title_stripsControlCharactersAgainstInjection() {
+        f.feed("\u001b]2;safe\u001bX\nls\r\u007f\u009c\u0007\u001b[21t")
+
+        assertEquals("\u001b]lsafeXls\u001b\\", f.writtenText)
+        assertEquals("safeXls", emulator.titleState.value)
     }
 
     @Test
@@ -100,6 +154,20 @@ class TerminalEmulatorResponseTest {
         f.feed("\u001b[23t")
 
         assertEquals("first", emulator.titleState.value)
+    }
+
+    @Test
+    fun title_pushPopBySubMode_isolatesWindowAndIconTitle() {
+        f.feed("\u001b]0;base\u0007")
+        f.feed("\u001b[22;1t\u001b]1;tmp-icon\u0007")
+        f.feed("\u001b[22;2t\u001b]2;tmp-win\u0007")
+
+        f.feed("\u001b[23;1t\u001b[20t\u001b[21t")
+        assertEquals("\u001b]Lbase\u001b\\\u001b]ltmp-win\u001b\\", f.writtenText)
+
+        f.clearWritten()
+        f.feed("\u001b[23;2t\u001b[21t")
+        assertEquals("\u001b]lbase\u001b\\", f.writtenText)
     }
 
     @Test

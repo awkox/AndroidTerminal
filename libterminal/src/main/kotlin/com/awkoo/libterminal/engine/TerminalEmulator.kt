@@ -733,13 +733,13 @@ internal class TerminalEmulator(
             11 -> writeString("\u001b[1t")
             13 -> writeString("\u001b[3;0;0t")
             14 -> writeString("\u001b[4;${rows * cellHeightPixels};${columns * cellWidthPixels}t")
-            16 -> writeString("\u001b[6;${rows * cellHeightPixels};${columns * cellWidthPixels}t")
+            16 -> writeString("\u001b[6;${cellHeightPixels};${cellWidthPixels}t")
             18 -> writeString("\u001b[8;${rows};${columns}t")
             19 -> writeString("\u001b[9;${rows};${columns}t")
-            20 -> writeString("\u001b]LIconLabel\u001b\\")
-            21 -> writeString("\u001b]l\u001b\\")
-            22 -> osc.pushTitle()
-            23 -> osc.popTitle()
+            20 -> writeString("\u001b]L${osc.iconTitle.orEmpty()}\u001b\\")
+            21 -> writeString("\u001b]l${osc.titleState.value.orEmpty()}\u001b\\")
+            22 -> osc.pushTitle(AnsiEscapeParser.getArg(args, 1, 0, false))
+            23 -> osc.popTitle(AnsiEscapeParser.getArg(args, 1, 0, false))
         }
     }
 

@@ -23,8 +23,13 @@ internal class OscHandler(
 ) {
 
     private val titleStack = ArrayDeque<String?>()
+    private val iconTitleStack = ArrayDeque<String?>()
+
     val titleState: StateFlow<String?>
         field = MutableStateFlow(null)
+
+    var iconTitle: String? = null
+        private set
 
     val copiedText = MutableSharedFlow<String>(
         replay = 0,
@@ -32,26 +37,52 @@ internal class OscHandler(
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
 
-    /** CSI 22：将当前标题压入栈中，栈深上限 20。 */
-    fun pushTitle() {
-        titleStack.addLast(titleState.value)
-        if (titleStack.size > 20) titleStack.removeFirst()
+    /** CSI 22：按模式（0=全部，1=图标名，2=窗口标题）将当前标题压入栈中，栈深上限 20。 */
+    fun pushTitle(mode: Int = 0) {
+        if (mode == 0 || mode == 1) {
+            iconTitleStack.addLast(iconTitle)
+            if (iconTitleStack.size > MAX_TITLE_STACK_DEPTH) iconTitleStack.removeFirst()
+        }
+        if (mode == 0 || mode == 2) {
+            titleStack.addLast(titleState.value)
+            if (titleStack.size > MAX_TITLE_STACK_DEPTH) titleStack.removeFirst()
+        }
     }
 
-    /** CSI 23：从栈中弹出标题恢复，栈空时忽略。 */
-    fun popTitle() {
-        if (!titleStack.isEmpty()) this.titleState.value = titleStack.removeLast()
+    /** CSI 23：按模式（0=全部，1=图标名，2=窗口标题）从栈中弹出恢复，栈空时忽略。 */
+    fun popTitle(mode: Int = 0) {
+        if ((mode == 0 || mode == 1) && iconTitleStack.isNotEmpty()) {
+            iconTitle = iconTitleStack.removeLast()
+        }
+        if ((mode == 0 || mode == 2) && titleStack.isNotEmpty()) {
+            this.titleState.value = titleStack.removeLast()
+        }
     }
 
     fun onOscCommand(value: Int, textParameter: String, bellOrStringTerminator: String) {
         when (value) {
-            0, 1, 2 -> this.titleState.value = textParameter
+            0 -> {
+                val sanitized = sanitizeTitle(textParameter)
+                iconTitle = sanitized
+                this.titleState.value = sanitized
+            }
+            1 -> iconTitle = sanitizeTitle(textParameter)
+            2 -> this.titleState.value = sanitizeTitle(textParameter)
             4 -> handleOscSetColor(textParameter)
             10, 11, 12 -> handleOscQuerySetColor(value, textParameter, bellOrStringTerminator)
             52 -> handleOscClipboard(textParameter)
             104 -> handleOscResetColor(textParameter)
             110, 111, 112 -> palette.reset(TextStyle.COLOR_INDEX_FOREGROUND + (value - 110))
             119 -> {} // 忽略
+        }
+    }
+
+    private fun sanitizeTitle(raw: String): String = buildString(raw.length) {
+        for (ch in raw) {
+            val code = ch.code
+            if (code >= 0x20 && code != 0x7F && code !in 0x80..0x9F) {
+                append(ch)
+            }
         }
     }
 
@@ -189,4 +220,8 @@ internal class OscHandler(
     }
 
     private val Int.hex4: String get() = toString(16).padStart(4, '0')
+
+    companion object {
+        private const val MAX_TITLE_STACK_DEPTH = 20
+    }
 }

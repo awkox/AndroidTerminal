@@ -24,14 +24,27 @@ class OscHandlerTest {
     private val written: String get() = strings.joinToString("")
 
     @Test
-    fun title_zeroOneTwo_setTitleState() {
+    fun title_zeroOneTwo_setTitleAndIconState() {
         handler.onOscCommand(2, "my title", "\u0007")
-
         assertEquals("my title", handler.titleState.value)
+        assertNull(handler.iconTitle)
+
+        handler.onOscCommand(1, "my icon", "\u0007")
+        assertEquals("my title", handler.titleState.value)
+        assertEquals("my icon", handler.iconTitle)
 
         handler.onOscCommand(0, "other", "\u0007")
-
         assertEquals("other", handler.titleState.value)
+        assertEquals("other", handler.iconTitle)
+    }
+
+    @Test
+    fun title_stripsControlCharactersFromTitleAndIcon() {
+        handler.onOscCommand(2, "safe\u001bX\nrm\r\u007f\u009c!", "\u0007")
+        assertEquals("safeXrm!", handler.titleState.value)
+
+        handler.onOscCommand(1, "ic\u0008on\u0085", "\u0007")
+        assertEquals("icon", handler.iconTitle)
     }
 
     @Test
@@ -43,6 +56,22 @@ class OscHandlerTest {
         handler.popTitle()
 
         assertEquals("first", handler.titleState.value)
+    }
+
+    @Test
+    fun title_pushAndPop_byModeIsolatesIconAndWindowTitle() {
+        handler.onOscCommand(0, "base", "\u0007")
+        handler.pushTitle(1)
+        handler.onOscCommand(1, "temp-icon", "\u0007")
+        handler.pushTitle(2)
+        handler.onOscCommand(2, "temp-win", "\u0007")
+
+        handler.popTitle(1)
+        assertEquals("base", handler.iconTitle)
+        assertEquals("temp-win", handler.titleState.value)
+
+        handler.popTitle(2)
+        assertEquals("base", handler.titleState.value)
     }
 
     @Test
