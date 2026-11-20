@@ -37,7 +37,7 @@ internal class OscHandler(
         onBufferOverflow = BufferOverflow.DROP_OLDEST
     )
 
-    /** CSI 22：按模式（0=全部，1=图标名，2=窗口标题）将当前标题压入栈中，栈深上限 20。 */
+    /** CSI 22：按模式（0=全部，1=图标名，2=窗口标题）将当前标题压入栈中，栈深上限 10。 */
     fun pushTitle(mode: Int = 0) {
         if (mode == 0 || mode == 1) {
             iconTitleStack.addLast(iconTitle)
@@ -222,6 +222,6 @@ internal class OscHandler(
     private val Int.hex4: String get() = toString(16).padStart(4, '0')
 
     companion object {
-        private const val MAX_TITLE_STACK_DEPTH = 20
+        private const val MAX_TITLE_STACK_DEPTH = 10
     }
 }

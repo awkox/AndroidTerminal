@@ -124,7 +124,29 @@ class TerminalEmulatorResponseTest {
     }
 
     @Test
+    fun windowReport_titleQueries_disabledByDefault_writesNothing() {
+        assertTrue(!emulator.isTitleQueryEnabled)
+        f.feed("\u001b]0;secret\u0007\u001b[20t\u001b[21t")
+
+        assertEquals("", f.writtenText)
+        assertTrue(f.writtenBytes.isEmpty())
+    }
+
+    @Test
+    fun windowReport_titleQueryPolicy_persistsAcrossSoftAndHardResets() {
+        f.feed("\u001b[!p\u001bc\u001b]0;secret\u0007\u001b[20t\u001b[21t")
+        assertTrue(!emulator.isTitleQueryEnabled)
+        assertEquals("", f.writtenText)
+
+        emulator.isTitleQueryEnabled = true
+        f.feed("\u001b[!p\u001bc\u001b]2;after\u0007\u001b[21t")
+        assertTrue(emulator.isTitleQueryEnabled)
+        assertEquals("\u001b]lafter\u001b\\", f.writtenText)
+    }
+
+    @Test
     fun windowReport_windowTitle_reportsCurrentTitleAndEmptyWhenUnset() {
+        emulator.isTitleQueryEnabled = true
         f.feed("\u001b[21t")
         assertEquals("\u001b]l\u001b\\", f.writtenText)
 
@@ -139,6 +161,7 @@ class TerminalEmulatorResponseTest {
 
     @Test
     fun windowReport_iconLabel_reportsCurrentIconAndEmptyWhenUnset() {
+        emulator.isTitleQueryEnabled = true
         f.feed("\u001b[20t")
         assertEquals("\u001b]L\u001b\\", f.writtenText)
 
@@ -153,6 +176,7 @@ class TerminalEmulatorResponseTest {
 
     @Test
     fun windowReport_title_stripsControlCharactersAgainstInjection() {
+        emulator.isTitleQueryEnabled = true
         f.feed("\u001b]2;safe\u001bX\nls\r\u007f\u009c\u0007\u001b[21t")
 
         assertEquals("\u001b]lsafeXls\u001b\\", f.writtenText)
@@ -167,13 +191,15 @@ class TerminalEmulatorResponseTest {
 
         assertEquals("second", emulator.titleState.value)
 
-        f.feed("\u001b[23t")
+        f.feed("\u001b[23t\u001b[20t\u001b[21t")
 
         assertEquals("first", emulator.titleState.value)
+        assertEquals("", f.writtenText)
     }
 
     @Test
     fun title_pushPopBySubMode_isolatesWindowAndIconTitle() {
+        emulator.isTitleQueryEnabled = true
         f.feed("\u001b]0;base\u0007")
         f.feed("\u001b[22;1t\u001b]1;tmp-icon\u0007")
         f.feed("\u001b[22;2t\u001b]2;tmp-win\u0007")
@@ -184,6 +210,13 @@ class TerminalEmulatorResponseTest {
         f.clearWritten()
         f.feed("\u001b[23;2t\u001b[21t")
         assertEquals("\u001b]lbase\u001b\\", f.writtenText)
+    }
+
+    @Test
+    fun title_pushPopWithThirdParam_preservesStandardTwoParamBehavior() {
+        f.feed("\u001b]2;a\u0007\u001b[22;2;99t\u001b]2;b\u0007\u001b[23;2;99t")
+
+        assertEquals("a", emulator.titleState.value)
     }
 
     @Test

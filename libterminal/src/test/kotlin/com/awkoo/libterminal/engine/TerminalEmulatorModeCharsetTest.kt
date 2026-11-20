@@ -181,6 +181,154 @@ class TerminalEmulatorModeCharsetTest {
     }
 
     @Test
+    fun altBuffer_mode47_then1049_enterAndExit() {
+        f.feed("main\u001b[4;6H\u001b7")
+        f.feed("\u001b[1;1H\u001b[?47h")
+        f.feed("kept\u001b[2;3H\u001b[?1049h")
+
+        assertTrue(emulator.isAlternateBufferActive)
+        assertEquals("kept", f.rowText(0))
+        assertEquals(1, emulator.cursorRow)
+        assertEquals(2, emulator.cursorCol)
+
+        f.feed("\u001b[?1049l")
+        assertFalse(emulator.isAlternateBufferActive)
+        assertEquals("main", f.rowText(0))
+        assertEquals(3, emulator.cursorRow)
+        assertEquals(5, emulator.cursorCol)
+    }
+
+    @Test
+    fun altBuffer_mode1047_then1049_enterAndExit() {
+        f.feed("main\u001b[3;4H\u001b7\u001b[1;1H")
+        f.feed("\u001b[?1047h\u001b[1;1Halt-data\u001b[?1049h")
+
+        assertTrue(emulator.isAlternateBufferActive)
+        assertEquals("alt-data", f.rowText(0))
+
+        f.feed("\u001b[?1049l")
+        assertFalse(emulator.isAlternateBufferActive)
+        assertEquals(2, emulator.cursorRow)
+        assertEquals(3, emulator.cursorCol)
+
+        f.feed("\u001b[?47h")
+        assertEquals("alt-data", f.rowText(0))
+    }
+
+    @Test
+    fun altBuffer_mode1049_setWhileAlreadyAlternate_doesNotRestoreStaleCursorOrClear() {
+        f.feed("\u001b[2;3H\u001b[?1049h")
+        f.feed("\u001b[1;1Halt\u001b[4;5H")
+
+        f.feed("\u001b[?1049h")
+        assertTrue(emulator.isAlternateBufferActive)
+        assertEquals("alt", f.rowText(0))
+        assertEquals(3, emulator.cursorRow)
+        assertEquals(4, emulator.cursorCol)
+
+        f.feed("\u001b[?1049l")
+        assertFalse(emulator.isAlternateBufferActive)
+        assertEquals(1, emulator.cursorRow)
+        assertEquals(2, emulator.cursorCol)
+    }
+
+    @Test
+    fun altBuffer_mode1049_repeatedSetAndReset() {
+        f.feed("base\u001b[2;4H")
+        f.feed("\u001b[?1049h\u001b[1;1Hrun1\u001b[?1049l")
+        assertEquals(1, emulator.cursorRow)
+        assertEquals(3, emulator.cursorCol)
+
+        f.feed("\u001b[?1049h")
+        assertEquals("", f.rowText(0))
+        f.feed("run2\u001b[?1049l\u001b[?1049l")
+
+        assertFalse(emulator.isAlternateBufferActive)
+        assertEquals("base", f.rowText(0))
+        assertEquals(1, emulator.cursorRow)
+        assertEquals(3, emulator.cursorCol)
+    }
+
+    @Test
+    fun altBuffer_mode1047_reenterAfterExit_keepsCurrentMainCursor() {
+        f.feed("\u001b[?1047h\u001b[1;1Hdirty\u001b[?1047l")
+        f.feed("\u001b[4;5H\u001b[?1047h")
+
+        assertTrue(emulator.isAlternateBufferActive)
+        assertEquals("", f.rowText(0))
+        assertEquals(3, emulator.cursorRow)
+        assertEquals(4, emulator.cursorCol)
+    }
+
+    @Test
+    fun altBuffer_crossMode47And1047And47() {
+        f.feed("\u001b[?47h\u001b[1;1Hpersisted\u001b[?1047h\u001b[?47l")
+        assertFalse(emulator.isAlternateBufferActive)
+
+        f.feed("\u001b[?47h")
+        assertEquals("persisted", f.rowText(0))
+
+        f.feed("\u001b[?1047l")
+        f.feed("\u001b[?47h")
+        assertEquals("", f.rowText(0))
+    }
+
+    @Test
+    fun altBuffer_crossMode1049And47And1049() {
+        f.feed("main\u001b[3;5H\u001b[?1049h\u001b[1;1Halt1\u001b[?47h")
+        assertEquals("alt1", f.rowText(0))
+
+        f.feed("\u001b[2;2H\u001b[?47l")
+        assertFalse(emulator.isAlternateBufferActive)
+        assertEquals(1, emulator.cursorRow)
+        assertEquals(1, emulator.cursorCol)
+
+        f.feed("\u001b[?1049h")
+        assertEquals("", f.rowText(0))
+
+        f.feed("\u001b[?1049l")
+        assertEquals(1, emulator.cursorRow)
+        assertEquals(1, emulator.cursorCol)
+    }
+
+    @Test
+    fun altBuffer_crossModeSwitch_clearsPendingAutoWrap() {
+        f.feed("1234567890")
+        f.feed("\u001b[?47hX")
+        assertEquals("         X", f.rowText(0))
+        assertEquals("", f.rowText(1))
+
+        f.feed("\u001b[?47l")
+        f.feed("\u001b[1;1H1234567890")
+        f.feed("\u001b[?1047hY")
+        assertEquals("         Y", f.rowText(0))
+        assertEquals("", f.rowText(1))
+
+        f.feed("\u001b[?1047l")
+        f.feed("\u001b[1;1H1234567890")
+        f.feed("\u001b[?1049hZ")
+        assertEquals("         Z", f.rowText(0))
+        assertEquals("", f.rowText(1))
+    }
+
+    @Test
+    fun altBuffer_crossModeWithDecscDecrcAndResize() {
+        f.feed("main-line\u001b[2;3H\u001b7\u001b[1;1H")
+        f.feed("\u001b[?47h")
+        f.feed("\u001b[1;1Halt-line\u001b7")
+        emulator.resize(8, 4, 10, 20)
+        f.feed("\u001b[3;3H\u001b8")
+
+        assertEquals(0, emulator.cursorRow)
+        assertEquals(7, emulator.cursorCol)
+
+        f.feed("\u001b[?47l\u001b8")
+        // 主屏 "main-line"（9 列）在缩为 8 列后重排占 2 行，原第 2 行保存光标随内容顺延到第 3 行（索引 2）
+        assertEquals(2, emulator.cursorRow)
+        assertEquals(2, emulator.cursorCol)
+    }
+
+    @Test
     fun lineDrawing_g0Designation_mapsBoxCharacters() {
         f.feed("\u001b(0q")
 

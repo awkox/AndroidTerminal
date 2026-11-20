@@ -76,21 +76,73 @@ class OscHandlerTest {
 
     @Test
     fun popTitle_emptyStack_isNoOp() {
-        handler.onOscCommand(2, "kept", "\u0007")
+        handler.onOscCommand(0, "kept", "\u0007")
 
         handler.popTitle()
 
         assertEquals("kept", handler.titleState.value)
+        assertEquals("kept", handler.iconTitle)
     }
 
     @Test
-    fun pushTitle_stackDepthCappedAt20() {
-        handler.onOscCommand(2, "base", "\u0007")
-        repeat(25) { handler.pushTitle() }
+    fun pushTitle_stackDepthCappedAt10_removesOldestOnOverflow() {
+        for (i in 0 until 12) {
+            handler.onOscCommand(0, "t$i", "\u0007")
+            handler.pushTitle()
+        }
+        handler.onOscCommand(0, "current", "\u0007")
 
-        repeat(20) { handler.popTitle() }
+        for (expected in 11 downTo 2) {
+            handler.popTitle()
+            assertEquals("t$expected", handler.titleState.value)
+            assertEquals("t$expected", handler.iconTitle)
+        }
 
+        handler.popTitle()
+        assertEquals("t2", handler.titleState.value)
+        assertEquals("t2", handler.iconTitle)
+    }
+
+    @Test
+    fun pushTitle_nullInitialState_roundTripRestoresNull() {
+        assertNull(handler.titleState.value)
+        assertNull(handler.iconTitle)
+
+        handler.pushTitle(0)
+        handler.onOscCommand(0, "active", "\u0007")
+        assertEquals("active", handler.titleState.value)
+        assertEquals("active", handler.iconTitle)
+
+        handler.popTitle(0)
+        assertNull(handler.titleState.value)
+        assertNull(handler.iconTitle)
+    }
+
+    @Test
+    fun pushTitle_mixedModes_preservesIndependentStackOrder() {
+        handler.onOscCommand(0, "base", "\u0007")
+        handler.pushTitle(0)
+        handler.onOscCommand(1, "icon-1", "\u0007")
+        handler.pushTitle(1)
+        handler.onOscCommand(2, "win-1", "\u0007")
+        handler.pushTitle(2)
+        handler.onOscCommand(0, "top", "\u0007")
+
+        handler.popTitle(2)
+        assertEquals("win-1", handler.titleState.value)
+        assertEquals("top", handler.iconTitle)
+
+        handler.popTitle(2)
         assertEquals("base", handler.titleState.value)
+        assertEquals("top", handler.iconTitle)
+
+        handler.popTitle(1)
+        assertEquals("base", handler.titleState.value)
+        assertEquals("icon-1", handler.iconTitle)
+
+        handler.popTitle(1)
+        assertEquals("base", handler.titleState.value)
+        assertEquals("base", handler.iconTitle)
     }
 
     @Test

@@ -168,6 +168,9 @@ internal class TerminalEmulator(
     @Volatile @JvmField
     var textBlinkState = false
 
+    @Volatile @JvmField
+    var isTitleQueryEnabled = false
+
     private var lastPrintedCodePoint = -1
 
     // OSC 处理器：拥有标题状态与剪贴板事件流，依赖稀疏覆盖板、主题基底与写回回调
@@ -736,8 +739,8 @@ internal class TerminalEmulator(
             16 -> writeString("\u001b[6;${cellHeightPixels};${cellWidthPixels}t")
             18 -> writeString("\u001b[8;${rows};${columns}t")
             19 -> writeString("\u001b[9;${rows};${columns}t")
-            20 -> writeString("\u001b]L${osc.iconTitle.orEmpty()}\u001b\\")
-            21 -> writeString("\u001b]l${osc.titleState.value.orEmpty()}\u001b\\")
+            20 -> if (isTitleQueryEnabled) writeString("\u001b]L${osc.iconTitle.orEmpty()}\u001b\\")
+            21 -> if (isTitleQueryEnabled) writeString("\u001b]l${osc.titleState.value.orEmpty()}\u001b\\")
             22 -> osc.pushTitle(AnsiEscapeParser.getArg(args, 1, 0, false))
             23 -> osc.popTitle(AnsiEscapeParser.getArg(args, 1, 0, false))
         }

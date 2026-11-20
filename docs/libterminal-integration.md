@@ -222,3 +222,12 @@ val full = TerminalColorScheme.custom(IntArray(TerminalColorScheme.COLOR_COUNT).
 
 - 颜色值统一为 `0xFFRRGGBB`（不透明 ARGB）。
 - `TerminalColorScheme` 是纯值对象（基于内容判等），可在多 view 间安全复用。
+
+---
+
+## 4. 协议支持与安全说明
+
+- **窗口/图标标题查询（`CSI 20 t` / `CSI 21 t`）**：出于安全考量（避免不受信任的输出探测或回注客户端标题），引擎层默认禁用标题查询响应；仅在 `TerminalEmulator.isTitleQueryEnabled` 显式开启时才回写 `OSC L ... ST` / `OSC l ... ST`，且终端软/硬复位不会重置该策略开关。`CSI 22 t` / `CSI 23 t` 本地标题压栈与弹栈不受此限制影响。
+- **标题栈容量（`CSI 22 t` / `CSI 23 t`）**：窗口标题栈与图标标题栈各自独立维护，最大深度均为 **10 层**（对齐 xterm 规范）；超出上限时按先进先出淘汰最早入栈的条目。
+- **标题栈第三参数扩展**：`CSI 22;Ps;Pn t` / `CSI 23;Ps;Pn t` 中用于指定栈槽位索引的第三参数 `Pn` **暂不实现**，当前仅解析操作码与子模式参数（`0`=全部、`1`=图标名、`2`=窗口标题）。
+
