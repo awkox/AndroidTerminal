@@ -1152,8 +1152,19 @@ internal class TerminalEmulator(
                 if (newScreen != this.screen) {
                     val resized =
                         !(newScreen.columns == columns && newScreen.screenRows == rows)
-                    if (setting) saveCursor()
+                    if (setting && externalBit == 1049) saveCursor()
+                    if (!setting && externalBit == 1047) {
+                        altBuffer.blockSet(
+                            0,
+                            0,
+                            columns,
+                            rows,
+                            ' '.code,
+                            rendition.eraseFillStyle
+                        )
+                    }
                     this.screen = newScreen
+                    aboutToAutoWrap = false
                     if (setting) {
                         if (resized) resize(columns, rows, cellWidthPixels, cellHeightPixels)
                     } else {
@@ -1172,9 +1183,9 @@ internal class TerminalEmulator(
                             savedStateMain.savedCursorCol = restored.col
                             savedStateMain.savedCursorRow = restored.row
                         }
-                        restoreCursor()
+                        if (externalBit == 1049) restoreCursor()
                     }
-                    if (externalBit == 1049 && newScreen == altBuffer) newScreen.blockSet(
+                    if (setting && externalBit == 1049) newScreen.blockSet(
                         0,
                         0,
                         columns,

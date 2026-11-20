@@ -127,6 +127,60 @@ class TerminalEmulatorModeCharsetTest {
     }
 
     @Test
+    fun altBuffer_mode47_preservesContentAndDoesNotSaveOrRestoreCursor() {
+        f.feed("\u001b[3;4H\u001b[?47h")
+        assertTrue(emulator.isAlternateBufferActive)
+        assertEquals(2, emulator.cursorRow)
+        assertEquals(3, emulator.cursorCol)
+
+        f.feed("\u001b[1;1Hkept\u001b[5;7H\u001b[?47l")
+        assertFalse(emulator.isAlternateBufferActive)
+        assertEquals(4, emulator.cursorRow)
+        assertEquals(6, emulator.cursorCol)
+
+        f.feed("\u001b[?47h")
+        assertEquals("kept", f.rowText(0))
+    }
+
+    @Test
+    fun altBuffer_mode1047_clearsAltOnExitAndDoesNotSaveOrRestoreCursor() {
+        f.feed("\u001b[3;4H\u001b[?1047h")
+        f.feed("\u001b[1;1Hdirty\u001b[5;7H\u001b[?1047l")
+
+        assertFalse(emulator.isAlternateBufferActive)
+        assertEquals(4, emulator.cursorRow)
+        assertEquals(6, emulator.cursorCol)
+
+        f.feed("\u001b[?47h")
+        assertEquals("", f.rowText(0))
+    }
+
+    @Test
+    fun altBuffer_mode1048_savesAndRestoresCursorWithoutSwitchingScreen() {
+        f.feed("main\u001b[3;5H\u001b[?1048h\u001b[1;1H")
+        assertFalse(emulator.isAlternateBufferActive)
+        assertEquals(0, emulator.cursorRow)
+        assertEquals(0, emulator.cursorCol)
+
+        f.feed("\u001b[?1048l")
+        assertEquals(2, emulator.cursorRow)
+        assertEquals(4, emulator.cursorCol)
+        assertEquals("main", f.rowText(0))
+    }
+
+    @Test
+    fun altBuffer_mode1049_clearsStaleAltBufferLeftByMode47() {
+        f.feed("\u001b[?47hstale\u001b[?47l")
+        f.feed("\u001b[2;3H\u001b[?1049h")
+
+        assertEquals("", f.rowText(0))
+        f.feed("fresh\u001b[?1049l")
+
+        assertEquals(1, emulator.cursorRow)
+        assertEquals(2, emulator.cursorCol)
+    }
+
+    @Test
     fun lineDrawing_g0Designation_mapsBoxCharacters() {
         f.feed("\u001b(0q")
 

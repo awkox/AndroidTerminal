@@ -69,6 +69,22 @@ class TerminalEmulatorResponseTest {
     }
 
     @Test
+    fun decrqm_altScreenModesReflectBufferState_andUnknownIsZero() {
+        f.feed("\u001b[?47\$p\u001b[?1047\$p\u001b[?1049\$p\u001b[?999\$p")
+        assertEquals(
+            "\u001b[?47;2\$y\u001b[?1047;2\$y\u001b[?1049;2\$y\u001b[?999;0\$y",
+            f.writtenText
+        )
+
+        f.clearWritten()
+        f.feed("\u001b[?1049h\u001b[?47\$p\u001b[?1047\$p\u001b[?1049\$p")
+        assertEquals(
+            "\u001b[?47;1\$y\u001b[?1047;1\$y\u001b[?1049;1\$y",
+            f.writtenText
+        )
+    }
+
+    @Test
     fun windowReport_textAreaSizeInChars() {
         f.feed("\u001b[18t")
 

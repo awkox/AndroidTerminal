@@ -78,4 +78,22 @@ class TerminalEmulatorSavedCursorTest {
         assertEquals(1, f.emulator.cursorRow)
         assertEquals(2, f.emulator.cursorCol)
     }
+
+    @Test
+    fun mode47Exit_afterShrinkDuringAlt_keepsAltCursorAndRemapsMainSavedCursor() {
+        val f = EmulatorFixture(columns = 10, rows = 6)
+        f.feed("aaaa\r\nbbbb\r\ncccc\r\ndddd\r\neeee\r\nffff")
+        f.feed("\u001b[5;5H\u001b7\u001b[2;2H")
+
+        f.feed("\u001b[?47h\u001b[1;1H")
+        f.emulator.resize(10, 4, 10, 20)
+        f.feed("\u001b[?47l")
+
+        assertEquals(0, f.emulator.cursorRow)
+        assertEquals(0, f.emulator.cursorCol)
+
+        f.feed("\u001b8")
+        assertEquals(2, f.emulator.cursorRow)
+        assertEquals(4, f.emulator.cursorCol)
+    }
 }
