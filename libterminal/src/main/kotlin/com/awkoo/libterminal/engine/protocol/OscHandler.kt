@@ -144,7 +144,8 @@ internal class OscHandler(
                         val r = (((rgb shr 16) and 0xFF) * 257).hex4
                         val g = (((rgb shr 8) and 0xFF) * 257).hex4
                         val b = ((rgb and 0xFF) * 257).hex4
-                        writeString("\u001b]$value;rgb:$r/$g/$b$bellOrStringTerminator")
+                        val oscCode = 10 + (specialIndex - TextStyle.COLOR_INDEX_FOREGROUND)
+                        writeString("\u001b]$oscCode;rgb:$r/$g/$b$bellOrStringTerminator")
                     } else {
                         setColor(specialIndex, colorSpec)
                     }

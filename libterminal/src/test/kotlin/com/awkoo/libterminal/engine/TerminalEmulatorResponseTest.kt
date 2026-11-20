@@ -320,4 +320,19 @@ class TerminalEmulatorResponseTest {
             f.writtenText
         )
     }
+
+    @Test
+    fun oscSpecialColorChainedQuery_reportsIncrementingOscCodes() {
+        f.feed("\u001b]10;#112233;#445566;#778899\u0007")
+        f.clearWritten()
+
+        f.feed("\u001b]10;?;?;?\u001b\\")
+
+        assertEquals(
+            "\u001b]10;rgb:1111/2222/3333\u001b\\" +
+                "\u001b]11;rgb:4444/5555/6666\u001b\\" +
+                "\u001b]12;rgb:7777/8888/9999\u001b\\",
+            f.writtenText
+        )
+    }
 }

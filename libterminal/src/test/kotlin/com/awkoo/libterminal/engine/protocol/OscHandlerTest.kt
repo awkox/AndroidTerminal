@@ -324,4 +324,35 @@ class OscHandlerTest {
 
         assertEquals("world", withTimeout(2_000) { pending.await() })
     }
+
+    @Test
+    fun queryColor_chainedSpecialColors_repliesWithIncrementingOscCodes() {
+        handler.onOscCommand(10, "?;?;?;?", "\u0007")
+
+        assertEquals(
+            "\u001b]10;rgb:ffff/ffff/ffff\u0007" +
+                "\u001b]11;rgb:0000/0000/0000\u0007" +
+                "\u001b]12;rgb:ffff/ffff/ffff\u0007",
+            written
+        )
+    }
+
+    @Test
+    fun queryColor_mixedSetAndQueryFromOsc11_stopsAtCursorColor() {
+        handler.onOscCommand(10, "#112233;?;?", "\u001b\\")
+        assertEquals(0xFF112233.toInt(), palette.value(TextStyle.COLOR_INDEX_FOREGROUND))
+        assertEquals(
+            "\u001b]11;rgb:0000/0000/0000\u001b\\" +
+                "\u001b]12;rgb:ffff/ffff/ffff\u001b\\",
+            written
+        )
+
+        strings.clear()
+        handler.onOscCommand(11, "?;?;?", "\u0007")
+        assertEquals(
+            "\u001b]11;rgb:0000/0000/0000\u0007" +
+                "\u001b]12;rgb:ffff/ffff/ffff\u0007",
+            written
+        )
+    }
 }
