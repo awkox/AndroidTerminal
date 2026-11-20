@@ -221,7 +221,7 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
         when (b) {
             '\u001b'.code -> continueSequence(EscapeState.P_ESCAPE)
             else -> {
-                if (oscOrDeviceControlArgs.length <= MAX_OSC_STRING_LENGTH) {
+                if (oscOrDeviceControlArgs.length + Character.charCount(b) <= MAX_OSC_STRING_LENGTH) {
                     oscOrDeviceControlArgs.appendCodePoint(b)
                 }
                 continueSequence(escapeState)
@@ -234,7 +234,7 @@ internal class AnsiEscapeParser(private val handler: TerminalActionHandler) {
             handler.onDeviceControl(oscOrDeviceControlArgs.toString())
             finishSequence()
         } else {
-            if (oscOrDeviceControlArgs.length + 2 <= MAX_OSC_STRING_LENGTH) {
+            if (oscOrDeviceControlArgs.length + 1 + Character.charCount(b) <= MAX_OSC_STRING_LENGTH) {
                 oscOrDeviceControlArgs.appendCodePoint(27)
                 oscOrDeviceControlArgs.appendCodePoint(b)
             }

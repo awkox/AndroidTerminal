@@ -409,11 +409,15 @@ class AnsiEscapeParserTest {
     @Test
     fun dcs_preservesLoneEscapeAndNewlinesAndCapsLength() {
         feed("\u001bPab\ncd\u001bXe\u001b\\")
+        val exactDcs = "z".repeat(AnsiEscapeParser.MAX_OSC_STRING_LENGTH)
+        feed("\u001bP$exactDcs\u001b\\")
         val longDcs = "y".repeat(AnsiEscapeParser.MAX_OSC_STRING_LENGTH + 20)
         feed("\u001bP$longDcs\u001b\\")
 
         assertEquals("ab\ncd\u001bXe", handler.deviceControls[0])
         assertTrue(handler.controls.isEmpty())
-        assertEquals(AnsiEscapeParser.MAX_OSC_STRING_LENGTH + 1, handler.deviceControls[1].length)
+        assertEquals(exactDcs, handler.deviceControls[1])
+        assertEquals(AnsiEscapeParser.MAX_OSC_STRING_LENGTH, handler.deviceControls[2].length)
+        assertEquals("y".repeat(AnsiEscapeParser.MAX_OSC_STRING_LENGTH), handler.deviceControls[2])
     }
 }
