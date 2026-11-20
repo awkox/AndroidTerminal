@@ -567,4 +567,87 @@ class TerminalEmulatorModeCharsetTest {
 
         assertEquals("Yab", f.rowText(0))
     }
+
+    @Test
+    fun decaln_fillsScreenWithLetterE() {
+        f.feed("\u001b[34m\u001b#8")
+
+        assertEquals(List(5) { "EEEEEEEEEE" }, f.screenText())
+        assertEquals(4, emulator.screen.getStyleAt(2, 5).foreColor)
+    }
+
+    @Test
+    fun decset3And69_resetMarginsAndClearScreenOnColmSwitch() {
+        f.feed("hello\u001b[2;4r\u001b[?69h\u001b[3;8s\u001b[3;5H")
+        f.feed("\u001b[?3h")
+
+        assertEquals(0, emulator.cursorRow)
+        assertEquals(0, emulator.cursorCol)
+        assertEquals("", f.rowText(0))
+
+        // DECSLRM 已关闭，CSI ? 69 $p 报告为 2
+        f.clearWritten()
+        f.feed("\u001b[?69\$p")
+        assertEquals("\u001b[?69;2\$y", f.writtenText)
+
+        // 重置 69 时清除左右边距
+        f.feed("\u001b[?69h\u001b[3;6s\u001b[?69l\u001b[1;1H0123456789")
+        assertEquals("0123456789", f.rowText(0))
+    }
+
+    @Test
+    fun xtsaveAndXtrestore_persistAndTriggerModeEffects() {
+        f.feed("\u001b[?1h\u001b[?69l")
+        f.feed("\u001b[?1;69s")
+        f.feed("\u001b[?1l\u001b[?69h\u001b[3;6s")
+        assertFalse(emulator.isCursorKeysApplicationMode)
+
+        // 恢复 1=开、69=关（69 关会联动清零左右边距）
+        f.feed("\u001b[?1;69r")
+        assertTrue(emulator.isCursorKeysApplicationMode)
+        f.feed("\u001b[1;1H0123456789")
+        assertEquals("0123456789", f.rowText(0))
+    }
+
+    @Test
+    fun cursorStyle_decscusr_coversDefaultEvenAndResetArgs() {
+        f.feed("\u001b[ q")
+        assertEquals(TerminalCursorStyle.BLOCK, emulator.cursorStyle)
+
+        f.feed("\u001b[4 q")
+        assertEquals(TerminalCursorStyle.UNDERLINE, emulator.cursorStyle)
+
+        f.feed("\u001b[6 q")
+        assertEquals(TerminalCursorStyle.BAR, emulator.cursorStyle)
+
+        f.feed("\u001b[2 q")
+        assertEquals(TerminalCursorStyle.BLOCK, emulator.cursorStyle)
+
+        f.feed("\u001b[0 q")
+        assertEquals(TerminalCursorStyle.BLOCK, emulator.cursorStyle)
+    }
+
+    @Test
+    fun decscDecrc_restoresLineDrawingAndUnderlineAttributes() {
+        f.feed("\u001b[4:3m\u001b[58;5;196m\u001b(0\u001b7")
+        f.feed("\u001b[0m\u001b(B\u001b8q")
+
+        assertEquals('\u2500', emulator.screen.getRowForRead(0).textChars()[0])
+        val ext = emulator.screen.getExtendedEffectAt(0, 0)
+        assertEquals(TextStyle.UNDERLINE_STYLE_CURLY, TextStyle.decodeUnderlineStyle(ext))
+        assertEquals(196, TextStyle.decodeUnderlineColor(ext))
+    }
+
+    @Test
+    fun sgr_endToEnd_rendersIndexedTruecolorAndUnderlineColors() {
+        f.feed("\u001b[1;38;5;196;48;2;10;20;30;4:4;58:2::40:50:60mX")
+
+        val style = emulator.screen.getStyleAt(0, 0)
+        assertTrue(style.isBold)
+        assertEquals(196, style.foreColor)
+        assertEquals(TextStyle.makeTrueColor(10, 20, 30), style.backColor)
+        val ext = emulator.screen.getExtendedEffectAt(0, 0)
+        assertEquals(TextStyle.UNDERLINE_STYLE_DOTTED, TextStyle.decodeUnderlineStyle(ext))
+        assertEquals(TextStyle.makeTrueColor(40, 50, 60), TextStyle.decodeUnderlineColor(ext))
+    }
 }

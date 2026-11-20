@@ -265,4 +265,63 @@ class OscHandlerTest {
         assertTrue(!palette.isOverridden(TextStyle.COLOR_INDEX_BACKGROUND))
         assertTrue(!palette.isOverridden(TextStyle.COLOR_INDEX_CURSOR))
     }
+
+    @Test
+    fun queryColor_11And12_echoesTerminatorAndReportsSchemeOrOverride() {
+        handler.onOscCommand(11, "?", "\u001b\\")
+        handler.onOscCommand(12, "?", "\u0007")
+
+        assertEquals(
+            "\u001b]11;rgb:0000/0000/0000\u001b\\\u001b]12;rgb:ffff/ffff/ffff\u0007",
+            written
+        )
+    }
+
+    @Test
+    fun setSpecialColors_osc10ChainedSemicolons_setsForegroundBackgroundAndCursor() {
+        handler.onOscCommand(10, "#112233;#445566;#778899", "\u0007")
+
+        assertEquals(0xFF112233.toInt(), palette.value(TextStyle.COLOR_INDEX_FOREGROUND))
+        assertEquals(0xFF445566.toInt(), palette.value(TextStyle.COLOR_INDEX_BACKGROUND))
+        assertEquals(0xFF778899.toInt(), palette.value(TextStyle.COLOR_INDEX_CURSOR))
+    }
+
+    @Test
+    fun setColor_supportsShortAndLongHexAndRgbFormats_andIgnoresInvalid() {
+        handler.onOscCommand(4, "1;#F0A", "\u0007")
+        handler.onOscCommand(4, "2;#111222333", "\u0007")
+        handler.onOscCommand(4, "3;#123456789ABC", "\u0007")
+        handler.onOscCommand(4, "4;rgb:ffff/0000/8080", "\u0007")
+        handler.onOscCommand(4, "5;rgb:ff/0/00;256;#112233;6;#12", "\u0007")
+
+        assertEquals(0xFFFF00AA.toInt(), palette.value(1))
+        assertEquals(0xFF112233.toInt(), palette.value(2))
+        assertEquals(0xFF12569A.toInt(), palette.value(3))
+        assertEquals(0xFFFF0080.toInt(), palette.value(4))
+        assertTrue(!palette.isOverridden(5))
+        assertTrue(!palette.isOverridden(6))
+    }
+
+    @Test
+    fun resetColor_multipleSlotsAndOutOfRange_handlesGracefully() {
+        palette.set(1, 0xFF111111.toInt())
+        palette.set(2, 0xFF222222.toInt())
+        palette.set(3, 0xFF333333.toInt())
+
+        handler.onOscCommand(104, "1;999;abc;2", "\u0007")
+
+        assertTrue(!palette.isOverridden(1))
+        assertTrue(!palette.isOverridden(2))
+        assertTrue(palette.isOverridden(3))
+    }
+
+    @Test
+    fun clipboard_emptySelectionTarget_stillDecodesBase64() = runBlocking {
+        val pending = async { handler.copiedText.first() }
+        yield()
+
+        handler.onOscCommand(52, ";d29ybGQ=", "\u0007")
+
+        assertEquals("world", withTimeout(2_000) { pending.await() })
+    }
 }

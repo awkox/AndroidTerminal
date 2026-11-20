@@ -237,4 +237,63 @@ class RenditionStateTest {
 
         assertEquals(TextStyle.COLOR_INDEX_FOREGROUND, rendition.foreColor)
     }
+
+    @Test
+    fun unknownExtendedColorSubmode_colonForm_skipsSubParamsAndAppliesFollowingSgr() {
+        val args = intArrayOf(38, 9, 1, 31)
+        val subParams = 0b0110
+
+        rendition.selectGraphicRendition(args, args.size, subParams)
+
+        assertEquals(1, rendition.foreColor)
+    }
+
+    @Test
+    fun underlineColor_58_semicolonAndTrueColorForms() {
+        apply(58, 5, 12)
+        assertEquals(12, rendition.underlineColor)
+
+        apply(58, 2, 10, 20, 30)
+        assertEquals(makeTrueColor(10, 20, 30), rendition.underlineColor)
+
+        val colonArgs = intArrayOf(58, 2, -1, 100, 150, 200)
+        rendition.selectGraphicRendition(colonArgs, colonArgs.size, 0b111110)
+        assertEquals(makeTrueColor(100, 150, 200), rendition.underlineColor)
+    }
+
+    @Test
+    fun underline_colonStyle_coversAllSupportedShapes() {
+        val shapes = listOf(
+            TextStyle.UNDERLINE_STYLE_SINGLE,
+            TextStyle.UNDERLINE_STYLE_DOUBLE,
+            TextStyle.UNDERLINE_STYLE_CURLY,
+            TextStyle.UNDERLINE_STYLE_DOTTED,
+            TextStyle.UNDERLINE_STYLE_DASHED
+        )
+        for (shape in shapes) {
+            rendition.selectGraphicRendition(intArrayOf(4, shape), 2, 1 shl 1)
+            assertTrue(rendition.style.isUnderline)
+            assertEquals(shape, rendition.underlineStyle)
+        }
+    }
+
+    @Test
+    fun extendedColor_outOfRangeOrTruncated_isIgnoredSafely() {
+        apply(38, 2, 256, 0, 0)
+        assertEquals(TextStyle.COLOR_INDEX_FOREGROUND, rendition.foreColor)
+
+        apply(38, 2, 10, 20)
+        assertEquals(TextStyle.COLOR_INDEX_FOREGROUND, rendition.foreColor)
+
+        apply(38)
+        assertEquals(TextStyle.COLOR_INDEX_FOREGROUND, rendition.foreColor)
+    }
+
+    @Test
+    fun middleEmptySlot_defaultsToZeroAndResetsPriorAttributes() {
+        rendition.selectGraphicRendition(intArrayOf(1, -1, 31), 3, 0)
+
+        assertFalse(rendition.style.isBold)
+        assertEquals(1, rendition.foreColor)
+    }
 }

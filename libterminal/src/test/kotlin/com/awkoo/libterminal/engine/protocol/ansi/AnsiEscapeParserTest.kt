@@ -313,4 +313,107 @@ class AnsiEscapeParserTest {
         assertEquals(5, AnsiEscapeParser.getArg(args, 2, 7, true))
         assertEquals(3, AnsiEscapeParser.getArg(args, 99, 3, true))
     }
+
+    @Test
+    fun vtAndFf_dispatchAsLinefeed_andSubCancelsSequence() {
+        feed("\u000b\u000c\u001b[12\u001aZ")
+
+        assertEquals(listOf("LF", "LF"), handler.controls)
+        assertTrue(handler.csiCommands.isEmpty())
+        assertEquals(listOf(127, 'Z'.code), handler.codePoints)
+    }
+
+    @Test
+    fun escPoundAndPercent_reportExpectedStates() {
+        feed("\u001b#8\u001b%G")
+
+        assertEquals(
+            listOf(EscapeState.POUND to '8'.code, EscapeState.PERCENT to 'G'.code),
+            handler.escCommands
+        )
+    }
+
+    @Test
+    fun apcSequence_isSwallowedIncludingLoneEscapeUntilSt() {
+        feed("a\u001b_payload\u001bxmore\u001b\\b")
+
+        assertEquals(listOf('a'.code, 'b'.code), handler.codePoints)
+        assertTrue(handler.escCommands.isEmpty())
+        assertTrue(handler.csiCommands.isEmpty())
+    }
+
+    @Test
+    fun csiIntermediateStates_reportDollarQuotesAsteriskAndQuestionDollar() {
+        feed("\u001b[1;2\$v\u001b[1\"q\u001b[2'}\u001b[2*x\u001b[?7\$p")
+
+        assertEquals(5, handler.csiCommands.size)
+        assertEquals(EscapeState.CSI_DOLLAR, handler.csiCommands[0].state)
+        assertEquals('v'.code, handler.csiCommands[0].command)
+        assertEquals(listOf(1, 2), handler.csiCommands[0].args)
+
+        assertEquals(EscapeState.CSI_DOUBLE_QUOTE, handler.csiCommands[1].state)
+        assertEquals('q'.code, handler.csiCommands[1].command)
+        assertEquals(listOf(1), handler.csiCommands[1].args)
+
+        assertEquals(EscapeState.CSI_SINGLE_QUOTE, handler.csiCommands[2].state)
+        assertEquals('}'.code, handler.csiCommands[2].command)
+        assertEquals(listOf(2), handler.csiCommands[2].args)
+
+        assertEquals(EscapeState.CSI_INTERMEDIATE_ASTERISK, handler.csiCommands[3].state)
+        assertEquals('x'.code, handler.csiCommands[3].command)
+        assertEquals(listOf(2), handler.csiCommands[3].args)
+
+        assertEquals(EscapeState.CSI_QUESTIONMARK_ARG_DOLLAR, handler.csiCommands[4].state)
+        assertEquals('p'.code, handler.csiCommands[4].command)
+        assertEquals(listOf(7), handler.csiCommands[4].args)
+    }
+
+    @Test
+    fun unsupportedEqualsAndChainedIntermediateBytes_areSwallowedCleanly() {
+        feed("\u001b[=1H\u001b[<1;2!Ha")
+
+        assertTrue(handler.csiCommands.isEmpty())
+        assertEquals(listOf('a'.code), handler.codePoints)
+    }
+
+    @Test
+    fun oscEdgeCases_nonNumericCodeDropped_noSemicolonEmptyParam_andLoneEscPreserved() {
+        feed("\u001b]abc;ignored\u0007")
+        feed("\u001b]104\u0007")
+        feed("\u001b]2;a\u001bXb\u001b\\")
+
+        assertEquals(2, handler.oscCommands.size)
+        assertEquals(Triple(104, "", "\u0007"), handler.oscCommands[0])
+        assertEquals(Triple(2, "a\u001bXb", "\u001b\\"), handler.oscCommands[1])
+    }
+
+    @Test
+    fun oscLengthCap_truncatesBeyondMaxOscStringLength() {
+        val longText = "x".repeat(AnsiEscapeParser.MAX_OSC_STRING_LENGTH + 50)
+        feed("\u001b]2;$longText\u0007")
+
+        val reported = handler.oscCommands.single()
+        assertEquals(2, reported.first)
+        assertEquals(AnsiEscapeParser.MAX_OSC_STRING_LENGTH - 2, reported.second.length)
+    }
+
+    @Test
+    fun osc_dispatchesLinefeedAndCancelSeparately() {
+        feed("\u001b]2;ab\ncd\u0018Z")
+
+        assertEquals(listOf("LF"), handler.controls)
+        assertTrue(handler.oscCommands.isEmpty())
+        assertEquals(listOf(127, 'Z'.code), handler.codePoints)
+    }
+
+    @Test
+    fun dcs_preservesLoneEscapeAndNewlinesAndCapsLength() {
+        feed("\u001bPab\ncd\u001bXe\u001b\\")
+        val longDcs = "y".repeat(AnsiEscapeParser.MAX_OSC_STRING_LENGTH + 20)
+        feed("\u001bP$longDcs\u001b\\")
+
+        assertEquals("ab\ncd\u001bXe", handler.deviceControls[0])
+        assertTrue(handler.controls.isEmpty())
+        assertEquals(AnsiEscapeParser.MAX_OSC_STRING_LENGTH + 1, handler.deviceControls[1].length)
+    }
 }

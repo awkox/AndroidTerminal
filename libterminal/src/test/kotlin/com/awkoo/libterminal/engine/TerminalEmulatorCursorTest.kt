@@ -390,4 +390,59 @@ class TerminalEmulatorCursorTest {
         assertEquals(0, emulator.cursorRow)
         assertEquals(0, emulator.cursorCol)
     }
+
+    @Test
+    fun indexAndNextLine_moveAndScrollWithinMargins() {
+        f.feed("00000000\r\n11111111\r\n22222222\r\n33333333\r\n44444444")
+        f.feed("\u001b[2;4r\u001b[?69h\u001b[2;6s")
+        f.feed("\u001b[3;4H\u001bD")
+        assertEquals(3, emulator.cursorRow)
+        assertEquals(3, emulator.cursorCol)
+
+        // IND 在底边距触发边距区内滚动
+        f.feed("\u001bD")
+        assertEquals(3, emulator.cursorRow)
+        assertEquals("00000000", f.rowText(0))
+        assertEquals("12222211", f.rowText(1))
+        assertEquals("23333322", f.rowText(2))
+        assertEquals("3     33", f.rowText(3))
+
+        // NEL 归位到左边距并换行
+        f.feed("\u001b[2;5H\u001bE")
+        assertEquals(2, emulator.cursorRow)
+        assertEquals(1, emulator.cursorCol)
+    }
+
+    @Test
+    fun decbiAndDecfi_stepOrShiftColumnsAtMargins() {
+        f.feed("0123456789\r\nabcdefghij\r\nklmnopqrst")
+        f.feed("\u001b[2;3r\u001b[?69h\u001b[3;7s")
+        f.feed("\u001b[2;4H\u001b6")
+        assertEquals(2, emulator.cursorCol)
+
+        // 左边距处 ESC 6 (DECBI) 在上下边距行内右移插入一列
+        f.feed("\u001b6")
+        assertEquals(2, emulator.cursorCol)
+        assertEquals("0123456789", f.rowText(0))
+        assertEquals("ab cdefhij", f.rowText(1))
+        assertEquals("kl mnoprst", f.rowText(2))
+
+        // 右边距处 ESC 9 (DECFI) 从左边距删除一列并左移边距内内容
+        f.feed("\u001b[2;7H\u001b9")
+        assertEquals(6, emulator.cursorCol)
+        assertEquals("abcdef hij", f.rowText(1))
+        assertEquals("klmnop rst", f.rowText(2))
+    }
+
+    @Test
+    fun originMode_cnlAndCpl_alignToLeftMargin() {
+        f.feed("\u001b[2;5r\u001b[?69h\u001b[3;8s\u001b[?6h")
+        f.feed("\u001b[1;5H\u001b[2E")
+        assertEquals(3, emulator.cursorRow)
+        assertEquals(2, emulator.cursorCol)
+
+        f.feed("\u001b[1F")
+        assertEquals(2, emulator.cursorRow)
+        assertEquals(2, emulator.cursorCol)
+    }
 }

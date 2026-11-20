@@ -98,4 +98,35 @@ class DeviceControlHandlerTest {
 
         assertEquals("\u001bP1+r436f=323536\u001b\\", written)
     }
+
+    @Test
+    fun xtgettcaps_colorsAndNameAliases_work() {
+        // "colors" = 636F6C6F7273, "name" = 6E616D65
+        handler.handleDeviceControl("+q636F6C6F7273;6E616D65", appCursorKeys = false, appKeypad = false)
+
+        assertEquals(
+            "\u001bP1+r636F6C6F7273=323536\u001b\\\u001bP1+r6E616D65=787465726D\u001b\\",
+            written
+        )
+    }
+
+    @Test
+    fun xtgettcaps_respectsAppCursorKeysAndAppKeypadModes() {
+        // "ku" = 6B75 (上方向键), "@8" = 4038 (小键盘回车)
+        handler.handleDeviceControl("+q6B75;4038", appCursorKeys = true, appKeypad = true)
+
+        assertEquals(
+            "\u001bP1+r6B75=1B4F41\u001b\\\u001bP1+r4038=1B4F4D\u001b\\",
+            written
+        )
+    }
+
+    @Test
+    fun unknownOrEmptyDcs_isIgnoredSilently() {
+        handler.handleDeviceControl("\$qr", appCursorKeys = false, appKeypad = false)
+        handler.handleDeviceControl("+q", appCursorKeys = false, appKeypad = false)
+        handler.handleDeviceControl("unknown", appCursorKeys = false, appKeypad = false)
+
+        assertEquals("", written)
+    }
 }

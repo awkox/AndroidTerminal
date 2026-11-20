@@ -207,4 +207,60 @@ class TerminalEmulatorWrapScrollTest {
         assertEquals(0, emulator.screen.activeTranscriptRows)
         assertEquals(listOf("aaa", "ccc", "ddd", "", "eee"), f.screenText())
     }
+
+    @Test
+    fun reverseWraparound_mode45_wrapsToPreviousWrappedLineAndRespectsMargins() {
+        f.feed("0123456789a")
+        f.feed("\u001b[2;1H\u0008")
+        // 默认未启用 ?45h，在第 1 列 BS 不回退
+        assertEquals(1, emulator.cursorRow)
+        assertEquals(0, emulator.cursorCol)
+
+        // 启用 ?45h 后，上一行有 lineWrap 且 >= topMargin 时回退到上一行末列
+        f.feed("\u001b[?45h\u0008")
+        assertEquals(0, emulator.cursorRow)
+        assertEquals(9, emulator.cursorCol)
+
+        // 关闭自动换行 (?7l) 后反向回绕失效
+        f.feed("\u001b[2;1H\u001b[?7l\u0008")
+        assertEquals(1, emulator.cursorRow)
+        assertEquals(0, emulator.cursorCol)
+
+        // 上一行没有软换行标志时不可反向回绕
+        f.feed("\u001b[?7h\u001b[3;1Hline3\r\n\u0008")
+        assertEquals(3, emulator.cursorRow)
+        assertEquals(0, emulator.cursorCol)
+    }
+
+    @Test
+    fun autoWrap_withLeftRightMargins_wrapsWithinMarginsAndClampsWideChar() {
+        f.feed("\u001b[?69h\u001b[3;6s")
+        f.feed("\u001b[1;3Habcdef")
+
+        assertEquals("  abcd", f.rowText(0))
+        assertEquals("  ef", f.rowText(1))
+        assertTrue(emulator.screen.getLineWrap(0))
+
+        // 右边距仅剩 1 格（第 6 列）时写入宽字符应立即换到下一行左边距
+        f.feed("\u001b[3;6H\u4e2d")
+        assertEquals(3, emulator.cursorRow)
+        assertEquals(4, emulator.cursorCol)
+        assertEquals("  \u4e2d", f.rowText(3))
+    }
+
+    @Test
+    fun scrollUpAndDown_inSubMargins_scrollOnlyRectangleAndClampArg() {
+        f.feed("0123456789\r\nabcdefghij\r\nklmnopqrst\r\nuvwxyzABCD\r\nEFGHIJKLMN")
+        f.feed("\u001b[2;4r\u001b[?69h\u001b[3;7s")
+        f.feed("\u001b[99S")
+
+        assertEquals("0123456789", f.rowText(0))
+        assertEquals("ab     hij", f.rowText(1))
+        assertEquals("kl     rst", f.rowText(2))
+        assertEquals("uv     BCD", f.rowText(3))
+        assertEquals("EFGHIJKLMN", f.rowText(4))
+
+        f.feed("\u001b[2;3HXYZ\u001b[1T")
+        assertEquals("klXYZ  rst", f.rowText(2))
+    }
 }

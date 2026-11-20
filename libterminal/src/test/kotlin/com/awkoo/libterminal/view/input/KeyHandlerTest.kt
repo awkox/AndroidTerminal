@@ -28,4 +28,36 @@ class KeyHandlerTest {
         assertEquals('a'.code, KeyHandler.processPrintableChar('a'.code, isCtrlDown = false, fromKeyEvent = true))
         assertEquals('a'.code, KeyHandler.processPrintableChar('a'.code, isCtrlDown = false, fromKeyEvent = false))
     }
+
+    @Test
+    fun ctrlCombination_mapsLettersAndSpecialCharsToAsciiControl() {
+        assertEquals(1, KeyHandler.processPrintableChar('a'.code, isCtrlDown = true, fromKeyEvent = true))
+        assertEquals(3, KeyHandler.processPrintableChar('C'.code, isCtrlDown = true, fromKeyEvent = true))
+        assertEquals(26, KeyHandler.processPrintableChar('z'.code, isCtrlDown = true, fromKeyEvent = true))
+        assertEquals(0, KeyHandler.processPrintableChar(' '.code, isCtrlDown = true, fromKeyEvent = true))
+        assertEquals(0, KeyHandler.processPrintableChar('2'.code, isCtrlDown = true, fromKeyEvent = false))
+        assertEquals(27, KeyHandler.processPrintableChar('['.code, isCtrlDown = true, fromKeyEvent = true))
+        assertEquals(27, KeyHandler.processPrintableChar('3'.code, isCtrlDown = true, fromKeyEvent = false))
+        assertEquals(28, KeyHandler.processPrintableChar('\\'.code, isCtrlDown = true, fromKeyEvent = true))
+        assertEquals(28, KeyHandler.processPrintableChar('4'.code, isCtrlDown = true, fromKeyEvent = false))
+        assertEquals(29, KeyHandler.processPrintableChar(']'.code, isCtrlDown = true, fromKeyEvent = true))
+        assertEquals(29, KeyHandler.processPrintableChar('5'.code, isCtrlDown = true, fromKeyEvent = false))
+        assertEquals(30, KeyHandler.processPrintableChar('^'.code, isCtrlDown = true, fromKeyEvent = true))
+        assertEquals(30, KeyHandler.processPrintableChar('6'.code, isCtrlDown = true, fromKeyEvent = false))
+        assertEquals(31, KeyHandler.processPrintableChar('_'.code, isCtrlDown = true, fromKeyEvent = true))
+        assertEquals(31, KeyHandler.processPrintableChar('7'.code, isCtrlDown = true, fromKeyEvent = false))
+        assertEquals(31, KeyHandler.processPrintableChar('/'.code, isCtrlDown = true, fromKeyEvent = false))
+        assertEquals(127, KeyHandler.processPrintableChar('8'.code, isCtrlDown = true, fromKeyEvent = true))
+    }
+
+    @Test
+    fun c0ControlCharacters_preserveOrNormalizeToCr() {
+        assertEquals('\r'.code, KeyHandler.processPrintableChar('\n'.code, isCtrlDown = false, fromKeyEvent = false))
+        assertEquals(1, KeyHandler.processPrintableChar(1, isCtrlDown = false, fromKeyEvent = false))
+        assertEquals(27, KeyHandler.processPrintableChar(27, isCtrlDown = false, fromKeyEvent = false))
+        assertEquals(28, KeyHandler.processPrintableChar(28, isCtrlDown = false, fromKeyEvent = false))
+        assertEquals(29, KeyHandler.processPrintableChar(29, isCtrlDown = false, fromKeyEvent = false))
+        assertEquals(30, KeyHandler.processPrintableChar(30, isCtrlDown = false, fromKeyEvent = false))
+        assertEquals(31, KeyHandler.processPrintableChar(31, isCtrlDown = false, fromKeyEvent = false))
+    }
 }

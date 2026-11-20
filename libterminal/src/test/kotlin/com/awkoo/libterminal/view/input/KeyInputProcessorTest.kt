@@ -2,18 +2,36 @@ package com.awkoo.libterminal.view.input
 
 import android.view.KeyEvent
 import com.awkoo.libterminal.engine.EmulatorFixture
+import com.awkoo.libterminal.engine.TerminalSession
 import com.awkoo.libterminal.engine.protocol.KeySequenceEncoder
+import com.awkoo.libterminal.process.ITerminalProcess
 import com.awkoo.libterminal.view.ExtraKeysModifierSnapshot
+import kotlinx.coroutines.flow.MutableStateFlow
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import java.io.OutputStream
+import java.util.concurrent.CountDownLatch
 
 /**
- * 键盘翻页语义（xterm scroll-back/scroll-forw 口径）：Shift+PageUp/Down 是本地回滚动作，
- * 只驱动视口回滚回调，不向应用发滚轮事件、不伪造指针坐标。
+ * 键盘处理链路：本地翻页（Shift+PageUp/Down）与功能键/Ctrl/Alt 码点按终端当前模式写入会话。
  */
 class KeyInputProcessorTest {
+
+    private class CapturingProcess : ITerminalProcess {
+        val capturedWrites = ByteArrayOutputStream()
+        override val inputStream: InputStream = ByteArrayInputStream(ByteArray(0))
+        override val outputStream: OutputStream = capturedWrites
+        override fun resize(columns: Int, rows: Int, cellWidthPixels: Int, cellHeightPixels: Int) = Unit
+        override fun waitFor(): Int = CountDownLatch(1).await().let { 0 }
+        override fun kill() = Unit
+        override fun close() = Unit
+    }
 
     private val f = EmulatorFixture()
     private val scrolls = mutableListOf<Int>()
@@ -26,6 +44,27 @@ class KeyInputProcessorTest {
         stopTextSelection = {},
         modifierReader = { ExtraKeysModifierSnapshot() }
     )
+
+    private fun awaitBytes(fake: CapturingProcess, expected: ByteArray): ByteArray {
+        val deadline = System.currentTimeMillis() + 5_000
+        while (System.currentTimeMillis() < deadline) {
+            val actual = fake.capturedWrites.toByteArray()
+            if (actual.size >= expected.size) return actual
+            Thread.sleep(10)
+        }
+        return fake.capturedWrites.toByteArray()
+    }
+
+    private fun runningSession(): Pair<TerminalSession, CapturingProcess> {
+        val fake = CapturingProcess()
+        val session = TerminalSession(
+            id = 1,
+            sessionName = MutableStateFlow("test"),
+            processFactory = { _, _, _, _ -> fake }
+        )
+        session.execute()
+        return session to fake
+    }
 
     @Test
     fun shiftPageUp_scrollsViewportBackByPage() {
@@ -46,5 +85,52 @@ class KeyInputProcessorTest {
         assertFalse(processor.handleKeyCode(KeyEvent.KEYCODE_PAGE_UP, 0))
 
         assertEquals(emptyList<Int>(), scrolls)
+    }
+
+    @Test
+    fun handleKeyCode_writesCursorAndKeypadModesToSession() {
+        val (session, fake) = runningSession()
+        val wired = KeyInputProcessor(
+            sessionProvider = { session },
+            emulatorProvider = { session.emulator },
+            pokeCursor = {},
+            scrollRows = {},
+            isSelectingText = { false },
+            stopTextSelection = {},
+            modifierReader = { ExtraKeysModifierSnapshot() }
+        )
+
+        session.emulator.append("\u001b[?1h\u001b=".toByteArray(), 7)
+        assertTrue(wired.handleKeyCode(KeyEvent.KEYCODE_DPAD_UP, 0))
+        assertTrue(wired.handleKeyCode(KeyEvent.KEYCODE_NUMPAD_ENTER, 0))
+
+        val expected = "\u001bOA\u001bOM".toByteArray()
+        assertArrayEquals(expected, awaitBytes(fake, expected))
+        session.finishIfRunning()
+    }
+
+    @Test
+    fun inputCodePoint_appliesSoftImeStickyModifiersAndAltPrefix() {
+        val (session, fake) = runningSession()
+        var snapshot = ExtraKeysModifierSnapshot(ctrl = true, alt = true)
+        val wired = KeyInputProcessor(
+            sessionProvider = { session },
+            emulatorProvider = { session.emulator },
+            pokeCursor = {},
+            scrollRows = {},
+            isSelectingText = { false },
+            stopTextSelection = {},
+            modifierReader = { snapshot }
+        )
+
+        // SOFT_IME 读取 ExtraKeys 粘性 Ctrl+Alt+'c' -> ESC 0x03
+        wired.inputCodePoint(InputSource.SOFT_IME, 'c'.code, controlDownFromEvent = false, leftAltDownFromEvent = false)
+        // VIRTUAL_KEY_BAR 不叠加粘性栏修饰，仅按显式 Alt+'x' -> ESC 'x'
+        snapshot = ExtraKeysModifierSnapshot(ctrl = true, alt = false)
+        wired.inputCodePoint(InputSource.VIRTUAL_KEY_BAR, 'x'.code, controlDownFromEvent = false, leftAltDownFromEvent = true)
+
+        val expected = byteArrayOf(27, 3, 27, 'x'.code.toByte())
+        assertArrayEquals(expected, awaitBytes(fake, expected))
+        session.finishIfRunning()
     }
 }

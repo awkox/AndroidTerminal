@@ -299,4 +299,25 @@ class TerminalEmulatorResponseTest {
 
         assertEquals("\u001bP1+r6B31=1B4F50\u001b\\\u001bP0+r\u001b\\", f.writtenText)
     }
+
+    @Test
+    fun dcs_xtgettcap_reflectsApplicationCursorAndKeypadModes() {
+        f.feed("\u001b[?1h\u001b=\u001bP+q6B75;4038\u001b\\")
+
+        // "ku" (6B75) -> ESC O A (1B4F41); "@8" (4038) -> ESC O M (1B4F4D)
+        assertEquals("\u001bP1+r6B75=1B4F41\u001b\\\u001bP1+r4038=1B4F4D\u001b\\", f.writtenText)
+    }
+
+    @Test
+    fun oscSpecialColorQuery_echoesPreservingTerminator() {
+        f.feed("\u001b]11;#112233\u0007\u001b]12;#445566\u001b\\")
+        f.clearWritten()
+
+        f.feed("\u001b]11;?\u001b\\\u001b]12;?\u0007")
+
+        assertEquals(
+            "\u001b]11;rgb:1111/2222/3333\u001b\\\u001b]12;rgb:4444/5555/6666\u0007",
+            f.writtenText
+        )
+    }
 }

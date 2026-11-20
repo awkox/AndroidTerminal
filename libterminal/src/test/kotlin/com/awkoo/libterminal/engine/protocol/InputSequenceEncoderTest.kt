@@ -163,4 +163,68 @@ class InputSequenceEncoderTest {
 
         assertEquals("\u001b[200~\u001b[201~", written)
     }
+
+    @Test
+    fun x10Protocol_exactLimitAndRowOverflowAndClamp() {
+        encoder.encodeMouseEvent(
+            button = MOUSE_LEFT_BUTTON, column = 222, row = 222, pressed = true,
+            buttonEventTracking = false, anyEventTracking = false, sgrProtocol = false,
+            columns = 300, rows = 300
+        )
+        assertEquals(listOf(27, '['.code, 'M'.code, 32, 255, 255), bytes.single().map { it.toInt() and 0xFF })
+
+        bytes.clear()
+        encoder.encodeMouseEvent(
+            button = MOUSE_LEFT_BUTTON, column = 1, row = 223, pressed = true,
+            buttonEventTracking = false, anyEventTracking = false, sgrProtocol = false,
+            columns = 300, rows = 300
+        )
+        encoder.encodeMouseEvent(
+            button = MOUSE_LEFT_BUTTON, column = 223, row = 1, pressed = true,
+            buttonEventTracking = false, anyEventTracking = false, sgrProtocol = false,
+            columns = 300, rows = 300
+        )
+        assertTrue(bytes.isEmpty())
+
+        encoder.encodeMouseEvent(
+            button = MOUSE_LEFT_BUTTON, column = -10, row = -5, pressed = true,
+            buttonEventTracking = false, anyEventTracking = false, sgrProtocol = false,
+            columns = 10, rows = 10
+        )
+        assertEquals(listOf(27, '['.code, 'M'.code, 32, 33, 33), bytes.single().map { it.toInt() and 0xFF })
+    }
+
+    @Test
+    fun x10Protocol_moveEvent_encodesMoveButtonCode() {
+        encoder.encodeMouseEvent(
+            button = MOUSE_LEFT_BUTTON_MOVED, column = 2, row = 1, pressed = true,
+            buttonEventTracking = true, anyEventTracking = false, sgrProtocol = false,
+            columns = 10, rows = 10
+        )
+
+        assertEquals(listOf(27, '['.code, 'M'.code, 64, 35, 34), bytes.single().map { it.toInt() and 0xFF })
+    }
+
+    @Test
+    fun sgrMouse_middleRightAndModifierMasks() {
+        encoder.encodeMouseEvent(
+            button = 1 or 4, column = 0, row = 0, pressed = true,
+            buttonEventTracking = false, anyEventTracking = false, sgrProtocol = true,
+            columns = 10, rows = 10
+        )
+        encoder.encodeMouseEvent(
+            button = 2 or 16, column = 0, row = 0, pressed = false,
+            buttonEventTracking = false, anyEventTracking = false, sgrProtocol = true,
+            columns = 10, rows = 10
+        )
+
+        assertEquals("\u001b[<5;1;1M\u001b[<18;1;1m", written)
+    }
+
+    @Test
+    fun paste_bracketedNeutralizesFakeEndMarkerAndPreservesTabAndUnicode() {
+        encoder.encodePastedText("a\t中\uD83D\uDE00\u001b[201~rm", bracketedPaste = true)
+
+        assertEquals("\u001b[200~a\t中\uD83D\uDE00[201~rm\u001b[201~", written)
+    }
 }

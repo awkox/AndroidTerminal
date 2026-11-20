@@ -228,4 +228,32 @@ class TerminalEmulatorEraseEditTest {
             f.screenText()
         )
     }
+
+    @Test
+    fun eraseDisplayThree_clearsTranscriptWithoutClearingVisibleScreen() {
+        f.feed("line1\r\nline2\r\nline3\r\nline4\r\nline5\r\nline6\r\nline7")
+        assertEquals(2, emulator.screen.activeTranscriptRows)
+
+        f.feed("\u001b[3J")
+        assertEquals(0, emulator.screen.activeTranscriptRows)
+        assertEquals(listOf("line3", "line4", "line5", "line6", "line7"), f.screenText())
+    }
+
+    @Test
+    fun backgroundColorErase_appliesBackgroundAcrossEraseAndEditCommands() {
+        fillRow(0, "abcdefghij")
+        fillRow(1, "klmnopqrst")
+        f.feed("\u001b[42m")
+
+        f.feed("\u001b[1;3H\u001b[2X")
+        assertEquals(2, emulator.screen.getStyleAt(0, 2).backColor)
+        assertEquals(2, emulator.screen.getStyleAt(0, 3).backColor)
+
+        f.feed("\u001b[1;8H\u001b[K")
+        assertEquals(2, emulator.screen.getStyleAt(0, 8).backColor)
+
+        f.feed("\u001b[2;3H\u001b[2@\u001b[2;8H\u001b[1P")
+        assertEquals(2, emulator.screen.getStyleAt(1, 2).backColor)
+        assertEquals(2, emulator.screen.getStyleAt(1, 9).backColor)
+    }
 }

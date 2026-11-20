@@ -47,9 +47,14 @@ class DecModeRegistryTest {
         assertEquals(DECSET_BIT_REVERSE_VIDEO, registry.mapExternalToInternal(5))
         assertEquals(DECSET_BIT_ORIGIN_MODE, registry.mapExternalToInternal(6))
         assertEquals(DECSET_BIT_AUTOWRAP, registry.mapExternalToInternal(7))
+        assertEquals(DECSET_BIT_REVERSE_WRAPAROUND, registry.mapExternalToInternal(45))
         assertEquals(DECSET_BIT_CURSOR_ENABLED, registry.mapExternalToInternal(25))
         assertEquals(DECSET_BIT_APPLICATION_KEYPAD, registry.mapExternalToInternal(66))
+        assertEquals(DECSET_BIT_LEFTRIGHT_MARGIN_MODE, registry.mapExternalToInternal(69))
         assertEquals(DECSET_BIT_MOUSE_TRACKING_PRESS_RELEASE, registry.mapExternalToInternal(1000))
+        assertEquals(DECSET_BIT_MOUSE_TRACKING_BUTTON_EVENT, registry.mapExternalToInternal(1002))
+        assertEquals(DECSET_BIT_MOUSE_TRACKING_ANY_EVENT, registry.mapExternalToInternal(1003))
+        assertEquals(DECSET_BIT_SEND_FOCUS_EVENTS, registry.mapExternalToInternal(1004))
         assertEquals(DECSET_BIT_MOUSE_PROTOCOL_SGR, registry.mapExternalToInternal(1006))
         assertEquals(DECSET_BIT_BRACKETED_PASTE_MODE, registry.mapExternalToInternal(2004))
     }
@@ -70,6 +75,20 @@ class DecModeRegistryTest {
     }
 
     @Test
+    fun saveModeBit_tracksMultipleBitsIndependently() {
+        registry.set(DECSET_BIT_APPLICATION_CURSOR_KEYS, true)
+        registry.set(DECSET_BIT_BRACKETED_PASTE_MODE, false)
+        registry.saveModeBit(DECSET_BIT_APPLICATION_CURSOR_KEYS)
+        registry.saveModeBit(DECSET_BIT_BRACKETED_PASTE_MODE)
+
+        registry.set(DECSET_BIT_APPLICATION_CURSOR_KEYS, false)
+        registry.set(DECSET_BIT_BRACKETED_PASTE_MODE, true)
+
+        assertTrue(registry.restoreModeBit(DECSET_BIT_APPLICATION_CURSOR_KEYS))
+        assertFalse(registry.restoreModeBit(DECSET_BIT_BRACKETED_PASTE_MODE))
+    }
+
+    @Test
     fun restoreModeBit_neverSaved_readsAsOff() {
         assertFalse(registry.restoreModeBit(DECSET_BIT_AUTOWRAP))
     }
@@ -77,12 +96,18 @@ class DecModeRegistryTest {
     @Test
     fun resetDefault_enablesAutowrapAndCursorOnly() {
         registry.set(DECSET_BIT_ORIGIN_MODE, true)
+        registry.set(DECSET_BIT_REVERSE_WRAPAROUND, true)
+        registry.set(DECSET_BIT_LEFTRIGHT_MARGIN_MODE, true)
+        registry.set(DECSET_BIT_BRACKETED_PASTE_MODE, true)
 
         registry.resetDefault()
 
         assertTrue(registry.isSet(DECSET_BIT_AUTOWRAP))
         assertTrue(registry.isSet(DECSET_BIT_CURSOR_ENABLED))
         assertFalse(registry.isSet(DECSET_BIT_ORIGIN_MODE))
+        assertFalse(registry.isSet(DECSET_BIT_REVERSE_WRAPAROUND))
+        assertFalse(registry.isSet(DECSET_BIT_LEFTRIGHT_MARGIN_MODE))
+        assertFalse(registry.isSet(DECSET_BIT_BRACKETED_PASTE_MODE))
     }
 
     @Test
