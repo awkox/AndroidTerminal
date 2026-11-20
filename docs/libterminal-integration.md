@@ -6,7 +6,7 @@
 
 ```kotlin
 dependencies {
-    implementation("io.github.awkox:libterminal:4.1.3")
+    implementation("io.github.awkox:libterminal:4.1.4")
 }
 ```
 
