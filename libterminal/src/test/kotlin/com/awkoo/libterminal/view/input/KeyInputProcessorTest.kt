@@ -6,11 +6,17 @@ import com.awkoo.libterminal.engine.TerminalSession
 import com.awkoo.libterminal.engine.protocol.KeySequenceEncoder
 import com.awkoo.libterminal.process.ITerminalProcess
 import com.awkoo.libterminal.view.ExtraKeysModifierSnapshot
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.setMain
+import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -21,20 +27,38 @@ import java.util.concurrent.CountDownLatch
 /**
  * 键盘处理链路：本地翻页（Shift+PageUp/Down）与功能键/Ctrl/Alt 码点按终端当前模式写入会话。
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 class KeyInputProcessorTest {
 
     private class CapturingProcess : ITerminalProcess {
         val capturedWrites = ByteArrayOutputStream()
+        private val exitLatch = CountDownLatch(1)
+
+        @Volatile
+        var killed = false
+            private set
+
         override val inputStream: InputStream = ByteArrayInputStream(ByteArray(0))
         override val outputStream: OutputStream = capturedWrites
         override fun resize(columns: Int, rows: Int, cellWidthPixels: Int, cellHeightPixels: Int) = Unit
-        override fun waitFor(): Int = CountDownLatch(1).await().let { 0 }
-        override fun kill() = Unit
-        override fun close() = Unit
+        override fun waitFor(): Int {
+            exitLatch.await()
+            return if (killed) -9 else 0
+        }
+
+        override fun kill() {
+            killed = true
+            exitLatch.countDown()
+        }
+
+        override fun close() {
+            exitLatch.countDown()
+        }
     }
 
     private val f = EmulatorFixture()
     private val scrolls = mutableListOf<Int>()
+    private val startedSessions = mutableListOf<TerminalSession>()
     private val processor = KeyInputProcessor(
         sessionProvider = { null },
         emulatorProvider = { f.emulator },
@@ -44,6 +68,20 @@ class KeyInputProcessorTest {
         stopTextSelection = {},
         modifierReader = { ExtraKeysModifierSnapshot() }
     )
+
+    @Before
+    fun setUp() {
+        Dispatchers.setMain(Dispatchers.Unconfined)
+    }
+
+    @After
+    fun tearDown() {
+        for (session in startedSessions) {
+            session.finishIfRunning()
+            awaitSessionStopped(session)
+        }
+        Dispatchers.resetMain()
+    }
 
     private fun awaitBytes(fake: CapturingProcess, expected: ByteArray): ByteArray {
         val deadline = System.currentTimeMillis() + 5_000
@@ -55,6 +93,15 @@ class KeyInputProcessorTest {
         return fake.capturedWrites.toByteArray()
     }
 
+    private fun awaitSessionStopped(session: TerminalSession, timeoutMs: Long = 5_000): Boolean {
+        val deadline = System.currentTimeMillis() + timeoutMs
+        while (System.currentTimeMillis() < deadline) {
+            if (!session.isRunning.value) return true
+            Thread.sleep(10)
+        }
+        return !session.isRunning.value
+    }
+
     private fun runningSession(): Pair<TerminalSession, CapturingProcess> {
         val fake = CapturingProcess()
         val session = TerminalSession(
@@ -62,6 +109,7 @@ class KeyInputProcessorTest {
             sessionName = MutableStateFlow("test"),
             processFactory = { _, _, _, _ -> fake }
         )
+        startedSessions += session
         session.execute()
         return session to fake
     }
@@ -107,6 +155,8 @@ class KeyInputProcessorTest {
         val expected = "\u001bOA\u001bOM".toByteArray()
         assertArrayEquals(expected, awaitBytes(fake, expected))
         session.finishIfRunning()
+        assertTrue(fake.killed)
+        assertTrue(awaitSessionStopped(session))
     }
 
     @Test
@@ -132,5 +182,7 @@ class KeyInputProcessorTest {
         val expected = byteArrayOf(27, 3, 27, 'x'.code.toByte())
         assertArrayEquals(expected, awaitBytes(fake, expected))
         session.finishIfRunning()
+        assertTrue(fake.killed)
+        assertTrue(awaitSessionStopped(session))
     }
 }
