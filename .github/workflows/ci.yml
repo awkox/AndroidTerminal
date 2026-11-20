@@ -2,6 +2,9 @@ name: 编译
 
 on:
   push:
+    # tag 推送由发布 workflow 负责（构建 + Maven Central + GitHub Release），此处只管分支
+    branches:
+      - '**'
     paths-ignore:
       - 'README.md'
       - 'docs/**'
@@ -13,7 +16,7 @@ on:
 
 concurrency:
   # 同类事件同 ref 的最新 run 优先，取消旧 run；push 与 PR 分属不同组，
-  # 避免 PR 事件后来居上把正在上传 release 的 push 构建取消掉
+  # 避免 PR 事件后来居上取消进行中的 push 构建
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 

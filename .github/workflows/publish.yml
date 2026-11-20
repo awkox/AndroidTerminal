@@ -1,4 +1,4 @@
-name: 发布 Maven Central
+name: 发布
 
 on:
   push:
@@ -11,11 +11,15 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  # 创建 GitHub Release
+  contents: write
 
 jobs:
   publish:
     runs-on: ubuntu-26.04
+    env:
+      # secrets 不能出现在 if 条件中，先解析为 job 级环境变量布尔值
+      HAS_KEYSTORE: ${{ secrets.KEYSTORE_GZ_B64 != '' }}
     steps:
       - name: 检出代码
         uses: actions/checkout@v7
@@ -39,6 +43,31 @@ jobs:
         # 不发布带回归的版本
         run: ./gradlew --build-cache :libterminal:testDebugUnitTest
 
+      - name: 解密KeyStore
+        # 无 secrets 时跳过 release 包，Release 只附 debug
+        if: env.HAS_KEYSTORE == 'true'
+        run: |
+          echo "${{ secrets.KEYSTORE_GZ_B64 }}" \
+            | base64 --decode \
+            | gunzip > app/release.keystore
+          ACTUAL_SHA=$(sha256sum app/release.keystore | awk '{print $1}')
+          EXPECTED_SHA=${{ secrets.KEYSTORE_EXPECTED_SHA256 }}
+          if [ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]; then
+              exit 1
+          fi
+
+      - name: 构建 APK
+        # 放在 Maven Central 之前：本地可验证动作全绿才占用不可逆的中央仓库版本号
+        env:
+          KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.KEY_PASS }}
+        run: |
+          ./gradlew --build-cache :app:assembleDebug
+          if [ "$HAS_KEYSTORE" = "true" ]; then
+            ./gradlew --build-cache :app:assembleRelease
+          fi
+
       - name: 发布并 release 到 Maven Central
         # publishAndReleaseToMavenCentral：上传 deployment + 自动 release + 轮询校验终态（失败即中止）
         run: ./gradlew --build-cache :libterminal:publishAndReleaseToMavenCentral
@@ -47,3 +76,20 @@ jobs:
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.MAVEN_SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.MAVEN_SIGNING_PASSWORD }}
+
+      - name: 创建 GitHub Release
+        # notes 自动生成；Maven Central 失败则本步骤不执行（串行 gate）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ASSETS=(app/build/outputs/apk/debug/app-debug.apk)
+          if [ "$HAS_KEYSTORE" = "true" ]; then
+            ASSETS+=(app/build/outputs/apk/release/app-release.apk)
+          fi
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${ASSETS[@]}" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${ASSETS[@]}" \
+              --title "AndroidTerminal $GITHUB_REF_NAME" \
+              --generate-notes
+          fi
