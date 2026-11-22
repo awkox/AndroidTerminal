@@ -19,7 +19,7 @@ class TerminalEmulatorLockAndSnapshotTest {
         f.feed("row0\r\nrow1")
 
         val snapshot = TerminalRenderSnapshot()
-        f.emulator.captureRenderSnapshot(snapshot) { 0 }
+        snapshot.captureFrom(f.emulator) { 0 }
 
         assertEquals(4, snapshot.rows)
         assertEquals(10, snapshot.columns)
@@ -30,7 +30,7 @@ class TerminalEmulatorLockAndSnapshotTest {
         val cachedRow0Version = cachedRow0.version
 
         f.feed("!")
-        f.emulator.captureRenderSnapshot(snapshot) { 0 }
+        snapshot.captureFrom(f.emulator) { 0 }
 
         assertSame(cachedRow0, snapshot.rowAt(0))
         assertEquals(cachedRow0Version, snapshot.rowAt(0).version)
@@ -48,11 +48,11 @@ class TerminalEmulatorLockAndSnapshotTest {
         f2.feed("\u001b]4;1;rgb:00/ff/00\u0007")
 
         val snapshot = TerminalRenderSnapshot()
-        f1.emulator.captureRenderSnapshot(snapshot) { 0 }
+        snapshot.captureFrom(f1.emulator) { 0 }
         assertTrue(snapshot.paletteOverrides.isOverridden(1))
         assertEquals(0xFFFF0000.toInt(), snapshot.paletteOverrides.value(1))
 
-        f2.emulator.captureRenderSnapshot(snapshot) { 0 }
+        snapshot.captureFrom(f2.emulator) { 0 }
         assertTrue(snapshot.paletteOverrides.isOverridden(1))
         assertEquals(0xFF00FF00.toInt(), snapshot.paletteOverrides.value(1))
     }
@@ -147,7 +147,7 @@ class TerminalEmulatorLockAndSnapshotTest {
         val snapshot = TerminalRenderSnapshot()
         var snapshotsCaptured = 0
         while (writer.isAlive && snapshotsCaptured < 200) {
-            emulator.captureRenderSnapshot(snapshot) { 0 }
+            snapshot.captureFrom(emulator) { 0 }
             for (r in 0 until snapshot.rows) {
                 val chars = snapshot.rowAt(r).textChars()
                 assertTrue(chars.size >= snapshot.columns)

@@ -13,7 +13,6 @@ import com.awkoo.libterminal.color.TerminalColorScheme
 import com.awkoo.libterminal.text.TextStyle
 import com.awkoo.libterminal.text.Utf8Decoder
 import com.awkoo.libterminal.text.WcWidth
-import com.awkoo.libterminal.view.render.TerminalRenderSnapshot
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.Volatile
@@ -450,32 +449,6 @@ internal class TerminalEmulator(
         }
         pausedQueueBytes = 0
         readyPausedBacklog = false
-    }
-
-    internal fun captureRenderSnapshot(
-        snapshot: TerminalRenderSnapshot,
-        topRowProvider: () -> Int
-    ) {
-        withReadLock {
-            val rowCount = rows
-            val colCount = columns
-            val top = topRowProvider()
-            val activeScreen = screen
-            snapshot.rows = rowCount
-            snapshot.columns = colCount
-            snapshot.topRow = top
-            snapshot.cursorRow = _cursorRow
-            snapshot.cursorCol = _cursorCol
-            snapshot.cursorVisible = isCursorVisible
-            snapshot.cursorStyle = cursorStyle
-            snapshot.reverseVideo = isReverseVideo
-            snapshot.textVisible = isTextVisible
-            snapshot.syncPalette(oscColorOverrides)
-            snapshot.ensureRows(rowCount)
-            for (i in 0 until rowCount) {
-                snapshot.updateRow(i, activeScreen.getRowForRead(top + i), colCount)
-            }
-        }
     }
 
     /**

@@ -2,6 +2,7 @@ package com.awkoo.libterminal.view.render
 
 import com.awkoo.libterminal.color.SparsePalette
 import com.awkoo.libterminal.engine.TerminalCursorStyle
+import com.awkoo.libterminal.engine.TerminalEmulator
 import com.awkoo.libterminal.engine.buffer.TerminalRow
 import com.awkoo.libterminal.text.TextStyle
 
@@ -34,13 +35,39 @@ internal class TerminalRenderSnapshot {
 
     private var rowSlots: Array<RowSlot?> = emptyArray()
 
-    fun ensureRows(rowCount: Int) {
+    fun captureFrom(
+        emulator: TerminalEmulator,
+        topRowProvider: () -> Int
+    ) {
+        emulator.withReadLock {
+            val rowCount = emulator.rows
+            val colCount = emulator.columns
+            val top = topRowProvider()
+            val activeScreen = emulator.screen
+            rows = rowCount
+            columns = colCount
+            topRow = top
+            cursorRow = emulator.cursorRow
+            cursorCol = emulator.cursorCol
+            cursorVisible = emulator.isCursorVisible
+            cursorStyle = emulator.cursorStyle
+            reverseVideo = emulator.isReverseVideo
+            textVisible = emulator.isTextVisible
+            syncPalette(emulator.oscColorOverrides)
+            ensureRows(rowCount)
+            for (i in 0 until rowCount) {
+                updateRow(i, activeScreen.getRowForRead(top + i), colCount)
+            }
+        }
+    }
+
+    private fun ensureRows(rowCount: Int) {
         if (rowSlots.size < rowCount) {
             rowSlots = rowSlots.copyOf(rowCount)
         }
     }
 
-    fun updateRow(viewportIndex: Int, source: TerminalRow, expectedColumns: Int) {
+    private fun updateRow(viewportIndex: Int, source: TerminalRow, expectedColumns: Int) {
         val existing = rowSlots[viewportIndex]
         if (existing == null) {
             val copy = TerminalRow(expectedColumns, TextStyle.NORMAL)
@@ -65,7 +92,7 @@ internal class TerminalRenderSnapshot {
 
     fun rowAt(viewportIndex: Int): TerminalRow = rowSlots[viewportIndex]!!.row
 
-    fun syncPalette(source: SparsePalette) {
+    private fun syncPalette(source: SparsePalette) {
         if (paletteSource !== source || paletteVersion != source.version) {
             paletteOverrides.copyFrom(source)
             paletteSource = source

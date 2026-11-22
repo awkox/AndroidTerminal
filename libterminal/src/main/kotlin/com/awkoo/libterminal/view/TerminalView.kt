@@ -508,7 +508,7 @@ class TerminalView(
         val resolver = currentPalette ?: return
         val sel = selectionBoundsScratch
         textSelectionCursorController.getSelectors(sel)
-        emulator.captureRenderSnapshot(renderSnapshot) { this.topRow }
+        renderSnapshot.captureFrom(emulator) { this.topRow }
         canvas.drawColor(resolver.background)
         renderer.render(renderSnapshot, resolver, canvas, sel[0], sel[1], sel[2], sel[3])
         textSelectionCursorController.render()
