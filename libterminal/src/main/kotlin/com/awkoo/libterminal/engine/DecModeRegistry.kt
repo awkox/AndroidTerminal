@@ -33,6 +33,7 @@ private val MOUSE_TRACKING_MASK =
  */
 internal class DecModeRegistry {
 
+    @Volatile
     private var currentFlags = 0
     private var savedFlags = 0
 
@@ -45,10 +46,11 @@ internal class DecModeRegistry {
      * 鼠标追踪模式（1000/1002/1003）互斥：开启任一模式时清除其余两个。
      */
     fun set(bit: Int, value: Boolean) {
+        var next = currentFlags
         if (value && (bit and MOUSE_TRACKING_MASK) != 0) {
-            currentFlags = currentFlags and MOUSE_TRACKING_MASK.inv()
+            next = next and MOUSE_TRACKING_MASK.inv()
         }
-        currentFlags = if (value) currentFlags or bit else currentFlags and bit.inv()
+        currentFlags = if (value) next or bit else next and bit.inv()
     }
 
     /** 当前全部模式位快照。 */
@@ -56,10 +58,8 @@ internal class DecModeRegistry {
 
     /** 清除并复位为默认状态：仅保留自动换行与光标可见。 */
     fun resetDefault() {
-        currentFlags = 0
         savedFlags = 0
-        set(DECSET_BIT_AUTOWRAP, true)
-        set(DECSET_BIT_CURSOR_ENABLED, true)
+        currentFlags = DECSET_BIT_AUTOWRAP or DECSET_BIT_CURSOR_ENABLED
     }
 
     /** 仅恢复自动换行与原点模式两个位（光标恢复专用）。 */

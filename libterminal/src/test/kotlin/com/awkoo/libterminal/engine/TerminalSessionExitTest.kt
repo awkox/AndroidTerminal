@@ -77,7 +77,7 @@ class TerminalSessionExitTest {
         return condition()
     }
 
-    private fun screenText(session: TerminalSession): String = synchronized(session.emulator) {
+    private fun screenText(session: TerminalSession): String = session.emulator.withReadLock {
         (0 until session.emulator.rows).joinToString("\n") { row ->
             String(session.emulator.screen.getRowForRead(row).textChars())
         }

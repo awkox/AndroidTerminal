@@ -17,7 +17,12 @@ internal class Utf8Decoder(private val onCodePoint: (Int) -> Unit) {
     private val sequenceBuffer = ByteArray(4)
 
     fun decode(buffer: ByteArray, length: Int) {
-        for (i in 0 until length) {
+        decode(buffer, 0, length)
+    }
+
+    fun decode(buffer: ByteArray, offset: Int, length: Int) {
+        val end = offset + length
+        for (i in offset until end) {
             val b = buffer[i]
             if (utf8ToFollow == 0 && b >= 0) {
                 onCodePoint(b.toInt())

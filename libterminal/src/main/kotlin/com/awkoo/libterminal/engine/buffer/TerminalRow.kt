@@ -4,6 +4,8 @@ import com.awkoo.libterminal.text.TextStyle
 import com.awkoo.libterminal.text.WcWidth
 import com.awkoo.libterminal.text.charCountAtSafe
 import com.awkoo.libterminal.text.forEachColumn
+import java.util.concurrent.atomic.AtomicLong
+import kotlin.math.max
 
 /**
  * 列吸附方向（闭区间语义）。
@@ -30,7 +32,7 @@ internal enum class SnapAlign {
  */
 internal class TerminalRow(
     /** 本行列数。 */
-    private val columns: Int,
+    val columns: Int,
     style: TextStyle
 ) {
     /** 存储行内文本的字符数组，可能包含用于填充的尾部空格。 */
@@ -45,6 +47,11 @@ internal class TerminalRow(
      * 行级元数据，只在行生命周期事件上变更，写入收口在 [clear]/[markLineWrap]/[copyLineWrapFrom]：
      * 行内的字符写入与横向搬移（[setChar]/[copyInterval]）不持有该状态，因此也不得触碰它。
      */
+    val id: Long = nextRowId.incrementAndGet()
+
+    var version: Long = 0L
+        private set
+
     private var lineWrap = false
 
     /** [lineWrap] 的唯一读口。 */
@@ -54,11 +61,13 @@ internal class TerminalRow(
     /** 标记本行行末自动换行，本行成为下一行的续行起点。 */
     fun markLineWrap() {
         lineWrap = true
+        version++
     }
 
     /** 行对象整体复制时同步续行标记，使标记与内容同生共死。 */
     fun copyLineWrapFrom(source: TerminalRow) {
         lineWrap = source.lineWrap
+        version++
     }
 
     /** 各列的样式位，交错存储：偶数索引=主样式，奇数索引=扩展特效。以原始 Long 存储以避免装箱。 */
@@ -94,6 +103,23 @@ internal class TerminalRow(
      * 处理宽字符后半部分的空白填充、组合字符的偏移覆盖，以及行内样式合并。
      * 注意：[sourceX2] 为排他端点。
      */
+    fun copySnapshotFrom(source: TerminalRow) {
+        require(columns == source.columns) {
+            "TerminalRow.copySnapshotFrom(): column mismatch $columns != ${source.columns}"
+        }
+        val sourceLen = source.usedCharCount
+        if (text.size < sourceLen) {
+            text = CharArray(max(source.text.size, sourceLen))
+        }
+        System.arraycopy(source.text, 0, text, 0, sourceLen)
+        System.arraycopy(source.styleAndEffectBits, 0, styleAndEffectBits, 0, columns * 2)
+        usedCharCount = sourceLen
+        lineWrap = source.lineWrap
+        hasNonOneWidthOrSurrogateChars = source.hasNonOneWidthOrSurrogateChars
+        isBlank = source.isBlank
+        version++
+    }
+
     fun copyInterval(line: TerminalRow, sourceX1: Int, sourceX2: Int, destinationX: Int) {
         if (sourceX1 >= sourceX2) return
         var srcCol = sourceX1
@@ -151,6 +177,7 @@ internal class TerminalRow(
                 sourceStyle[truncSrcCol * 2 + 1]
             )
         }
+        version++
     }
 
     /**
@@ -318,6 +345,7 @@ internal class TerminalRow(
         isBlank = (style.foreColor == TextStyle.COLOR_INDEX_FOREGROUND) &&
                   (style.backColor == TextStyle.COLOR_INDEX_BACKGROUND) &&
                   (style.effect == 0)
+        version++
     }
 
     /**
@@ -354,6 +382,7 @@ internal class TerminalRow(
                 styleAndEffectBits[columnToSet * 2 + 1] = ext
                 text[columnToSet] = codePoint.toChar()
                 if (codePoint != 0x20) isBlank = false
+                version++
                 return
             }
             if (codePoint >= Character.MIN_SUPPLEMENTARY_CODE_POINT || newCodePointDisplayWidth != 1) {
@@ -362,6 +391,7 @@ internal class TerminalRow(
                 styleAndEffectBits[columnToSet * 2] = style.value
                 styleAndEffectBits[columnToSet * 2 + 1] = ext
                 text[columnToSet] = codePoint.toChar()
+                version++
                 return
             }
         }
@@ -418,6 +448,7 @@ internal class TerminalRow(
         )
 
         handleWidthChange(columnToSet, oldCodePointDisplayWidth, newCodePointDisplayWidth, newNextColumnIndex, text, style, ext)
+        version++
     }
 
     /**
@@ -589,6 +620,7 @@ internal class TerminalRow(
         // 特效位非零即非默认样式，与 setChar 的空白判定口径一致；
         // 清位后无法在不扫描整行的前提下判定能否恢复空白，保守保持非空白
         if (newEffect != 0) isBlank = false
+        version++
     }
 
     /**
@@ -605,6 +637,7 @@ internal class TerminalRow(
     }
 
     companion object {
+        private val nextRowId = AtomicLong(0L)
         private const val SPARE_CAPACITY_FACTOR = 1.5f
         private const val MAX_COMBINING_CHARACTERS_PER_COLUMN = 15
     }

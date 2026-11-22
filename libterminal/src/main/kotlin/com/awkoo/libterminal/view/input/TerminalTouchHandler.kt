@@ -103,7 +103,7 @@ internal class TerminalTouchHandler(
         var scrollX = coord.col
         var scrollY = coord.row
 
-        synchronized(emulator) {
+        emulator.withReadLock {
             repeat(amount) {
                 if (emulator.isMouseTrackingActive) {
                     val button = if (up) TerminalEmulator.MOUSE_WHEELUP_BUTTON else TerminalEmulator.MOUSE_WHEELDOWN_BUTTON
@@ -128,7 +128,7 @@ internal class TerminalTouchHandler(
         var x = coord.col
         var y = coord.row
 
-        synchronized(emulator) {
+        emulator.withReadLock {
             if (pressed && (button == TerminalEmulator.MOUSE_WHEELDOWN_BUTTON || button == TerminalEmulator.MOUSE_WHEELUP_BUTTON)) {
                 val anchor = anchorScroll(e.downTime, x, y)
                 x = anchor.col

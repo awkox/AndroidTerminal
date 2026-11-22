@@ -111,7 +111,7 @@ internal class TextSelectionCursorController internal constructor(
         // 触发选择的瞬间最先冻结屏幕，并记住实际冻结的模拟器实例，确保退出时 1:1 精准解冻
         val emulator = host.emulator
         emulator?.let {
-            synchronized(it) { it.setInputPaused(true) }
+            it.withWriteLock { it.setInputPaused(true) }
             pausedEmulator = it
         }
 
@@ -142,7 +142,7 @@ internal class TextSelectionCursorController internal constructor(
 
         pausedEmulator?.let { emulator ->
             pausedEmulator = null
-            synchronized(emulator) { emulator.setInputPaused(false) }
+            emulator.withWriteLock { emulator.setInputPaused(false) }
         }
 
         return true
@@ -188,7 +188,7 @@ internal class TextSelectionCursorController internal constructor(
     private fun setInitialTextSelectionPosition(x: Float, y: Float) {
         val emulator = host.emulator ?: return
 
-        synchronized(emulator) {
+        emulator.withReadLock {
             val screen = emulator.screen
 
             val coord = host.bufferCellAt(x, y)
@@ -308,7 +308,7 @@ internal class TextSelectionCursorController internal constructor(
     override fun updatePosition(handle: SelectionHandle, x: Int, y: Int) {
         val emulator = host.emulator ?: return
 
-        synchronized(emulator) {
+        emulator.withReadLock {
             val screen = emulator.screen
             val isStart = handle === startHandle
 
@@ -375,7 +375,7 @@ internal class TextSelectionCursorController internal constructor(
     val selectedText: String
         get() {
             val emulator = host.emulator ?: return ""
-            synchronized(emulator) {
+            emulator.withReadLock {
                 return emulator.getSelectedText(selectionStartCol, selectionStartRow, selectionEndCol, selectionEndRow)
             }
         }

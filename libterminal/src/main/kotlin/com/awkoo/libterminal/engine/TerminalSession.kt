@@ -12,8 +12,8 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.yield
@@ -53,6 +53,10 @@ class TerminalSession(
     private val terminalReadChannel: Channel<DataChunk> = Channel(Channel.UNLIMITED)
     private val terminalReadBufferPoolChannel = Channel<DataChunk>(POOL_SIZE)
     private val terminalWriteChannel: Channel<ByteArray> = Channel(Channel.BUFFERED)
+    private val resumeChannel: Channel<Unit> = Channel(Channel.CONFLATED)
+
+    @Volatile
+    private var processorRunning: Boolean = false
 
     init {
         repeat(POOL_SIZE) {
@@ -69,7 +73,12 @@ class TerminalSession(
     var exitStatus: Int = 0
         private set
 
-    internal val emulator = TerminalEmulator(::write, ::write, maxTranscriptRows)
+    internal val emulator = TerminalEmulator(
+        writeString = ::write,
+        writeByteArray = ::write,
+        maxTranscriptRows = maxTranscriptRows,
+        onDeferredResumeRequested = ::onEmulatorResumeRequested
+    )
 
     private var process: ITerminalProcess? = null
 
@@ -79,12 +88,21 @@ class TerminalSession(
     /** OSC 52 剪贴板写入事件流，仅供模块内 view 层消费。 */
     internal val copiedText = emulator.copiedText
 
+    private fun onEmulatorResumeRequested() {
+        if (processorRunning) {
+            resumeChannel.trySend(Unit)
+        } else {
+            emulator.drainPausedAll()
+            notifyScreenUpdate()
+        }
+    }
+
     /** 通知伪终端新尺寸，并执行文本重排或重新初始化模拟器。 */
     internal fun updateSize(columns: Int, rows: Int, cellWidthPixels: Int, cellHeightPixels: Int) {
         if (isRunning.value) {
             process?.resize(columns, rows, cellWidthPixels, cellHeightPixels)
         }
-        synchronized(emulator) {
+        emulator.withWriteLock {
             emulator.resize(columns, rows, cellWidthPixels, cellHeightPixels)
         }
     }
@@ -173,47 +191,143 @@ class TerminalSession(
 
     private fun launchEmulatorProcessor(): Job {
         return scope.launch(Dispatchers.Default) {
+            processorRunning = true
+            var pendingChunk: DataChunk? = null
+            var pendingOffset = 0
             try {
-                for (chunk in terminalReadChannel) {
-                    try {
-                        var bytesProcessed = chunk.length
+                var channelClosed = false
+                while (true) {
+                    var yieldToWaiters = false
+                    var processedAny = false
 
-                        synchronized(emulator) {
-                            emulator.append(chunk.buffer, chunk.length)
+                    if (emulator.hasReadyPausedBacklog()) {
+                        var bytesProcessed = 0
+                        val startNs = System.nanoTime()
+                        emulator.withWriteLock {
+                            while (bytesProcessed < MAX_BATCH_BYTES) {
+                                val hasMore = emulator.drainPausedSlice(PROCESS_SLICE_BYTES)
+                                bytesProcessed += PROCESS_SLICE_BYTES
+                                processedAny = true
+                                if (!hasMore) break
+                                if (emulator.hasPendingLockWaiter() ||
+                                    System.nanoTime() - startNs >= MAX_BATCH_HOLD_NS
+                                ) {
+                                    yieldToWaiters = true
+                                    break
+                                }
+                            }
+                        }
+                    } else {
+                        if (pendingChunk == null && !channelClosed) {
+                            val immediate = terminalReadChannel.tryReceive()
+                            if (immediate.isSuccess) {
+                                pendingChunk = immediate.getOrThrow()
+                                pendingOffset = 0
+                            } else if (immediate.isClosed) {
+                                channelClosed = true
+                            }
+                        }
 
-                            // 批量处理，减少 UI 通知次数。
-                            while (bytesProcessed < 32 * 1024) {
-                                val moreChunk =
-                                    terminalReadChannel.tryReceive().getOrNull()
-                                        ?: break
-
-                                try {
-                                    emulator.append(
-                                        moreChunk.buffer,
-                                        moreChunk.length
-                                    )
-
-                                    bytesProcessed += moreChunk.length
-                                } finally {
-                                    // 当前 chunk 已经消费，归还缓冲区。
-                                    terminalReadBufferPoolChannel.trySend(
-                                        moreChunk
-                                    )
+                        if (pendingChunk == null && !channelClosed && !emulator.hasReadyPausedBacklog()) {
+                            select<Unit> {
+                                terminalReadChannel.onReceiveCatching { result ->
+                                    val chunk = result.getOrNull()
+                                    if (chunk != null) {
+                                        pendingChunk = chunk
+                                        pendingOffset = 0
+                                    } else {
+                                        channelClosed = true
+                                    }
+                                }
+                                resumeChannel.onReceive {
                                 }
                             }
                         }
 
-                        notifyScreenUpdate()
-                    } finally {
-                        // 当前 chunk 已经处理，归还缓冲区。
-                        terminalReadBufferPoolChannel.trySend(chunk)
+                        if (pendingChunk != null && !emulator.hasReadyPausedBacklog()) {
+                            var bytesProcessed = 0
+                            val startNs = System.nanoTime()
+                            emulator.withWriteLock {
+                                while (bytesProcessed < MAX_BATCH_BYTES) {
+                                    val chunk = pendingChunk ?: break
+                                    while (pendingOffset < chunk.length) {
+                                        val step = minOf(PROCESS_SLICE_BYTES, chunk.length - pendingOffset)
+                                        emulator.append(chunk.buffer, pendingOffset, step)
+                                        pendingOffset += step
+                                        bytesProcessed += step
+                                        processedAny = true
+
+                                        if (bytesProcessed >= MAX_BATCH_BYTES ||
+                                            emulator.hasPendingLockWaiter() ||
+                                            System.nanoTime() - startNs >= MAX_BATCH_HOLD_NS
+                                        ) {
+                                            if (pendingOffset < chunk.length) {
+                                                yieldToWaiters = true
+                                                break
+                                            }
+                                        }
+                                    }
+
+                                    if (pendingOffset >= chunk.length) {
+                                        terminalReadBufferPoolChannel.trySend(chunk)
+                                        pendingChunk = null
+                                        pendingOffset = 0
+                                    }
+
+                                    if (yieldToWaiters ||
+                                        bytesProcessed >= MAX_BATCH_BYTES ||
+                                        emulator.hasPendingLockWaiter() ||
+                                        System.nanoTime() - startNs >= MAX_BATCH_HOLD_NS
+                                    ) {
+                                        if (pendingChunk == null && !channelClosed) {
+                                            val nextResult = terminalReadChannel.tryReceive()
+                                            val nextChunk = nextResult.getOrNull()
+                                            if (nextChunk != null) {
+                                                pendingChunk = nextChunk
+                                                pendingOffset = 0
+                                            } else if (nextResult.isClosed) {
+                                                channelClosed = true
+                                            }
+                                        }
+                                        if (pendingChunk != null) {
+                                            yieldToWaiters = true
+                                        }
+                                        break
+                                    }
+
+                                    val nextResult = terminalReadChannel.tryReceive()
+                                    val nextChunk = nextResult.getOrNull()
+                                    if (nextChunk != null) {
+                                        pendingChunk = nextChunk
+                                        pendingOffset = 0
+                                    } else {
+                                        if (nextResult.isClosed) channelClosed = true
+                                        break
+                                    }
+                                }
+                            }
+                        }
                     }
 
-                    yield()
+                    if (processedAny) {
+                        notifyScreenUpdate()
+                    }
+                    if (channelClosed && pendingChunk == null && !emulator.hasReadyPausedBacklog()) {
+                        break
+                    }
+                    if (yieldToWaiters) {
+                        yield()
+                    }
                 }
             } finally {
-                // 这里不追加退出提示。
-                // 退出提示由 ExitHandler 在 Processor 完成之后追加。
+                processorRunning = false
+                pendingChunk?.let { terminalReadBufferPoolChannel.trySend(it) }
+                if (emulator.hasReadyPausedBacklog()) {
+                    emulator.withWriteLock {
+                        emulator.drainPausedAll()
+                    }
+                    notifyScreenUpdate()
+                }
             }
         }
     }
@@ -281,7 +395,7 @@ class TerminalSession(
     ) {
         exitStatus = exitCode
 
-        synchronized(emulator) {
+        emulator.withWriteLock {
             // SSH 等进程的非正常退出原因。
             if (!exitReason.isNullOrEmpty()) {
                 val reasonBytes = ("\r\n$exitReason\r\n").toByteArray()
@@ -386,7 +500,7 @@ class TerminalSession(
 
     /** 重置终端模拟器状态。 */
     fun reset() {
-        synchronized(emulator) {
+        emulator.withWriteLock {
             emulator.reset()
         }
         notifyScreenUpdate()
@@ -398,8 +512,11 @@ class TerminalSession(
     }
 
     companion object {
-        private const val POOL_SIZE = 64
-        private const val CHUNK_SIZE = 4096
+        private const val POOL_SIZE = 32
+        private const val CHUNK_SIZE = 16384
+        private const val PROCESS_SLICE_BYTES = 4096
+        private const val MAX_BATCH_BYTES = 64 * 1024
+        private const val MAX_BATCH_HOLD_NS = 4_000_000L
 
         /** 退出汇合各 join 的排空期限：正常 EOF 毫秒级，超时视为流已不可结束。 */
         private const val DRAIN_TIMEOUT_MS = 3_000L

@@ -13,6 +13,9 @@ import com.awkoo.libterminal.color.TerminalColorScheme
 import com.awkoo.libterminal.text.TextStyle
 import com.awkoo.libterminal.text.Utf8Decoder
 import com.awkoo.libterminal.text.WcWidth
+import com.awkoo.libterminal.view.render.TerminalRenderSnapshot
+import java.util.concurrent.atomic.AtomicInteger
+import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.Volatile
 import kotlin.math.max
 import kotlin.math.min
@@ -20,14 +23,54 @@ import kotlin.math.min
 internal class TerminalEmulator(
     private val writeString: (data: String) -> Unit,
     private val writeByteArray: (data: ByteArray) -> Unit,
-    maxTranscriptRows: Int = 5000
+    maxTranscriptRows: Int = 5000,
+    private val onDeferredResumeRequested: (() -> Unit)? = null
 ) : TerminalActionHandler {
+
+    @PublishedApi
+    internal val stateLock = ReentrantReadWriteLock(true)
+
+    @PublishedApi
+    internal val pendingWaiters = AtomicInteger(0)
+
+    internal inline fun <T> withReadLock(block: () -> T): T {
+        val lock = stateLock.readLock()
+        pendingWaiters.incrementAndGet()
+        try {
+            lock.lock()
+        } finally {
+            pendingWaiters.decrementAndGet()
+        }
+        try {
+            return block()
+        } finally {
+            lock.unlock()
+        }
+    }
+
+    internal inline fun <T> withWriteLock(block: () -> T): T {
+        val lock = stateLock.writeLock()
+        pendingWaiters.incrementAndGet()
+        try {
+            lock.lock()
+        } finally {
+            pendingWaiters.decrementAndGet()
+        }
+        try {
+            return block()
+        } finally {
+            lock.unlock()
+        }
+    }
+
+    internal fun hasPendingLockWaiter(): Boolean =
+        pendingWaiters.get() > 0 || stateLock.hasQueuedThreads()
 
     private var _cursorRow = 0
     private var _cursorCol = 0
-    @JvmField
+    @Volatile @JvmField
     var rows = DEFAULT_ROWS
-    @JvmField
+    @Volatile @JvmField
     var columns = DEFAULT_COLUMNS
     @JvmField
     var cellWidthPixels = DEFAULT_CELL_WIDTH_PIXELS
@@ -87,6 +130,7 @@ internal class TerminalEmulator(
     private val mainBuffer = TerminalBuffer(columns, maxTranscriptRows, rows)
     private val altBuffer = TerminalBuffer(columns, rows, rows)
 
+    @Volatile
     var screen = mainBuffer
         private set
 
@@ -123,7 +167,7 @@ internal class TerminalEmulator(
     @JvmField
     var colorScheme: TerminalColorScheme = TerminalColorScheme.dark()
 
-    @JvmField
+    @Volatile @JvmField
     var cursorStyle: TerminalCursorStyle = TerminalCursorStyle.BAR
 
     private fun saveCursor() {
@@ -301,14 +345,20 @@ internal class TerminalEmulator(
         get() = !isTextBlinkingEnabled || textBlinkState
 
     /** 自上次取走以来的滚动行数增量，仅通过 [takeScrollCounter] 消费。 */
-    private var scrollCounter: Int = 0
+    private val scrollCounter = AtomicInteger(0)
+    @Volatile
     var isAutoScrollDisabled: Boolean = false
         private set
 
-    // 输入冻结状态：为真时 append 的字节只进缓存队列而不解码，
-    // 用于文本选择期间冻结屏幕，解除后按序重放。全部字段仅在 synchronized(emulator) 内访问。
+    // 输入冻结状态：为真时 append 的字节只进有界缓存队列而不解码，
+    // 用于文本选择期间冻结屏幕，解除后按序重放。全部队列字段仅在写锁内访问。
+    @Volatile
     private var isPaused: Boolean = false
+    @Volatile
+    private var readyPausedBacklog: Boolean = false
     private val pausedQueue = ArrayDeque<ByteArray>()
+    private var pausedQueueBytes: Int = 0
+    private var pausedHeadOffset: Int = 0
 
     val isReverseVideo: Boolean get() = isDecsetInternalBitSet(DECSET_BIT_REVERSE_VIDEO)
     val isCursorEnabled: Boolean get() = isDecsetInternalBitSet(DECSET_BIT_CURSOR_ENABLED)
@@ -336,28 +386,118 @@ internal class TerminalEmulator(
         get() = isDecsetInternalBitSet(DECSET_BIT_MOUSE_TRACKING_ANY_EVENT)
 
     fun append(buffer: ByteArray, length: Int) {
-        if (isPaused) {
-            // 文本选择期间冻结屏幕：仅缓存字节，不进入解码，整屏保持不变
-            pausedQueue.add(buffer.copyOf(length))
+        append(buffer, 0, length)
+    }
+
+    fun append(buffer: ByteArray, offset: Int, length: Int) {
+        if (length <= 0) return
+        if (isPaused || pausedQueue.isNotEmpty()) {
+            enqueuePaused(buffer, offset, length)
             return
         }
-        utf8Decoder.decode(buffer, length)
+        utf8Decoder.decode(buffer, offset, length)
+    }
+
+    private fun enqueuePaused(buffer: ByteArray, offset: Int, length: Int) {
+        if (length >= MAX_PAUSED_QUEUE_BYTES) {
+            pausedQueue.clear()
+            pausedHeadOffset = 0
+            val start = offset + length - MAX_PAUSED_QUEUE_BYTES
+            pausedQueue.addLast(buffer.copyOfRange(start, offset + length))
+            pausedQueueBytes = MAX_PAUSED_QUEUE_BYTES
+        } else {
+            while (pausedQueueBytes + length > MAX_PAUSED_QUEUE_BYTES && pausedQueue.isNotEmpty()) {
+                val dropped = pausedQueue.removeFirst()
+                pausedQueueBytes -= (dropped.size - pausedHeadOffset)
+                pausedHeadOffset = 0
+            }
+            pausedQueue.addLast(buffer.copyOfRange(offset, offset + length))
+            pausedQueueBytes += length
+        }
+        readyPausedBacklog = !isPaused && pausedQueue.isNotEmpty()
+    }
+
+    internal fun hasReadyPausedBacklog(): Boolean = readyPausedBacklog
+
+    internal fun drainPausedSlice(maxBytes: Int): Boolean {
+        var remaining = maxBytes
+        while (remaining > 0 && pausedQueue.isNotEmpty()) {
+            val head = pausedQueue.first()
+            val available = head.size - pausedHeadOffset
+            val step = min(available, remaining)
+            utf8Decoder.decode(head, pausedHeadOffset, step)
+            pausedHeadOffset += step
+            pausedQueueBytes -= step
+            remaining -= step
+            if (pausedHeadOffset >= head.size) {
+                pausedQueue.removeFirst()
+                pausedHeadOffset = 0
+            }
+        }
+        val hasMore = pausedQueue.isNotEmpty()
+        readyPausedBacklog = !isPaused && hasMore
+        return hasMore
+    }
+
+    internal fun drainPausedAll() {
+        while (pausedQueue.isNotEmpty()) {
+            val head = pausedQueue.removeFirst()
+            val len = head.size - pausedHeadOffset
+            if (len > 0) {
+                utf8Decoder.decode(head, pausedHeadOffset, len)
+            }
+            pausedHeadOffset = 0
+        }
+        pausedQueueBytes = 0
+        readyPausedBacklog = false
+    }
+
+    internal fun captureRenderSnapshot(
+        snapshot: TerminalRenderSnapshot,
+        topRowProvider: () -> Int
+    ) {
+        withReadLock {
+            val rowCount = rows
+            val colCount = columns
+            val top = topRowProvider()
+            val activeScreen = screen
+            snapshot.rows = rowCount
+            snapshot.columns = colCount
+            snapshot.topRow = top
+            snapshot.cursorRow = _cursorRow
+            snapshot.cursorCol = _cursorCol
+            snapshot.cursorVisible = isCursorVisible
+            snapshot.cursorStyle = cursorStyle
+            snapshot.reverseVideo = isReverseVideo
+            snapshot.textVisible = isTextVisible
+            snapshot.syncPalette(oscColorOverrides)
+            snapshot.ensureRows(rowCount)
+            for (i in 0 until rowCount) {
+                snapshot.updateRow(i, activeScreen.getRowForRead(top + i), colCount)
+            }
+        }
     }
 
     /**
      * 开关输入冻结。
      *
      * paused 为真时后续 [append] 的原始字节被缓存而不解码（屏幕完全静止）；
-     * 为假时按序重放缓存并恢复实时。需在 synchronized(emulator) 内调用。
+     * 为假时在存在后台调度回调时交由后台分片重放，否则同步重放并恢复实时。须在写锁内调用。
      */
     fun setInputPaused(paused: Boolean) {
         if (paused == isPaused) return
         isPaused = paused
         if (!paused) {
-            while (pausedQueue.isNotEmpty()) {
-                val bytes = pausedQueue.removeFirst()
-                utf8Decoder.decode(bytes, bytes.size)
+            if (onDeferredResumeRequested != null) {
+                readyPausedBacklog = pausedQueue.isNotEmpty()
+                if (readyPausedBacklog) {
+                    onDeferredResumeRequested.invoke()
+                }
+            } else {
+                drainPausedAll()
             }
+        } else {
+            readyPausedBacklog = false
         }
     }
 
@@ -1122,7 +1262,7 @@ internal class TerminalEmulator(
     }
 
     private fun scrollDownOneLine() {
-        this.scrollCounter++
+        scrollCounter.incrementAndGet()
         screen.scrollRegionOneLine(
             topMargin,
             bottomMargin,
@@ -1220,12 +1360,8 @@ internal class TerminalEmulator(
     private fun blockClear(sx: Int, sy: Int, w: Int, h: Int = 1) =
         screen.blockSet(sx, sy, w, h, ' '.code, rendition.eraseFillStyle)
 
-    /** 取走并清零滚动增量；调用方须持有 synchronized(this)。 */
-    internal fun takeScrollCounter(): Int {
-        val delta = scrollCounter
-        scrollCounter = 0
-        return delta
-    }
+    /** 取走并清零滚动增量。 */
+    internal fun takeScrollCounter(): Int = scrollCounter.getAndSet(0)
 
     fun toggleAutoScrollDisabled() {
         this.isAutoScrollDisabled = !this.isAutoScrollDisabled
@@ -1292,6 +1428,7 @@ internal class TerminalEmulator(
         private val DSR_STATUS_RESPONSE =
             byteArrayOf(27, '['.code.toByte(), '0'.code.toByte(), 'n'.code.toByte())
 
+        private const val MAX_PAUSED_QUEUE_BYTES = 2 * 1024 * 1024
         private const val DEFAULT_ROWS = 24
         private const val DEFAULT_COLUMNS = 80
         private const val DEFAULT_CELL_WIDTH_PIXELS = 10

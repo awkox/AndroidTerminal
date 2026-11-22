@@ -13,6 +13,9 @@ internal class SparsePalette {
     private val values = IntArray(TextStyle.NUM_INDEXED_COLORS)
     private val overridden = BooleanArray(TextStyle.NUM_INDEXED_COLORS)
 
+    var version: Long = 0L
+        private set
+
     /** 指定索引是否被 OSC 覆盖过。 */
     fun isOverridden(index: Int): Boolean = overridden[index]
 
@@ -23,17 +26,26 @@ internal class SparsePalette {
     fun set(index: Int, color: Int) {
         values[index] = color
         overridden[index] = true
+        version++
     }
 
     /** 复位单个索引的覆盖，恢复回退到主题基底。 */
     fun reset(index: Int) {
         overridden[index] = false
         values[index] = 0
+        version++
     }
 
     /** 清空整块覆盖板，全部槽位回退到主题基底。 */
     fun resetAll() {
         overridden.fill(false)
         values.fill(0)
+        version++
+    }
+
+    fun copyFrom(source: SparsePalette) {
+        System.arraycopy(source.values, 0, values, 0, values.size)
+        System.arraycopy(source.overridden, 0, overridden, 0, overridden.size)
+        version = source.version
     }
 }

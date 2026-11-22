@@ -8,16 +8,15 @@ import android.graphics.PathDashPathEffect
 import android.graphics.PathEffect
 import android.graphics.PorterDuff
 import android.graphics.Typeface
-import com.awkoo.libterminal.engine.TerminalEmulator
 import com.awkoo.libterminal.engine.TerminalCursorStyle
+import com.awkoo.libterminal.engine.buffer.TerminalRow
 import com.awkoo.libterminal.text.TextStyle
-import com.awkoo.libterminal.engine.buffer.TerminalBuffer
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
 
 /**
- * 将 [TerminalEmulator] 渲染到 [Canvas]。
+ * 将 [TerminalRenderSnapshot] 渲染到 [Canvas]。
  *
  * 缓存字体度量信息，字体或字号变更时需重新创建。
  */
@@ -134,17 +133,23 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
     }
 
     fun render(
-        emulator: TerminalEmulator, resolver: TerminalPaletteResolver, canvas: Canvas, topRow: Int,
-        selectionY1: Int, selectionY2: Int, selectionX1: Int, selectionX2: Int
+        snapshot: TerminalRenderSnapshot,
+        resolver: TerminalPaletteResolver,
+        canvas: Canvas,
+        selectionY1: Int,
+        selectionY2: Int,
+        selectionX1: Int,
+        selectionX2: Int
     ) {
-        val reverseVideo = emulator.isReverseVideo
-        val endRow = topRow + emulator.rows
-        val columns = emulator.columns
-        val cursorCol = emulator.cursorCol
-        val cursorRow = emulator.cursorRow
-        val cursorVisible = emulator.isCursorVisible
-        val screen = emulator.screen
-        val cursorShape = emulator.cursorStyle
+        val reverseVideo = snapshot.reverseVideo
+        val topRow = snapshot.topRow
+        val rows = snapshot.rows
+        val columns = snapshot.columns
+        val cursorCol = snapshot.cursorCol
+        val cursorRow = snapshot.cursorRow
+        val cursorVisible = snapshot.cursorVisible
+        val cursorShape = snapshot.cursorStyle
+        val textVisible = snapshot.textVisible
 
         if (reverseVideo) canvas.drawColor(
             resolver.foreground,
@@ -152,9 +157,27 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
         )
 
         var heightOffset = baselineOffset.toFloat()
-        for (row in topRow..<endRow) {
+        for (viewportIndex in 0 until rows) {
+            val row = topRow + viewportIndex
             heightOffset += fontLineSpacing.toFloat()
-            renderRow(canvas, emulator, row, heightOffset, columns, cursorCol, cursorRow, cursorVisible, selectionY1, selectionY2, selectionX1, selectionX2, reverseVideo, resolver, cursorShape, screen)
+            renderRow(
+                canvas = canvas,
+                lineObject = snapshot.rowAt(viewportIndex),
+                row = row,
+                heightOffset = heightOffset,
+                columns = columns,
+                cursorCol = cursorCol,
+                cursorRow = cursorRow,
+                cursorVisible = cursorVisible,
+                textVisible = textVisible,
+                selectionY1 = selectionY1,
+                selectionY2 = selectionY2,
+                selectionX1 = selectionX1,
+                selectionX2 = selectionX2,
+                reverseVideo = reverseVideo,
+                resolver = resolver,
+                cursorShape = cursorShape
+            )
         }
     }
 
@@ -166,31 +189,30 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
      */
     private fun renderRow(
         canvas: Canvas,
-        emulator: TerminalEmulator,
+        lineObject: TerminalRow,
         row: Int,
         heightOffset: Float,
         columns: Int,
         cursorCol: Int,
         cursorRow: Int,
         cursorVisible: Boolean,
+        textVisible: Boolean,
         selectionY1: Int,
         selectionY2: Int,
         selectionX1: Int,
         selectionX2: Int,
         reverseVideo: Boolean,
         resolver: TerminalPaletteResolver,
-        cursorShape: TerminalCursorStyle,
-        screen: TerminalBuffer
+        cursorShape: TerminalCursorStyle
     ) {
         val cursorX = if (row == cursorRow && cursorVisible) cursorCol else -1
         var selx1 = -1
         var selx2 = -1
         if (row in selectionY1..selectionY2) {
             if (row == selectionY1) selx1 = selectionX1
-            selx2 = if (row == selectionY2) selectionX2 else emulator.columns
+            selx2 = if (row == selectionY2) selectionX2 else columns
         }
 
-        val lineObject = screen.getRowForRead(row)
         val line = lineObject.textChars()
 
         var lastRunRawStyle: Long = 0L
@@ -244,7 +266,8 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
                         TextStyle(lastRunRawStyle),
                         lastRunExtEffect,
                         reverseVideo || (lastRunInsideCursor && cursorShape == TerminalCursorStyle.BLOCK) || lastRunInsideSelection,
-                        emulator
+                        textVisible,
+                        columns
                     )
                 }
                 measuredWidthForRun = 0f
@@ -276,7 +299,8 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
             TextStyle(lastRunRawStyle),
             lastRunExtEffect,
             reverseVideo || (lastRunInsideCursor && cursorShape == TerminalCursorStyle.BLOCK) || lastRunInsideSelection,
-            emulator
+            textVisible,
+            columns
         )
     }
 
@@ -301,7 +325,8 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
         textStyle: TextStyle,
         extendedEffect: Long,
         reverseVideo: Boolean,
-        emulator: TerminalEmulator
+        textVisible: Boolean,
+        columns: Int
     ) {
         var mes = mes
         val colors = resolver.resolve(textStyle, reverseVideo)
@@ -344,7 +369,7 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
             canvas.drawRect(left, y - cursorHeight, right, y, textPaint)
         }
 
-        val textIsVisible = !blink || emulator.isTextVisible
+        val textIsVisible = !blink || textVisible
 
         if (!invisible && textIsVisible) {
             textPaint.isFakeBoldText = bold
@@ -416,7 +441,7 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
                         else -> dashedEffect
                     }
                     // 从屏幕原点起笔使特效相位全局对齐，clipRect 裁出当前运行区间
-                    canvas.drawLine(0f, ulY, emulator.columns * this.fontWidth, ulY, underlinePaint)
+                    canvas.drawLine(0f, ulY, columns * this.fontWidth, ulY, underlinePaint)
                 }
             }
             canvas.restore()

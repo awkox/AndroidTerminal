@@ -70,13 +70,15 @@ class TerminalSessionProcessTest {
     private fun awaitScreen(session: TerminalSession, row: Int, expected: String, timeoutMs: Long = 5_000) {
         val deadline = System.currentTimeMillis() + timeoutMs
         while (System.currentTimeMillis() < deadline) {
-            val text = synchronized(session.emulator) {
+            val text = session.emulator.withReadLock {
                 String(session.emulator.screen.getRowForRead(row).textChars()).trimEnd()
             }
             if (text.contains(expected)) return
             Thread.sleep(10)
         }
-        val text = String(session.emulator.screen.getRowForRead(row).textChars()).trimEnd()
+        val text = session.emulator.withReadLock {
+            String(session.emulator.screen.getRowForRead(row).textChars()).trimEnd()
+        }
         assertTrue("screen row $row never contained '$expected', got '$text'", text.contains(expected))
     }
 

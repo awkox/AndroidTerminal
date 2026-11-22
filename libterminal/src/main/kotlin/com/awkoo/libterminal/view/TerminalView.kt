@@ -22,9 +22,10 @@ import com.awkoo.libterminal.view.input.InputSource
 import com.awkoo.libterminal.view.input.KeyInputProcessor
 import com.awkoo.libterminal.view.input.TerminalImeConnection
 import com.awkoo.libterminal.view.input.TerminalTouchHandler
-import com.awkoo.libterminal.view.render.TerminalRenderer
 import com.awkoo.libterminal.view.render.TerminalBlinker
 import com.awkoo.libterminal.view.render.TerminalPaletteResolver
+import com.awkoo.libterminal.view.render.TerminalRenderSnapshot
+import com.awkoo.libterminal.view.render.TerminalRenderer
 import com.awkoo.libterminal.view.textselection.TextSelectionCursorController
 import com.awkoo.libterminal.view.lifecycle.SessionBinder
 import com.awkoo.libterminal.view.interact.TerminalClipboard
@@ -168,16 +169,18 @@ class TerminalView(
             }
         }
 
+    private val renderSnapshot = TerminalRenderSnapshot()
+
     /**
      * 依据当前 [colorScheme] 为指定会话重建主题基底与合成调色板。
      *
      * OSC 动态改色作为 [TerminalPaletteResolver] 的覆盖板盖在主题之上，仍保持生效。
      */
     private fun applyColorScheme(session: TerminalSession) {
-        synchronized(session.emulator) {
+        session.emulator.withWriteLock {
             session.emulator.colorScheme = colorScheme
         }
-        currentPalette = TerminalPaletteResolver(colorScheme, session.emulator.oscColorOverrides)
+        currentPalette = TerminalPaletteResolver(colorScheme, renderSnapshot.paletteOverrides)
     }
 
     /**
@@ -324,25 +327,32 @@ class TerminalView(
         scrollbackOffset = (scrollbackOffset + deltaRows).coerceIn(0, maxScrollback)
     }
 
-    override fun computeVerticalScrollRange() = emulator?.screen?.activeRows ?: 1
+    override fun computeVerticalScrollRange() = emulator?.let { emu ->
+        emu.withReadLock { emu.screen.activeRows }
+    } ?: 1
+
     override fun computeVerticalScrollExtent() = emulator?.rows ?: 1
+
     override fun computeVerticalScrollOffset(): Int {
         val emulator = emulator ?: return 1
-        return emulator.screen.activeRows + this.topRow - emulator.rows
+        return emulator.withReadLock {
+            emulator.screen.activeRows + this.topRow - emulator.rows
+        }
     }
 
     private fun onScreenUpdated(skipScrolling: Boolean = false) {
         val emulator = emulator ?: return
         var skipScrolling = skipScrolling
+        var shouldStopSelection = false
 
-        synchronized(emulator) {
+        emulator.withReadLock {
             val rowsInHistory = maxScrollback
             scrollbackOffset = scrollbackOffset.coerceAtMost(rowsInHistory)
 
             val rowShift = emulator.takeScrollCounter()
             if (this.isSelectingText || emulator.isAutoScrollDisabled) {
                 if (scrollbackOffset + rowShift > rowsInHistory) {
-                    if (this.isSelectingText) stopTextSelectionMode()
+                    if (this.isSelectingText) shouldStopSelection = true
                     if (emulator.isAutoScrollDisabled) {
                         scrollbackOffset = rowsInHistory
                         skipScrolling = true
@@ -353,6 +363,10 @@ class TerminalView(
                     decrementYTextSelectionCursors(rowShift)
                 }
             }
+        }
+
+        if (shouldStopSelection) {
+            stopTextSelectionMode()
         }
 
         if (!skipScrolling && this.scrollbackOffset != 0) {
@@ -384,10 +398,13 @@ class TerminalView(
     internal fun bufferCellAt(x: Float, y: Float): CursorCoord {
         val renderer = renderer
         val column = CellPoint.xToColumn(x, renderer.fontWidth)
-        val row = CellPoint.yToRow(y, renderer.fontLineSpacing, renderer.baselineOffset) + topRow
-        val emulator = emulator ?: return CursorCoord.pack(column, row)
-        val screen = emulator.screen
-        return CursorCoord.pack(screen.clampColumn(column), screen.clampRow(row))
+        val viewportRow = CellPoint.yToRow(y, renderer.fontLineSpacing, renderer.baselineOffset)
+        val emulator = emulator ?: return CursorCoord.pack(column, viewportRow + topRow)
+        return emulator.withReadLock {
+            val row = viewportRow + topRow
+            val screen = emulator.screen
+            CursorCoord.pack(screen.clampColumn(column), screen.clampRow(row))
+        }
     }
 
     /** 单元格列 → 像素边界；末列之后的右边界传 `columns`。 */
@@ -489,12 +506,11 @@ class TerminalView(
     override fun onDraw(canvas: Canvas) {
         val emulator = emulator ?: return
         val resolver = currentPalette ?: return
-        canvas.drawColor(resolver.background)
         val sel = selectionBoundsScratch
         textSelectionCursorController.getSelectors(sel)
-        synchronized(emulator) {
-            renderer.render(emulator, resolver, canvas, this.topRow, sel[0], sel[1], sel[2], sel[3])
-        }
+        emulator.captureRenderSnapshot(renderSnapshot) { this.topRow }
+        canvas.drawColor(resolver.background)
+        renderer.render(renderSnapshot, resolver, canvas, sel[0], sel[1], sel[2], sel[3])
         textSelectionCursorController.render()
     }
 

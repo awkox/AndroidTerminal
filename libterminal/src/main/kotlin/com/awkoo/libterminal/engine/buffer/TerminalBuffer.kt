@@ -10,9 +10,9 @@ import kotlin.math.min
  * 管理屏幕可见行和滚动历史，支持文本选择、行列操作、块复制/填充和上下滚动。
  */
 internal class TerminalBuffer(
-    @JvmField var columns: Int,
+    @Volatile @JvmField var columns: Int,
     @JvmField var totalRows: Int,
-    @JvmField var screenRows: Int
+    @Volatile @JvmField var screenRows: Int
 ) {
     @JvmField
     var lines: Array<TerminalRow?> = arrayOfNulls(totalRows)
@@ -25,6 +25,7 @@ internal class TerminalBuffer(
      */
     private var sharedBlankRow: TerminalRow = TerminalRow(columns, TextStyle.NORMAL)
 
+    @Volatile
     var activeTranscriptRows: Int = 0
         private set
 
