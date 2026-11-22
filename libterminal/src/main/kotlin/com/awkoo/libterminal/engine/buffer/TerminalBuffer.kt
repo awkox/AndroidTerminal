@@ -107,7 +107,7 @@ internal class TerminalBuffer private constructor(
             val x2 = if (row == y2) x2End else columns
             val lineObject = lines[externalToInternalRow(row)]
             if (lineObject == null) {
-                if ((!joinBackLines) && row < y2 && row < screenRows - 1) {
+                if (row < y2 && row < screenRows - 1) {
                     builder.append('\n')
                 }
                 continue

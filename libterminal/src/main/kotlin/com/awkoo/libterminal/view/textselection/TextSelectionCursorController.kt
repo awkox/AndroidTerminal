@@ -46,6 +46,7 @@ internal interface SelectionHost {
     fun copyTextToClipboard()
     fun pasteTextFromClipboard()
     fun stopTextSelectionMode()
+    fun onSelectionSnapshotCapturing(emulator: TerminalEmulator)
     fun onSelectionSnapshotReleased()
 }
 
@@ -74,6 +75,8 @@ private class TerminalViewSelectionHost(
     override fun copyTextToClipboard() = terminalView.copyTextToClipboard()
     override fun pasteTextFromClipboard() = terminalView.pasteTextFromClipboard()
     override fun stopTextSelectionMode() = terminalView.stopTextSelectionMode()
+    override fun onSelectionSnapshotCapturing(emulator: TerminalEmulator) =
+        terminalView.onSelectionSnapshotCapturing(emulator)
     override fun onSelectionSnapshotReleased() = terminalView.onSelectionSnapshotReleased()
 }
 
@@ -112,11 +115,12 @@ internal class TextSelectionCursorController internal constructor(
     internal fun showAt(x: Float, y: Float) {
         if (isActive) hide()
 
-        val emulator = host.emulator
-        emulator?.let {
-            frozenSnapshot = it.withWriteLock { it.captureFrozenSnapshot() }
-            frozenEmulator = it
+        val emulator = host.emulator ?: return
+        frozenSnapshot = emulator.withWriteLock {
+            host.onSelectionSnapshotCapturing(emulator)
+            emulator.captureFrozenSnapshot()
         }
+        frozenEmulator = emulator
 
         setInitialTextSelectionPosition(x, y)
 

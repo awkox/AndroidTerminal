@@ -306,7 +306,13 @@ class TerminalView(
 
     /** 切换自动滚动的禁用状态（配合滚动锁定使用）。 */
     fun toggleAutoScrollDisabled() {
-        emulator?.toggleAutoScrollDisabled()
+        val emulator = emulator ?: return
+        emulator.withWriteLock {
+            emulator.toggleAutoScrollDisabled()
+            if (!emulator.isAutoScrollDisabled) {
+                pendingAutoScrollRowsDuringSelection = 0
+            }
+        }
     }
 
     private val frozenSelectionSnapshot: TerminalEmulator.FrozenScreenSnapshot?
@@ -353,6 +359,18 @@ class TerminalView(
         }
     }
 
+    internal fun onSelectionSnapshotCapturing(emulator: TerminalEmulator) {
+        val preShift = emulator.takeScrollCounter()
+        if (preShift > 0) {
+            if (emulator.isAutoScrollDisabled) {
+                val rowsInHistory = emulator.screen.activeTranscriptRows
+                scrollbackOffset = (scrollbackOffset + preShift).coerceIn(0, rowsInHistory)
+            } else {
+                hasPendingOutputDuringSelection = true
+            }
+        }
+    }
+
     internal fun onSelectionSnapshotReleased() {
         if (hasPendingOutputDuringSelection) {
             hasPendingOutputDuringSelection = false
@@ -367,8 +385,9 @@ class TerminalView(
         val emulator = emulator ?: return
         if (isSelectingText) {
             hasPendingOutputDuringSelection = true
+            val shift = emulator.takeScrollCounter()
             if (emulator.isAutoScrollDisabled) {
-                pendingAutoScrollRowsDuringSelection += emulator.takeScrollCounter()
+                pendingAutoScrollRowsDuringSelection += shift
             }
             return
         }

@@ -117,4 +117,16 @@ class TerminalEmulatorFreezeTest {
             emulator.releaseFrozenSnapshot(snapshot)
         }
     }
+
+    @Test
+    fun frozenSnapshot_getSelectedText_preservesNewlineAcrossUnallocatedBlankRowAfterReflow() {
+        f.feed("top\r\n\r\nbot")
+        emulator.resize(10, 4, 10, 20)
+        val snapshot = emulator.captureFrozenSnapshot()
+        try {
+            assertEquals("top\n\nbot", snapshot.buffer.getSelectedText(0, 0, 9, 2))
+        } finally {
+            emulator.releaseFrozenSnapshot(snapshot)
+        }
+    }
 }

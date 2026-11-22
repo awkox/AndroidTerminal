@@ -8,6 +8,7 @@ import com.awkoo.libterminal.engine.buffer.CursorCoord
 import com.awkoo.libterminal.view.interact.ActionModeCustomizer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -67,11 +68,17 @@ class TextSelectionCursorControllerTest {
         override fun copyTextToClipboard() {}
         override fun pasteTextFromClipboard() {}
 
+        var capturingCount = 0
         var releasedCount = 0
 
         override fun stopTextSelectionMode() {
             stopCount++
             controller.hide()
+        }
+
+        override fun onSelectionSnapshotCapturing(emulator: TerminalEmulator) {
+            capturingCount++
+            emulator.takeScrollCounter()
         }
 
         override fun onSelectionSnapshotReleased() {
@@ -226,5 +233,33 @@ class TextSelectionCursorControllerTest {
         assertEquals(0, sel[2])
         assertEquals(4, sel[3])
         assertEquals("hello", controller.selectedText)
+    }
+
+    @Test
+    fun showAt_whenEmulatorIsNull_doesNotActivateSelectionOrShowHandles() {
+        val (controller, host, handles) = createController(null)
+
+        controller.showAt(10f, 10f)
+
+        assertFalse(controller.isActive)
+        assertNull(controller.frozenSnapshot)
+        assertNull(host.lastActionModeCallback)
+        assertEquals(0, host.capturingCount)
+        assertEquals(0, handles.first.visibleCount)
+        assertEquals(0, handles.second.visibleCount)
+    }
+
+    @Test
+    fun showAt_invokesCapturingCallbackBeforeFreezingSnapshot() {
+        val f = EmulatorFixture(columns = 10, rows = 2, maxTranscriptRows = 10)
+        f.feed("a\r\nb\r\nc\r\nd")
+        val (controller, host, _) = createController(f.emulator)
+
+        controller.showAt(0f, 0f)
+
+        assertTrue(controller.isActive)
+        assertEquals(1, host.capturingCount)
+        assertEquals(0, f.emulator.takeScrollCounter())
+        controller.hide()
     }
 }

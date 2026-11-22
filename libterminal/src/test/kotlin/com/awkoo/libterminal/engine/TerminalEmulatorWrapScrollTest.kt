@@ -171,6 +171,19 @@ class TerminalEmulatorWrapScrollTest {
     }
 
     @Test
+    fun toggleAutoScrollDisabled_enablingClearsAccumulatedScrollCounter() {
+        f.feed("aaaa\r\nbbbb\r\ncccc\r\ndddd\r\neeee\n\n")
+        assertFalse(emulator.isAutoScrollDisabled)
+
+        emulator.toggleAutoScrollDisabled()
+        assertTrue(emulator.isAutoScrollDisabled)
+        assertEquals(0, emulator.takeScrollCounter())
+
+        f.feed("\n")
+        assertEquals(1, emulator.takeScrollCounter())
+    }
+
+    @Test
     fun wideChar_wrapsAcrossLine_secondCharLandsOnNextRow() {
         f.feed("01234567\u4e2d\u4e2d")
 

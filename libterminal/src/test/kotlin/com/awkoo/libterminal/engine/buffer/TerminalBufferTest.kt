@@ -181,6 +181,16 @@ class TerminalBufferTest {
     }
 
     @Test
+    fun getSelectedText_unallocatedNullRow_preservesNewline() {
+        val buffer = smallBuffer()
+        buffer.write(0, "top")
+        buffer.write(2, "bot")
+        buffer.lines[1] = null
+
+        assertEquals("top\n\nbot", buffer.getSelectedText(0, 0, 3, 2))
+    }
+
+    @Test
     fun getLineWrap_outOfRangeRow_isFalse() {
         val buffer = smallBuffer()
 

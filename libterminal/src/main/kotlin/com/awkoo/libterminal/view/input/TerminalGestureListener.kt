@@ -130,6 +130,7 @@ internal class TerminalGestureListener(
     }
 
     override fun onLongPress(e: MotionEvent) {
+        if (view.emulator == null) return
         if (view.touchHandler.gestureRecognizer.isInProgress) return
         if (!view.isSelectingText) {
             view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)

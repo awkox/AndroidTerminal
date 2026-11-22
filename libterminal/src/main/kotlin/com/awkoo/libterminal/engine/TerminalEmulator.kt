@@ -1280,7 +1280,9 @@ internal class TerminalEmulator(
     internal fun takeScrollCounter(): Int = scrollCounter.getAndSet(0)
 
     fun toggleAutoScrollDisabled() {
-        this.isAutoScrollDisabled = !this.isAutoScrollDisabled
+        val next = !this.isAutoScrollDisabled
+        if (next) takeScrollCounter()
+        this.isAutoScrollDisabled = next
     }
 
     fun onWindowFocusChanged(hasFocus: Boolean) {
