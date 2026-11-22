@@ -38,4 +38,29 @@ class GlyphWidthCacheTest {
         assertEquals(22f, cache.measure(line, 1, 2, 0x1F600), 0.001f)
         assertEquals(3, calls)
     }
+
+    @Test
+    fun measure_bypassesAsciiAndBmpCache_forMultiCharClusters() {
+        var calls = 0
+        val ascii = FloatArray(127) { 10f }
+        val cache = GlyphWidthCache(ascii) { _, _, count ->
+            calls++
+            count * 10f
+        }
+        val keycap = "1\uFE0F\u20E3".toCharArray()
+        val heartVs16 = "\u2764\uFE0F".toCharArray()
+
+        assertEquals(10f, cache.measure(keycap, 0, 1, '1'.code), 0.001f)
+        assertEquals(0, calls)
+        assertEquals(30f, cache.measure(keycap, 0, keycap.size, '1'.code), 0.001f)
+        assertEquals(1, calls)
+
+        assertEquals(10f, cache.measure(heartVs16, 0, 1, 0x2764), 0.001f)
+        assertEquals(2, calls)
+        assertEquals(20f, cache.measure(heartVs16, 0, heartVs16.size, 0x2764), 0.001f)
+        assertEquals(3, calls)
+        // 单字符缓存未被多字符分支污染
+        assertEquals(10f, cache.measure(heartVs16, 0, 1, 0x2764), 0.001f)
+        assertEquals(3, calls)
+    }
 }

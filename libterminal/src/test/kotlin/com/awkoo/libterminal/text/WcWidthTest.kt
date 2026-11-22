@@ -72,4 +72,34 @@ class WcWidthTest {
         assertEquals(0, WcWidth.zeroWidthCharsCount(chars, -1, 2))
         assertEquals(0, WcWidth.zeroWidthCharsCount(chars, 5, 6))
     }
+
+    @Test
+    fun unicode16Emojis_andTagChars_haveExpectedWidth() {
+        assertEquals(2, WcWidth.width(0x1FA89)) // Harp
+        assertEquals(2, WcWidth.width(0x1FAE9)) // Face with bags under eyes
+        assertEquals(2, WcWidth.width(0x1FAC6)) // Fingerprint
+        assertEquals(2, WcWidth.width(0x1FADC)) // Root vegetable
+        assertEquals(0, WcWidth.width(0xE0067)) // Tag Latin Small Letter G
+        assertEquals(0, WcWidth.width(0xE007F)) // Cancel Tag
+    }
+
+    @Test
+    fun emojiClusterHelpers_classifyCandidatesAccurately() {
+        assertEquals(true, WcWidth.isVs16WideningCandidate(0x2764)) // Heavy Black Heart
+        assertEquals(true, WcWidth.isVs16WideningCandidate(0x26A0)) // Warning Sign
+        assertEquals(true, WcWidth.isVs16WideningCandidate(0x1F3F3)) // Waving White Flag
+        assertEquals(false, WcWidth.isVs16WideningCandidate('A'.code))
+        assertEquals(false, WcWidth.isVs16WideningCandidate('1'.code))
+        assertEquals(false, WcWidth.isVs16WideningCandidate(0x4E2D))
+
+        assertEquals(true, WcWidth.isKeycapBase('1'.code))
+        assertEquals(true, WcWidth.isKeycapBase('#'.code))
+        assertEquals(true, WcWidth.isKeycapBase('*'.code))
+        assertEquals(false, WcWidth.isKeycapBase('a'.code))
+
+        assertEquals(true, WcWidth.isEmojiOrPictographic(0x1F600))
+        assertEquals(true, WcWidth.isEmojiOrPictographic(0x2764))
+        assertEquals(true, WcWidth.isEmojiOrPictographic(0x1F3FD))
+        assertEquals(false, WcWidth.isEmojiOrPictographic('A'.code))
+    }
 }

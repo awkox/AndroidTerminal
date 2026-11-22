@@ -169,8 +169,8 @@ internal class TerminalBuffer private constructor(
         return (screenFirstRow + externalRow).mod(totalRows)
     }
 
-    fun setLineWrap(row: Int) {
-        allocateFullLineIfNecessary(externalToInternalRow(row)).markLineWrap()
+    fun setLineWrap(row: Int, hasTrailingWrapPadding: Boolean = false) {
+        allocateFullLineIfNecessary(externalToInternalRow(row)).markLineWrap(hasTrailingWrapPadding)
     }
 
     fun getLineWrap(row: Int): Boolean {
@@ -466,9 +466,62 @@ internal class TerminalBuffer private constructor(
         require(!(row !in 0..<screenRows || column < 0 || column >= columns)) {
             "TerminalBuffer.setChar(): row=$row, column=$column, screenRows=$screenRows, columns=$columns"
         }
-        val row = externalToInternalRow(row)
-        allocateFullLineIfNecessary(row).setChar(column, codePoint, style, extendedEffect)
+        val internal = externalToInternalRow(row)
+        allocateFullLineIfNecessary(internal).setChar(column, codePoint, style, extendedEffect)
     }
+
+    fun setCell(
+        column: Int,
+        row: Int,
+        sourceChars: CharArray,
+        charStart: Int,
+        charEnd: Int,
+        width: Int,
+        style: TextStyle,
+        extendedEffect: Long = 0L
+    ) {
+        require(!(row !in 0..<screenRows || column < 0 || column >= columns)) {
+            "TerminalBuffer.setCell(): row=$row, column=$column, screenRows=$screenRows, columns=$columns"
+        }
+        val internal = externalToInternalRow(row)
+        allocateFullLineIfNecessary(internal).setCell(column, sourceChars, charStart, charEnd, width, style, extendedEffect)
+    }
+
+    fun appendCodePointToCell(
+        column: Int,
+        row: Int,
+        codePoint: Int,
+        expandToWide: Boolean,
+        style: TextStyle,
+        extendedEffect: Long = 0L
+    ) {
+        require(!(row !in 0..<screenRows || column < 0 || column >= columns)) {
+            "TerminalBuffer.appendCodePointToCell(): row=$row, column=$column, screenRows=$screenRows, columns=$columns"
+        }
+        val internal = externalToInternalRow(row)
+        allocateFullLineIfNecessary(internal).appendCodePointToCell(column, codePoint, expandToWide, style, extendedEffect)
+    }
+
+    fun getCellStartColAt(row: Int, column: Int): Int =
+        getRowForRead(row).getCellStartColAt(column)
+
+    fun getCellStartColBefore(row: Int, column: Int): Int =
+        getRowForRead(row).getCellStartColBefore(column)
+
+    fun getCellWidth(row: Int, column: Int): Int =
+        getRowForRead(row).getCellWidth(column)
+
+    fun getCellFirstCodePoint(row: Int, column: Int): Int =
+        getRowForRead(row).getCellFirstCodePoint(column)
+
+    fun getCellLastCodePoint(row: Int, column: Int): Int =
+        getRowForRead(row).getCellLastCodePoint(column)
+
+    fun getCellCodePointCount(row: Int, column: Int): Int =
+        getRowForRead(row).getCellCodePointCount(column)
+
+    fun copyCellChars(row: Int, column: Int): CharArray =
+        getRowForRead(row).copyCellChars(column)
 
     fun getStyleAt(externalRow: Int, column: Int): TextStyle {
         if (!rowInRange(externalRow) || column !in 0 until columns) return TextStyle.NORMAL

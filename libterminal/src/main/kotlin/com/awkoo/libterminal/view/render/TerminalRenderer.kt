@@ -27,14 +27,16 @@ internal class GlyphWidthCache(
     private val bmpMeasureCache = FloatArray(0x10000) { -1f }
 
     fun measure(line: CharArray, charStart: Int, charsForCodePoint: Int, codePoint: Int): Float {
-        if (codePoint < asciiMeasures.size) return asciiMeasures[codePoint]
-        if (charsForCodePoint == 1 && codePoint < bmpMeasureCache.size) {
-            var cached = bmpMeasureCache[codePoint]
-            if (cached < 0f) {
-                cached = measureRange(line, charStart, charsForCodePoint)
-                bmpMeasureCache[codePoint] = cached
+        if (charsForCodePoint == 1) {
+            if (codePoint < asciiMeasures.size) return asciiMeasures[codePoint]
+            if (codePoint < bmpMeasureCache.size) {
+                var cached = bmpMeasureCache[codePoint]
+                if (cached < 0f) {
+                    cached = measureRange(line, charStart, 1)
+                    bmpMeasureCache[codePoint] = cached
+                }
+                return cached
             }
-            return cached
         }
         return measureRange(line, charStart, charsForCodePoint)
     }
@@ -225,32 +227,31 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
         var currentCharIndex = 0
         var measuredWidthForRun = 0f
 
-        lineObject.forEachRun { column, charStart, charEnd, codePoint, codePointWcWidth, rawStyle, extEffect ->
-            if (codePointWcWidth <= 0) {
-                currentCharIndex = charEnd
-                return@forEachRun true
-            }
-            if (column >= columns) return@forEachRun false
+        lineObject.forEachCell { column, charStart, charEnd, cellWcWidth, rawStyle, extEffect ->
+            if (column >= columns) return@forEachCell false
 
-            val insideCursor = (cursorX == column || (codePointWcWidth == 2 && cursorX == column + 1))
-            val insideSelection = column in selx1..selx2
-            val charsForCodePoint = charEnd - charStart
+            val insideCursor = (cursorX == column || (cellWcWidth == 2 && cursorX == column + 1))
+            val insideSelection = column in selx1..selx2 || (cellWcWidth == 2 && (column + 1) in selx1..selx2)
+            val clusterChars = charEnd - charStart
+            val firstCodePoint = if (clusterChars > 0) Character.codePointAt(line, charStart, charEnd) else ' '.code
 
-            val measuredCodePointWidth =
-                glyphWidthCache.measure(line, charStart, charsForCodePoint, codePoint)
+            val measuredClusterWidth =
+                glyphWidthCache.measure(line, charStart, clusterChars, firstCodePoint)
 
-            val fontWidthMismatch = abs(measuredCodePointWidth / this.fontWidth - codePointWcWidth) > 0.01
+            val fontWidthMismatch = abs(measuredClusterWidth / this.fontWidth - cellWcWidth) > 0.01
 
             // 直接比较原始 Long，避免 TextStyle 装箱
-            // 当样式/扩展特效/光标/选区/字体宽度任一变化时，中断当前文本运行
-            if (rawStyle != lastRunRawStyle ||
+            // 当样式/扩展特效/光标/选区/宽失配任一变化，或前后任一为失配宽单元格时中断运行：
+            // 失配单元格独立绘制与缩放，防止多个表情/宽字符合并后按平均比例缩放引起偏移或右半截裁剪。
+            if (lastRunStartColumn < 0 ||
+                rawStyle != lastRunRawStyle ||
                 extEffect != lastRunExtEffect ||
                 insideCursor != lastRunInsideCursor ||
                 insideSelection != lastRunInsideSelection ||
-                fontWidthMismatch != lastRunFontWidthMismatch) {
-                if (column == 0) {
-                    // 跳过首列（无可绘制内容），仅记录当前样式
-                } else {
+                lastRunFontWidthMismatch ||
+                fontWidthMismatch
+            ) {
+                if (lastRunStartColumn >= 0) {
                     drawTextRun(
                         canvas,
                         line,
@@ -279,29 +280,31 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
                 lastRunStartIndex = charStart
                 lastRunFontWidthMismatch = fontWidthMismatch
             }
-            measuredWidthForRun += measuredCodePointWidth
+            measuredWidthForRun += measuredClusterWidth
             currentCharIndex = charEnd
             true
         }
 
-        drawTextRun(
-            canvas,
-            line,
-            resolver,
-            heightOffset,
-            lastRunStartColumn,
-            columns - lastRunStartColumn,
-            lastRunStartIndex,
-            currentCharIndex - lastRunStartIndex,
-            measuredWidthForRun,
-            if (lastRunInsideCursor) resolver.cursor else 0,
-            cursorShape,
-            TextStyle(lastRunRawStyle),
-            lastRunExtEffect,
-            reverseVideo || (lastRunInsideCursor && cursorShape == TerminalCursorStyle.BLOCK) || lastRunInsideSelection,
-            textVisible,
-            columns
-        )
+        if (lastRunStartColumn >= 0) {
+            drawTextRun(
+                canvas,
+                line,
+                resolver,
+                heightOffset,
+                lastRunStartColumn,
+                columns - lastRunStartColumn,
+                lastRunStartIndex,
+                currentCharIndex - lastRunStartIndex,
+                measuredWidthForRun,
+                if (lastRunInsideCursor) resolver.cursor else 0,
+                cursorShape,
+                TextStyle(lastRunRawStyle),
+                lastRunExtEffect,
+                reverseVideo || (lastRunInsideCursor && cursorShape == TerminalCursorStyle.BLOCK) || lastRunInsideSelection,
+                textVisible,
+                columns
+            )
+        }
     }
 
     /**
@@ -348,7 +351,7 @@ internal class TerminalRenderer(textSize: Int, typeface: Typeface) {
         // 如果字体渲染宽度与列宽不匹配，缩放 Canvas 以适配
         mes /= this.fontWidth
         var savedMatrix = false
-        if (abs(mes - runWidthColumns) > 0.01) {
+        if (mes > 0f && abs(mes - runWidthColumns) > 0.01) {
             canvas.save()
             canvas.scale(runWidthColumns / mes, 1f)
             left *= mes / runWidthColumns

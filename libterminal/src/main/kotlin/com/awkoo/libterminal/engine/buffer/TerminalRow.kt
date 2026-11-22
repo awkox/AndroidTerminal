@@ -2,8 +2,6 @@ package com.awkoo.libterminal.engine.buffer
 
 import com.awkoo.libterminal.text.TextStyle
 import com.awkoo.libterminal.text.WcWidth
-import com.awkoo.libterminal.text.charCountAtSafe
-import com.awkoo.libterminal.text.forEachColumn
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.max
 
@@ -28,7 +26,7 @@ internal enum class SnapAlign {
  * 经 [getStyle]/[getRawStyle]/[getExtendedEffect] 取样式。
  *
  * 列与 char 的换算一律经由本类：[startCharOfColumn]/[endCharOfColumn]、
- * [forEachRun]、[snapToColumn]，消费者不得自行扫 char 数组推列。
+ * [forEachCell]、[snapToColumn]，消费者不得自行扫 char 数组推列。
  */
 internal class TerminalRow(
     /** 本行列数。 */
@@ -42,10 +40,17 @@ internal class TerminalRow(
     private var usedCharCount = 0
 
     /**
+     * 每列占用的 Java char 数（仅在行内出现非单宽或代理项字符时懒分配）。
+     * `counts[col] == 0` 表示该列是前一宽字符单元格 `col - 1` 的后半格；
+     * `counts[col] > 0` 表示列 `col` 是一个单元格的起始列，其占用的 char 数为 `counts[col]`。
+     */
+    private var cellCharCounts: IntArray? = null
+
+    /**
      * 行末是否因输出而自动换行。
      *
      * 行级元数据，只在行生命周期事件上变更，写入收口在 [clear]/[markLineWrap]/[copyLineWrapFrom]：
-     * 行内的字符写入与横向搬移（[setChar]/[copyInterval]）不持有该状态，因此也不得触碰它。
+     * 行内的字符写入与横向搬移（[setChar]/[setCell]/[copyInterval]）不持有该状态，因此也不得触碰它。
      */
     val id: Long = nextRowId.incrementAndGet()
 
@@ -66,20 +71,27 @@ internal class TerminalRow(
     }
 
     private var lineWrap = false
+    private var trailingWrapPadding = false
 
     /** [lineWrap] 的唯一读口。 */
     val isLineWrap: Boolean
         get() = lineWrap
 
+    /** 标记本行行末自动换行时末列是否因宽字符折行而留空占位。 */
+    val hasTrailingWrapPadding: Boolean
+        get() = trailingWrapPadding
+
     /** 标记本行行末自动换行，本行成为下一行的续行起点。 */
-    fun markLineWrap() {
+    fun markLineWrap(hasTrailingPadding: Boolean = false) {
         lineWrap = true
+        trailingWrapPadding = hasTrailingPadding
         version++
     }
 
     /** 行对象整体复制时同步续行标记，使标记与内容同生共死。 */
     fun copyLineWrapFrom(source: TerminalRow) {
         lineWrap = source.lineWrap
+        trailingWrapPadding = source.trailingWrapPadding
         version++
     }
 
@@ -110,12 +122,6 @@ internal class TerminalRow(
     val charLength: Int
         get() = usedCharCount
 
-    /**
-     * 从源行复制 [sourceX1] 到 [sourceX2)（不含）的内容到本行 [destinationX] 位置。
-     *
-     * 处理宽字符后半部分的空白填充、组合字符的偏移覆盖，以及行内样式合并。
-     * 注意：[sourceX2] 为排他端点。
-     */
     fun copySnapshotFrom(source: TerminalRow) {
         require(columns == source.columns) {
             "TerminalRow.copySnapshotFrom(): column mismatch $columns != ${source.columns}"
@@ -126,154 +132,202 @@ internal class TerminalRow(
         }
         System.arraycopy(source.text, 0, text, 0, sourceLen)
         System.arraycopy(source.styleAndEffectBits, 0, styleAndEffectBits, 0, columns * 2)
+        val sourceCounts = source.cellCharCounts
+        if (sourceCounts == null) {
+            cellCharCounts = null
+        } else {
+            val dstCounts = cellCharCounts ?: IntArray(columns).also { cellCharCounts = it }
+            System.arraycopy(sourceCounts, 0, dstCounts, 0, columns)
+        }
         usedCharCount = sourceLen
         lineWrap = source.lineWrap
+        trailingWrapPadding = source.trailingWrapPadding
         hasNonOneWidthOrSurrogateChars = source.hasNonOneWidthOrSurrogateChars
         isBlank = source.isBlank
         version++
     }
 
+    /**
+     * 从源行复制 [sourceX1] 到 [sourceX2)（不含）的内容到本行 [destinationX] 位置。
+     *
+     * 处理宽字符后半部分的空白填充、组合字符/字素簇集群的完整搬移，以及行内样式保留。
+     * 注意：[sourceX2] 为排他端点。
+     */
     fun copyInterval(line: TerminalRow, sourceX1: Int, sourceX2: Int, destinationX: Int) {
         if (sourceX1 >= sourceX2) return
-        var srcCol = sourceX1
-        var dstCol = destinationX
-        hasNonOneWidthOrSurrogateChars =
-            hasNonOneWidthOrSurrogateChars or line.hasNonOneWidthOrSurrogateChars
-
         val sourceChars = if (this == line) line.text.copyOf(line.usedCharCount) else line.text
         val sourceStyle = if (this == line) line.styleAndEffectBits.copyOf() else line.styleAndEffectBits
+        val sourceCounts = if (this == line) line.cellCharCounts?.copyOf() else line.cellCharCounts
 
-        val x2 = line.findStartOfColumn(sourceX2)
-        val startInSecondHalf = srcCol > 0 && line.wideDisplayCharacterStartingAt(srcCol - 1)
-        var i = if (startInSecondHalf) line.findStartOfColumn(srcCol + 1) else line.findStartOfColumn(srcCol)
-
+        var srcCol = sourceX1
+        var dstCol = destinationX
+        val startInSecondHalf = srcCol > 0 && line.isWideSecondHalf(sourceCounts, srcCol)
         if (startInSecondHalf) {
             setChar(dstCol, ' '.code, TextStyle(sourceStyle[srcCol * 2]), sourceStyle[srcCol * 2 + 1])
             dstCol++
             srcCol++
         }
 
-        var latestNonCombiningWidth = 0
-        while (i < x2) {
-            val sourceChar = sourceChars[i]
-            val codePoint: Int
-            val charCount: Int
-            if (sourceChar.isHighSurrogate() && i + 1 < x2) {
-                codePoint = Character.toCodePoint(sourceChar, sourceChars[i + 1])
-                charCount = 2
-            } else {
-                codePoint = sourceChar.code
-                charCount = 1
+        if (sourceCounts == null) {
+            for (col in srcCol until sourceX2) {
+                setChar(
+                    dstCol,
+                    sourceChars[col].code,
+                    TextStyle(sourceStyle[col * 2]),
+                    sourceStyle[col * 2 + 1]
+                )
+                dstCol++
             }
-            val w = WcWidth.width(codePoint)
-            if (w > 0) {
-                dstCol += latestNonCombiningWidth
-                srcCol += latestNonCombiningWidth
-                latestNonCombiningWidth = w
-            }
-
-            val styleValue = sourceStyle[srcCol * 2]
-            val extEffect = sourceStyle[srcCol * 2 + 1]
-
-            setChar(dstCol, codePoint, TextStyle(styleValue), extEffect)
-            i += charCount
+            version++
+            return
         }
 
-        val endCol = dstCol + latestNonCombiningWidth
-        val targetEndCol = destinationX + (sourceX2 - sourceX1)
-        if (endCol < targetEndCol) {
-            val truncSrcCol = sourceX2 - 1
-            setChar(
-                endCol,
-                ' '.code,
-                TextStyle(sourceStyle[truncSrcCol * 2]),
-                sourceStyle[truncSrcCol * 2 + 1]
-            )
+        var charIndex = 0
+        var col = 0
+        while (col < sourceX2 && col < line.columns) {
+            val charCount = sourceCounts[col]
+            val width = if (col + 1 < line.columns && sourceCounts[col + 1] == 0) 2 else 1
+            if (col >= srcCol) {
+                if (col + width <= sourceX2) {
+                    setCell(
+                        columnToSet = dstCol,
+                        sourceChars = sourceChars,
+                        charStart = charIndex,
+                        charEnd = charIndex + charCount,
+                        width = width,
+                        style = TextStyle(sourceStyle[col * 2]),
+                        extendedEffect = sourceStyle[col * 2 + 1]
+                    )
+                    dstCol += width
+                } else {
+                    val truncSrcCol = sourceX2 - 1
+                    setChar(
+                        dstCol,
+                        ' '.code,
+                        TextStyle(sourceStyle[truncSrcCol * 2]),
+                        sourceStyle[truncSrcCol * 2 + 1]
+                    )
+                    dstCol++
+                }
+            }
+            charIndex += charCount
+            col += width
         }
         version++
+    }
+
+    private fun isWideSecondHalf(counts: IntArray?, column: Int): Boolean =
+        counts != null && column in 1 until columns && counts[column] == 0
+
+    private fun ensureCellCharCounts(): IntArray {
+        return cellCharCounts ?: IntArray(columns) { 1 }.also { cellCharCounts = it }
     }
 
     /**
      * 查找指定列号对应的字符数组起始索引。
      *
-     * 当行内包含宽字符或代理项对时，列号与字符索引不是一一对应，
-     * 需要从头扫描累加显示宽度来定位。无宽字符时直接返回列号（O(1) 快速路径）。
+     * 宽字符的后半格返回该宽字符的起始索引。无宽字符时直接返回列号（O(1) 快速路径）。
      */
     private fun findStartOfColumn(column: Int): Int {
-        if (column == columns) return usedCharCount
-        if (!hasNonOneWidthOrSurrogateChars) return column
-
-        text.forEachColumn(0, usedCharCount) { i, col, _, w, charCount ->
-            if (w > 0) {
-                val currentColumn = col + w
-                if (currentColumn == column) {
-                    var newCharIndex = i + charCount
-                    while (newCharIndex < usedCharCount) {
-                        if (WcWidth.width(text, newCharIndex) <= 0) {
-                            newCharIndex += text.charCountAtSafe(newCharIndex, usedCharCount)
-                        } else {
-                            break
-                        }
-                    }
-                    return newCharIndex
-                } else if (currentColumn > column) {
-                    return i
-                }
-            }
-            true
+        if (column >= columns) return usedCharCount
+        val counts = cellCharCounts ?: return column
+        val startCol = if (column > 0 && counts[column] == 0) column - 1 else column
+        var idx = 0
+        for (c in 0 until startCol) {
+            idx += counts[c]
         }
-        return usedCharCount
+        return idx
     }
 
     /**
-     * 逐码点迭代本行内容，替代消费者手写的 `withCodePointAt + WcWidth + 列推进` 状态机。
+     * 按单元格集群迭代本行内容。
      *
      * 回调参数：
-     * - [column] 码点起始显示列；正宽码点恒 < 列数，仅零宽码点可能因前一个宽字符而 ≥ 列数
-     * - [charStart]/[charEnd] 该码点在 [textChars] 中的区间，[charEnd] 不含其后跟随的零宽码点
-     * - [width] 显示宽度，0 或负数表示零宽（组合字符），此类码点不推进列
-     * - [rawStyle]/[extEffect] 同帧成对返回：正宽码点取其起始列的槽，零宽码点进位复用所属
-     *   正宽码点的槽（写入方 [setChar] 把组合字符样式写在基字符列上，两者本就同槽）；
-     *   行首即零宽码点、无槽可复用时恒为 0/默认，与 reflow 的空行样式初值一致
+     * - [column] 单元格起始显示列；
+     * - [charStart]/[charEnd] 该单元格完整字符集群（含全部零宽修饰符/ZWJ 序列）在 [textChars] 中的区间；
+     * - [width] 单元格占用显示列数（1 或 2）；
+     * - [rawStyle]/[extEffect] 该单元格主样式与扩展特效。
      *
-     * 返回 false 可提前停止。迭代期间不得调用 [setChar]/[clear]/[copyInterval] 变异本行。
+     * 返回 false 可提前停止。迭代期间不得变异本行。
      */
-    inline fun forEachRun(
+    inline fun forEachCell(
         action: (
             column: Int,
             charStart: Int,
             charEnd: Int,
-            codePoint: Int,
             width: Int,
             rawStyle: Long,
             extEffect: Long
         ) -> Boolean
     ) {
-        var carriedStyleColumn = -1
-        text.forEachColumn(0, usedCharCount) { charStart, column, codePoint, width, charCount ->
-            val rawStyle: Long
-            val extEffect: Long
-            if (width > 0) {
-                carriedStyleColumn = column
-                rawStyle = getRawStyle(column)
-                extEffect = getExtendedEffect(column)
-            } else if (carriedStyleColumn >= 0) {
-                rawStyle = getRawStyle(carriedStyleColumn)
-                extEffect = getExtendedEffect(carriedStyleColumn)
-            } else {
-                rawStyle = 0L
-                extEffect = 0L
+        val counts = cellCharCounts
+        if (counts == null) {
+            for (col in 0 until columns) {
+                if (!action(col, col, col + 1, 1, getRawStyle(col), getExtendedEffect(col))) {
+                    return
+                }
             }
-            action(
-                column,
-                charStart,
-                charStart + charCount,
-                codePoint,
-                width,
-                rawStyle,
-                extEffect
-            )
+            return
         }
+        var col = 0
+        var charIndex = 0
+        while (col < columns) {
+            val charCount = counts[col]
+            if (charCount <= 0) {
+                col++
+                continue
+            }
+            val width = if (col + 1 < columns && counts[col + 1] == 0) 2 else 1
+            if (!action(col, charIndex, charIndex + charCount, width, getRawStyle(col), getExtendedEffect(col))) {
+                return
+            }
+            charIndex += charCount
+            col += width
+        }
+    }
+
+    /** 返回包含列 [column] 的单元格起始列（若落在宽字符后半格则回退至前一半起始列）。 */
+    fun getCellStartColAt(column: Int): Int {
+        if (column <= 0) return 0
+        val clamped = column.coerceAtMost(columns - 1)
+        val counts = cellCharCounts ?: return clamped
+        return if (counts[clamped] == 0) clamped - 1 else clamped
+    }
+
+    /** 返回紧邻在列 [column] 之前结束的单元格起始列（宽格返回 `column - 2`，窄格返回 `column - 1`）。 */
+    fun getCellStartColBefore(column: Int): Int =
+        if (column <= 0) 0 else getCellStartColAt(column - 1)
+
+    fun getCellWidth(column: Int): Int {
+        val startCol = getCellStartColAt(column)
+        val counts = cellCharCounts ?: return 1
+        return if (startCol + 1 < columns && counts[startCol + 1] == 0) 2 else 1
+    }
+
+    fun getCellFirstCodePoint(column: Int): Int {
+        val start = startCharOfColumn(column)
+        if (start >= usedCharCount) return ' '.code
+        return Character.codePointAt(text, start, usedCharCount)
+    }
+
+    fun getCellLastCodePoint(column: Int): Int {
+        val start = startCharOfColumn(column)
+        val end = endCharOfColumn(column)
+        if (start >= end) return ' '.code
+        return Character.codePointBefore(text, end, start)
+    }
+
+    fun getCellCodePointCount(column: Int): Int {
+        val start = startCharOfColumn(column)
+        val end = endCharOfColumn(column)
+        if (start >= end) return 0
+        return Character.codePointCount(text, start, end - start)
+    }
+
+    fun copyCellChars(column: Int): CharArray {
+        val start = startCharOfColumn(column)
+        val end = endCharOfColumn(column)
+        return text.copyOfRange(start, end)
     }
 
     /**
@@ -295,10 +349,10 @@ internal class TerminalRow(
      */
     fun endCharOfColumn(column: Int): Int {
         if (column >= columns) return usedCharCount
-        val start = startCharOfColumn(column)
-        val next = findStartOfColumn(column + 1)
-        val end = if (next > start) next else findStartOfColumn(column + 2)
-        return end.coerceAtMost(usedCharCount)
+        val counts = cellCharCounts ?: return (column + 1).coerceAtMost(usedCharCount)
+        val startCol = getCellStartColAt(column)
+        val start = findStartOfColumn(startCol)
+        return (start + counts[startCol]).coerceAtMost(usedCharCount)
     }
 
     /**
@@ -322,26 +376,29 @@ internal class TerminalRow(
      */
     fun snapToColumn(column: Int, align: SnapAlign): Int {
         if (!hasNonOneWidthOrSurrogateChars) return column
-
-        text.forEachColumn(0, usedCharCount) { _, col, codePoint, width, _ ->
-            if (codePoint == 0) return@forEachColumn false
+        val counts = cellCharCounts ?: return column
+        var col = 0
+        var charIndex = 0
+        while (col < columns) {
+            val charCount = counts[col]
+            if (charCount <= 0) {
+                col++
+                continue
+            }
+            val width = if (col + 1 < columns && counts[col + 1] == 0) 2 else 1
+            if (charIndex < usedCharCount && text[charIndex].code == 0) return column
             if (column in col until col + width) {
                 return if (align == SnapAlign.Start) col else col + width - 1
             }
-            true
+            charIndex += charCount
+            col += width
         }
         return column
     }
 
     private fun wideDisplayCharacterStartingAt(column: Int): Boolean {
-        text.forEachColumn(0, usedCharCount) { _, col, _, w, _ ->
-            if (w > 0) {
-                if (col == column && w == 2) return true
-                if (col + w > column) return false
-            }
-            true
-        }
-        return false
+        val counts = cellCharCounts ?: return false
+        return column in 0 until (columns - 1) && counts[column] > 0 && counts[column + 1] == 0
     }
 
     fun clear(style: TextStyle, extendedEffect: Long = 0L) {
@@ -352,8 +409,10 @@ internal class TerminalRow(
             styleAndEffectBits[i * 2 + 1] = ext
         }
         usedCharCount = columns
+        cellCharCounts = null
         hasNonOneWidthOrSurrogateChars = false
         lineWrap = false
+        trailingWrapPadding = false
         // 扩展槽中下划线位关闭时不可见的残留（形状已归零、颜色独立）不影响空白判定
         isBlank = (style.foreColor == TextStyle.COLOR_INDEX_FOREGROUND) &&
                   (style.backColor == TextStyle.COLOR_INDEX_BACKGROUND) &&
@@ -372,24 +431,16 @@ internal class TerminalRow(
      * 如果目标位置被宽字符占据（写入点在其后半部分），会先拆分宽字符。
      */
     fun setChar(columnToSet: Int, codePoint: Int, style: TextStyle, extendedEffect: Long = 0L) {
-        var columnToSet = columnToSet
-        require(!(columnToSet < 0 || columnToSet >= columns)) { "TerminalRow.setChar(): columnToSet=$columnToSet, codePoint=$codePoint, style=${style.value}" }
+        require(columnToSet in 0 until columns) { "TerminalRow.setChar(): columnToSet=$columnToSet, codePoint=$codePoint, style=${style.value}" }
 
         val ext = normalizeExtendedEffect(style.value, extendedEffect)
-
-        if (codePoint != ' '.code) {
-            isBlank = false
-        } else if (style.foreColor != TextStyle.COLOR_INDEX_FOREGROUND ||
-                   style.backColor != TextStyle.COLOR_INDEX_BACKGROUND ||
-                   style.effect != 0) {
-            isBlank = false
-        }
+        markNonBlankIfNeeded(codePoint, style)
 
         val isAsciiPrintable = codePoint in 0x20..0x7E
-        val newCodePointDisplayWidth = if(isAsciiPrintable) 1 else WcWidth.width(codePoint)
+        val newCodePointDisplayWidth = if (isAsciiPrintable) 1 else WcWidth.width(codePoint)
 
         if (!hasNonOneWidthOrSurrogateChars) {
-            // 快速路径：全为 ASCII 单宽字符，直接替换
+            if (columnToSet == columns - 1) trailingWrapPadding = false
             if (isAsciiPrintable) {
                 styleAndEffectBits[columnToSet * 2] = style.value
                 styleAndEffectBits[columnToSet * 2 + 1] = ext
@@ -400,6 +451,7 @@ internal class TerminalRow(
             }
             if (codePoint >= Character.MIN_SUPPLEMENTARY_CODE_POINT || newCodePointDisplayWidth != 1) {
                 hasNonOneWidthOrSurrogateChars = true
+                ensureCellCharCounts()
             } else {
                 styleAndEffectBits[columnToSet * 2] = style.value
                 styleAndEffectBits[columnToSet * 2 + 1] = ext
@@ -409,73 +461,188 @@ internal class TerminalRow(
             }
         }
 
-        val newIsCombining = newCodePointDisplayWidth <= 0
-        val wasExtraColForWideChar =
-            (columnToSet > 0) && wideDisplayCharacterStartingAt(columnToSet - 1)
-
-        if (newIsCombining) {
-            // 组合字符：合并到前一列的字符上
-            if (wasExtraColForWideChar) columnToSet--
-        } else {
-            // 普通/宽字符：如果目标在宽字符后半列，先拆分宽字符
-            if (wasExtraColForWideChar) setChar(columnToSet - 1, ' '.code, style, ext)
-            val overwritingWideCharInNextColumn =
-                newCodePointDisplayWidth == 2 && wideDisplayCharacterStartingAt(columnToSet + 1)
-            if (overwritingWideCharInNextColumn) setChar(columnToSet + 1, ' '.code, style, ext)
+        if (newCodePointDisplayWidth <= 0) {
+            appendCodePointToCell(columnToSet, codePoint, expandToWide = false, style = style, extendedEffect = ext)
+            return
         }
 
-        // 在 columnToSet 调整（组合字符合并）之后写入样式，确保写入正确的列
-        styleAndEffectBits[columnToSet * 2] = style.value
-        styleAndEffectBits[columnToSet * 2 + 1] = ext
-
-        var text = text
-        val oldStartOfColumnIndex = findStartOfColumn(columnToSet)
-        val oldCodePointDisplayWidth = WcWidth.width(text, oldStartOfColumnIndex)
-
-        val oldCharactersUsedForColumn = calculateOldCharactersUsed(columnToSet, oldStartOfColumnIndex, oldCodePointDisplayWidth)
-
-        if (newIsCombining) {
-            val combiningCharsCount = WcWidth.zeroWidthCharsCount(
-                this@TerminalRow.text,
-                oldStartOfColumnIndex,
-                oldStartOfColumnIndex + oldCharactersUsedForColumn
-            )
-            if (combiningCharsCount >= MAX_COMBINING_CHARACTERS_PER_COLUMN) return
-        }
-
-        var newCharactersUsedForColumn = Character.charCount(codePoint)
-        if (newIsCombining) {
-            newCharactersUsedForColumn += oldCharactersUsedForColumn
-        }
-
-        val oldNextColumnIndex = oldStartOfColumnIndex + oldCharactersUsedForColumn
-        val newNextColumnIndex = oldStartOfColumnIndex + newCharactersUsedForColumn
-
-        text = shiftTextBuffer(text, oldNextColumnIndex, newNextColumnIndex, newCharactersUsedForColumn - oldCharactersUsedForColumn)
-        usedCharCount += newCharactersUsedForColumn - oldCharactersUsedForColumn
-
-        Character.toChars(
-            codePoint,
-            text,
-            oldStartOfColumnIndex + (if (newIsCombining) oldCharactersUsedForColumn else 0)
-        )
-
-        handleWidthChange(columnToSet, oldCodePointDisplayWidth, newCodePointDisplayWidth, newNextColumnIndex, text, style, ext)
-        version++
+        val scratch = charArrayOf('\u0000', '\u0000')
+        val charCount = Character.toChars(codePoint, scratch, 0)
+        replaceCell(columnToSet, scratch, 0, charCount, newCodePointDisplayWidth, style, ext)
     }
 
     /**
-     * 计算旧字符占用的 char 数量。
-     *
-     * 宽字符在行尾时可能没有完整的后半列，需用 mSpaceUsed 作为边界。
+     * 原子写入完整单元格字符集群（包含基字符与附加修饰符/ZWJ 序列）及显示列宽。
      */
-    private fun calculateOldCharactersUsed(columnToSet: Int, oldStartOfColumnIndex: Int, oldCodePointDisplayWidth: Int): Int {
-        return if (columnToSet + oldCodePointDisplayWidth < columns) {
-            val oldEndOfColumnIndex = findStartOfColumn(columnToSet + oldCodePointDisplayWidth)
-            oldEndOfColumnIndex - oldStartOfColumnIndex
-        } else {
-            usedCharCount - oldStartOfColumnIndex
+    fun setCell(
+        columnToSet: Int,
+        sourceChars: CharArray,
+        charStart: Int,
+        charEnd: Int,
+        width: Int,
+        style: TextStyle,
+        extendedEffect: Long = 0L
+    ) {
+        require(columnToSet in 0 until columns) { "TerminalRow.setCell(): columnToSet=$columnToSet" }
+        val ext = normalizeExtendedEffect(style.value, extendedEffect)
+        val count = charEnd - charStart
+        if (count == 1 && width == 1 && !hasNonOneWidthOrSurrogateChars) {
+            setChar(columnToSet, sourceChars[charStart].code, style, ext)
+            return
         }
+        hasNonOneWidthOrSurrogateChars = true
+        ensureCellCharCounts()
+        if (count != 1) isBlank = false else markNonBlankIfNeeded(sourceChars[charStart].code, style)
+        replaceCell(columnToSet, sourceChars, charStart, count, width, style, ext)
+    }
+
+    /**
+     * 将 [codePoint] 追加合并到 [column] 所属的单元格集群中；若 [expandToWide] 为 true 且该格当前为单宽，
+     * 则就地吸收右侧相邻格扩展为 2 列宽。
+     */
+    fun appendCodePointToCell(
+        column: Int,
+        codePoint: Int,
+        expandToWide: Boolean,
+        style: TextStyle,
+        extendedEffect: Long = 0L
+    ) {
+        require(column in 0 until columns) { "TerminalRow.appendCodePointToCell(): column=$column" }
+        val ext = normalizeExtendedEffect(style.value, extendedEffect)
+        hasNonOneWidthOrSurrogateChars = true
+        val counts = ensureCellCharCounts()
+        markNonBlankIfNeeded(codePoint, style)
+
+        val cellCol = getCellStartColAt(column)
+        styleAndEffectBits[cellCol * 2] = style.value
+        styleAndEffectBits[cellCol * 2 + 1] = ext
+
+        val oldCharCount = counts[cellCol]
+        val oldStartIdx = findStartOfColumn(cellCol)
+        if (Character.codePointCount(text, oldStartIdx, oldCharCount) >= MAX_CELL_CODEPOINTS) {
+            version++
+            return
+        }
+
+        val cpChars = Character.charCount(codePoint)
+        val oldWidth = if (cellCol + 1 < columns && counts[cellCol + 1] == 0) 2 else 1
+
+        if (expandToWide && oldWidth == 1 && cellCol + 1 < columns) {
+            if (wideDisplayCharacterStartingAt(cellCol + 1)) {
+                val spaceScratch = charArrayOf(' ')
+                replaceCell(cellCol + 1, spaceScratch, 0, 1, 1, style, ext)
+            }
+            val startIdx = findStartOfColumn(cellCol)
+            val nextCharCount = counts[cellCol + 1]
+            val currentText = shiftTextBuffer(
+                this.text,
+                startIdx + oldCharCount + nextCharCount,
+                startIdx + oldCharCount + cpChars,
+                cpChars - nextCharCount
+            )
+            usedCharCount += cpChars - nextCharCount
+            Character.toChars(codePoint, currentText, startIdx + oldCharCount)
+            counts[cellCol] = oldCharCount + cpChars
+            counts[cellCol + 1] = 0
+            styleAndEffectBits[(cellCol + 1) * 2] = style.value
+            styleAndEffectBits[(cellCol + 1) * 2 + 1] = ext
+            if (cellCol + 2 >= columns) trailingWrapPadding = false
+        } else {
+            val currentText = shiftTextBuffer(
+                this.text,
+                oldStartIdx + oldCharCount,
+                oldStartIdx + oldCharCount + cpChars,
+                cpChars
+            )
+            usedCharCount += cpChars
+            Character.toChars(codePoint, currentText, oldStartIdx + oldCharCount)
+            counts[cellCol] = oldCharCount + cpChars
+        }
+        version++
+    }
+
+    private fun markNonBlankIfNeeded(codePoint: Int, style: TextStyle) {
+        if (codePoint != ' '.code) {
+            isBlank = false
+        } else if (style.foreColor != TextStyle.COLOR_INDEX_FOREGROUND ||
+            style.backColor != TextStyle.COLOR_INDEX_BACKGROUND ||
+            style.effect != 0
+        ) {
+            isBlank = false
+        }
+    }
+
+    private fun replaceCell(
+        columnToSet: Int,
+        src: CharArray,
+        srcStart: Int,
+        srcCount: Int,
+        requestedWidth: Int,
+        style: TextStyle,
+        ext: Long
+    ) {
+        var source = src
+        var sourceStart = srcStart
+        var sourceCount = srcCount
+        var newWidth = requestedWidth
+
+        if (newWidth == 2 && columnToSet == columns - 1) {
+            source = SPACE_CHAR_ARRAY
+            sourceStart = 0
+            sourceCount = 1
+            newWidth = 1
+        }
+
+        if (columnToSet > 0 && wideDisplayCharacterStartingAt(columnToSet - 1)) {
+            replaceCell(columnToSet - 1, SPACE_CHAR_ARRAY, 0, 1, 1, style, ext)
+        }
+        if (newWidth == 2 && wideDisplayCharacterStartingAt(columnToSet + 1)) {
+            replaceCell(columnToSet + 1, SPACE_CHAR_ARRAY, 0, 1, 1, style, ext)
+        }
+
+        styleAndEffectBits[columnToSet * 2] = style.value
+        styleAndEffectBits[columnToSet * 2 + 1] = ext
+
+        val counts = ensureCellCharCounts()
+        val oldWidth = if (columnToSet + 1 < columns && counts[columnToSet + 1] == 0) 2 else 1
+        val oldCharCount = counts[columnToSet]
+        val startIdx = findStartOfColumn(columnToSet)
+
+        when {
+            oldWidth == newWidth -> {
+                val delta = sourceCount - oldCharCount
+                val dst = shiftTextBuffer(this.text, startIdx + oldCharCount, startIdx + sourceCount, delta)
+                usedCharCount += delta
+                source.copyInto(dst, destinationOffset = startIdx, startIndex = sourceStart, endIndex = sourceStart + sourceCount)
+                counts[columnToSet] = sourceCount
+            }
+            oldWidth == 2 && newWidth == 1 -> {
+                val targetChars = sourceCount + 1
+                val delta = targetChars - oldCharCount
+                val dst = shiftTextBuffer(this.text, startIdx + oldCharCount, startIdx + targetChars, delta)
+                usedCharCount += delta
+                source.copyInto(dst, destinationOffset = startIdx, startIndex = sourceStart, endIndex = sourceStart + sourceCount)
+                dst[startIdx + sourceCount] = ' '
+                counts[columnToSet] = sourceCount
+                counts[columnToSet + 1] = 1
+                styleAndEffectBits[(columnToSet + 1) * 2] = style.value
+                styleAndEffectBits[(columnToSet + 1) * 2 + 1] = ext
+            }
+            else -> {
+                val nextCharCount = counts[columnToSet + 1]
+                val replacedChars = oldCharCount + nextCharCount
+                val delta = sourceCount - replacedChars
+                val dst = shiftTextBuffer(this.text, startIdx + replacedChars, startIdx + sourceCount, delta)
+                usedCharCount += delta
+                source.copyInto(dst, destinationOffset = startIdx, startIndex = sourceStart, endIndex = sourceStart + sourceCount)
+                counts[columnToSet] = sourceCount
+                counts[columnToSet + 1] = 0
+                styleAndEffectBits[(columnToSet + 1) * 2] = style.value
+                styleAndEffectBits[(columnToSet + 1) * 2 + 1] = ext
+            }
+        }
+        if (columnToSet + newWidth >= columns) trailingWrapPadding = false
+        version++
     }
 
     private fun shiftTextBuffer(text: CharArray, oldNextColumnIndex: Int, newNextColumnIndex: Int, charDifference: Int): CharArray {
@@ -483,7 +650,7 @@ internal class TerminalRow(
         if (charDifference > 0) {
             val oldCharactersAfterColumn = usedCharCount - oldNextColumnIndex
             if (usedCharCount + charDifference > text.size) {
-                val newText = CharArray(text.size + columns)
+                val newText = CharArray(text.size + max(columns, charDifference))
                 text.copyInto(destination = newText, endIndex = oldNextColumnIndex)
                 text.copyInto(
                     destination = newText,
@@ -510,85 +677,6 @@ internal class TerminalRow(
             )
         }
         return text
-    }
-
-    /**
-     * 当新旧字符宽度不同时，调整后续内容的缓冲区。
-     *
-     * 宽→窄：在新字符后插入一个空格占位
-     * 窄→宽：删除原后半列的字符
-     */
-    private fun handleWidthChange(columnToSet: Int, oldCodePointDisplayWidth: Int, newCodePointDisplayWidth: Int, newNextColumnIndex: Int, text: CharArray, style: TextStyle, extendedEffect: Long) {
-        var text = text
-        if (oldCodePointDisplayWidth == 2 && newCodePointDisplayWidth == 1) {
-            // 根源：宽字符起始于行末列时，其后半格在行外，columnToSet+1 即越出行界。
-            // 此时写 mStyle[(columnToSet+1)*2] 会超出 mStyle(mColumns*2) 的最大索引，
-            // 且行末没有后半格内容需要保留，右移插入占位空格并 ++usedCharCount 会产出幽灵列。
-            // 故行末只保留 setChar 已写入的单列降级结果，整个后半格调整跳过。
-            if (columnToSet + 1 < columns) {
-                if (usedCharCount + 1 > text.size) {
-                    val newText = CharArray(text.size + columns)
-                    text.copyInto(destination = newText, endIndex = newNextColumnIndex)
-                    text.copyInto(
-                        destination = newText,
-                        destinationOffset = newNextColumnIndex + 1,
-                        startIndex = newNextColumnIndex,
-                        endIndex = usedCharCount
-                    )
-                    text = newText
-                    this@TerminalRow.text = text
-                } else {
-                    text.copyInto(
-                        destination = text,
-                        destinationOffset = newNextColumnIndex + 1,
-                        startIndex = newNextColumnIndex,
-                        endIndex = usedCharCount
-                    )
-                }
-                text[newNextColumnIndex] = ' '
-                styleAndEffectBits[(columnToSet + 1) * 2] = style.value
-                styleAndEffectBits[(columnToSet + 1) * 2 + 1] = extendedEffect
-                ++usedCharCount
-            }
-        } else if (oldCodePointDisplayWidth == 1 && newCodePointDisplayWidth == 2) {
-            if (columnToSet == columns - 1) {
-                val newCharCount =
-                    if (newNextColumnIndex >= 2 &&
-                        text[newNextColumnIndex - 1].isLowSurrogate() &&
-                        text[newNextColumnIndex - 2].isHighSurrogate()
-                    ) 2 else 1
-                val cellStart = newNextColumnIndex - newCharCount
-                text[cellStart] = ' '
-                if (newCharCount == 2) {
-                    if (newNextColumnIndex < usedCharCount) {
-                        text.copyInto(
-                            destination = text,
-                            destinationOffset = cellStart + 1,
-                            startIndex = newNextColumnIndex,
-                            endIndex = usedCharCount
-                        )
-                    }
-                    usedCharCount--
-                }
-            } else if (columnToSet == columns - 2) {
-                usedCharCount = newNextColumnIndex
-            } else if (newNextColumnIndex < usedCharCount) {
-                var newNextNextColumnIndex =
-                    newNextColumnIndex + text.charCountAtSafe(newNextColumnIndex, usedCharCount)
-                while (newNextNextColumnIndex < usedCharCount && WcWidth.width(text, newNextNextColumnIndex) <= 0) {
-                    newNextNextColumnIndex += text.charCountAtSafe(newNextNextColumnIndex, usedCharCount)
-                }
-                val nextLen = newNextNextColumnIndex - newNextColumnIndex
-
-                text.copyInto(
-                    destination = text,
-                    destinationOffset = newNextColumnIndex,
-                    startIndex = newNextNextColumnIndex,
-                    endIndex = usedCharCount
-                )
-                usedCharCount -= nextLen
-            }
-        }
     }
 
     inline fun getStyle(column: Int): TextStyle {
@@ -652,6 +740,7 @@ internal class TerminalRow(
     companion object {
         private val nextRowId = AtomicLong(0L)
         private const val SPARE_CAPACITY_FACTOR = 1.5f
-        private const val MAX_COMBINING_CHARACTERS_PER_COLUMN = 15
+        private const val MAX_CELL_CODEPOINTS = 32
+        private val SPACE_CHAR_ARRAY = charArrayOf(' ')
     }
 }

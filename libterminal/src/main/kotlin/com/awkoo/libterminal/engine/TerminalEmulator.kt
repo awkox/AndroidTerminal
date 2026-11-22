@@ -76,6 +76,13 @@ internal class TerminalEmulator(
     var cellHeightPixels = DEFAULT_CELL_HEIGHT_PIXELS
 
     private var aboutToAutoWrap = false
+    private var lastClusterRow = -1
+    private var lastClusterCol = -1
+
+    private fun invalidateLastCluster() {
+        lastClusterRow = -1
+        lastClusterCol = -1
+    }
 
     /**
      * 光标行/列的合法域由生产者保证：协议路径各自按边距推导，
@@ -87,6 +94,7 @@ internal class TerminalEmulator(
         private set(row) {
             _cursorRow = row
             aboutToAutoWrap = false
+            invalidateLastCluster()
         }
 
     var cursorCol: Int
@@ -94,6 +102,7 @@ internal class TerminalEmulator(
         private set(col) {
             _cursorCol = col
             aboutToAutoWrap = false
+            invalidateLastCluster()
         }
 
     /** 光标列 [col] 的包含左边界：已越过左边距时左边距失效，退回 0。 */
@@ -240,6 +249,7 @@ internal class TerminalEmulator(
         bottomMargin = rows
         rightMargin = columns
         aboutToAutoWrap = false
+        invalidateLastCluster()
         lastPrintedCodePoint = -1
         rendition.reset()
         setDefaultTabStops()
@@ -462,7 +472,10 @@ internal class TerminalEmulator(
         when (state) {
             EscapeState.ESC -> handleEscStandard(command)
             EscapeState.POUND -> {
-                if (command == '8'.code) screen.blockSet(0, 0, columns, rows, 'E'.code, rendition.style)
+                if (command == '8'.code) {
+                    invalidateLastCluster()
+                    screen.blockSet(0, 0, columns, rows, 'E'.code, rendition.style)
+                }
             }
 
             EscapeState.SELECT_LEFT_PAREN -> g0IsLineDrawing = (command == '0'.code)
@@ -634,6 +647,7 @@ internal class TerminalEmulator(
 
             'X' -> {
                 aboutToAutoWrap = false
+                invalidateLastCluster()
                 screen.blockSet(
                     _cursorCol,
                     _cursorRow,
@@ -712,6 +726,7 @@ internal class TerminalEmulator(
             'u' -> restoreCursor()
             '@' -> if (_cursorCol in leftMargin until rightMargin) {
                 aboutToAutoWrap = false
+                invalidateLastCluster()
                 val columnsAfterCursor = rightMargin - _cursorCol
                 val spacesToInsert = min(AnsiEscapeParser.getArg(args, 0, 1, true), columnsAfterCursor)
                 screen.insertColumns(_cursorCol, _cursorRow, spacesToInsert, 1, rightMargin, rendition.eraseFillStyle)
@@ -790,6 +805,7 @@ internal class TerminalEmulator(
     private fun handleCsiP(args: IntArray) {
         if (_cursorCol !in leftMargin until rightMargin) return
         aboutToAutoWrap = false
+        invalidateLastCluster()
         val cellsAfterCursor = rightMargin - _cursorCol
         val cellsToDelete = min(AnsiEscapeParser.getArg(args, 0, 1, true), cellsAfterCursor)
         screen.deleteColumns(_cursorCol, _cursorRow, cellsToDelete, 1, rightMargin, rendition.eraseFillStyle)
@@ -821,6 +837,7 @@ internal class TerminalEmulator(
         when (b.toChar()) {
             'J', 'K' -> {
                 aboutToAutoWrap = false
+                invalidateLastCluster()
                 val fillChar = ' '.code
                 var startCol = -1
                 var startRow = -1
@@ -894,6 +911,7 @@ internal class TerminalEmulator(
     private fun handleCsiDollar(b: Int, args: IntArray, argCount: Int) {
         when (b.toChar()) {
             'v' -> {
+                invalidateLastCluster()
                 val topSource = (AnsiEscapeParser.getArg(args, 0, 1, true) - 1 + originTop).coerceAtMost(rows)
                 val leftSource = (AnsiEscapeParser.getArg(args, 1, 1, true) - 1 + originLeft).coerceAtMost(columns)
                 val bottomSource = (AnsiEscapeParser.getArg(args, 2, rows, true) + originTop).coerceIn(topSource, rows)
@@ -920,6 +938,7 @@ internal class TerminalEmulator(
     }
 
     private fun handleCsiDollarErase(b: Int, args: IntArray) {
+        invalidateLastCluster()
         val erase = b != 'x'.code
         val selective = b == '{'.code
         val keepVisualAttributes = erase && selective
@@ -1009,6 +1028,7 @@ internal class TerminalEmulator(
             '}'.code, '~'.code -> {
                 if (!isCursorWithinMargins()) return
                 aboutToAutoWrap = false
+                invalidateLastCluster()
                 val columnsAfterCursor = rightMargin - _cursorCol
                 val columnsToChange = min(AnsiEscapeParser.getArg(args, 0, 1, true), columnsAfterCursor)
                 val marginHeight = bottomMargin - topMargin
@@ -1118,22 +1138,119 @@ internal class TerminalEmulator(
             cp = mapSpecialCharacters(cp)
         }
 
-        // 自动换行：行尾 + (预备换行 + 普通字符) 或 宽字符 → 换行
         val autoWrap = isDecsetInternalBitSet(DECSET_BIT_AUTOWRAP)
+        val graphemeClustering = isDecsetInternalBitSet(DECSET_BIT_GRAPHEME_CLUSTERING)
         val displayWidth = WcWidth.width(cp)
-        val cursorInLastColumn = _cursorCol == rightEdgeExclusive(_cursorCol) - 1
 
+        if (graphemeClustering && lastClusterRow == _cursorRow && lastClusterCol in 0 until columns) {
+            val prevWidth = screen.getCellWidth(_cursorRow, lastClusterCol)
+            val firstCp = screen.getCellFirstCodePoint(_cursorRow, lastClusterCol)
+            val lastCp = screen.getCellLastCodePoint(_cursorRow, lastClusterCol)
+            val cellCodePoints = screen.getCellCodePointCount(_cursorRow, lastClusterCol)
+            if (shouldMergeIntoLastCluster(cp, displayWidth, firstCp, lastCp, cellCodePoints)) {
+                val expandToWide = shouldExpandCellToWide(cp, prevWidth, firstCp, lastCp, cellCodePoints)
+                val existingStyle = screen.getStyleAt(lastClusterRow, lastClusterCol)
+                val existingExt = screen.getExtendedEffectAt(lastClusterRow, lastClusterCol)
+                val rightEdge = rightEdgeExclusive(lastClusterCol)
+                val leftEdge = leftEdgeInclusive(lastClusterCol)
+                val canExpandHere = expandToWide && lastClusterCol < rightEdge - 1
+                val canWrapAndExpand = expandToWide &&
+                    lastClusterCol == rightEdge - 1 &&
+                    autoWrap &&
+                    (rightEdge - leftEdge) >= 2
+
+                if (canWrapAndExpand) {
+                    val existingChars = screen.copyCellChars(lastClusterRow, lastClusterCol)
+                    val cpChars = Character.toChars(cp)
+                    val combined = CharArray(existingChars.size + cpChars.size)
+                    existingChars.copyInto(combined, 0)
+                    cpChars.copyInto(combined, existingChars.size)
+
+                    screen.setChar(lastClusterCol, lastClusterRow, ' '.code, rendition.eraseFillStyle)
+                    screen.setLineWrap(lastClusterRow, hasTrailingWrapPadding = lastClusterCol == columns - 1)
+                    this.cursorCol = leftMargin
+                    if (_cursorRow + 1 < bottomMargin) this.cursorRow++ else scrollDownOneLine()
+
+                    val targetRow = _cursorRow
+                    val targetCol = _cursorCol
+                    if (isInsertMode && targetCol + 2 < rightMargin) {
+                        screen.blockCopy(
+                            targetCol,
+                            targetRow,
+                            rightMargin - (targetCol + 2),
+                            1,
+                            targetCol + 2,
+                            targetRow
+                        )
+                    }
+                    screen.setCell(targetCol, targetRow, combined, 0, combined.size, 2, existingStyle, existingExt)
+                    val newRightEdge = rightEdgeExclusive(targetCol)
+                    this.cursorCol = min(targetCol + 2, newRightEdge - 1)
+                    aboutToAutoWrap = targetCol == newRightEdge - 2
+                    lastClusterRow = targetRow
+                    lastClusterCol = targetCol
+                    return
+                }
+
+                if (canExpandHere && isInsertMode && _cursorCol + 1 < rightMargin) {
+                    screen.blockCopy(
+                        _cursorCol,
+                        _cursorRow,
+                        rightMargin - (_cursorCol + 1),
+                        1,
+                        _cursorCol + 1,
+                        _cursorRow
+                    )
+                }
+
+                val mergedCol = lastClusterCol
+                val mergedRow = lastClusterRow
+                screen.appendCodePointToCell(
+                    mergedCol,
+                    mergedRow,
+                    cp,
+                    expandToWide = canExpandHere,
+                    style = existingStyle,
+                    extendedEffect = existingExt
+                )
+                if (canExpandHere) {
+                    this.cursorCol = min(mergedCol + 2, rightEdge - 1)
+                    aboutToAutoWrap = autoWrap && (mergedCol == rightEdge - 2)
+                }
+                lastClusterRow = mergedRow
+                lastClusterCol = mergedCol
+                return
+            }
+        }
+
+        if (displayWidth <= 0) {
+            val offsetDueToCombiningChar =
+                if (_cursorCol > 0 && !aboutToAutoWrap) 1 else 0
+            screen.setChar(
+                _cursorCol - offsetDueToCombiningChar,
+                _cursorRow,
+                cp,
+                rendition.style,
+                rendition.currentExtendedEffect
+            )
+            invalidateLastCluster()
+            return
+        }
+
+        val cursorInLastColumn = _cursorCol == rightEdgeExclusive(_cursorCol) - 1
         if (autoWrap) {
             if (cursorInLastColumn && ((aboutToAutoWrap && displayWidth == 1) || displayWidth == 2)) {
-                screen.setLineWrap(_cursorRow)
+                val skippedPad = !aboutToAutoWrap && displayWidth == 2 && _cursorCol == columns - 1
+                screen.setLineWrap(_cursorRow, hasTrailingWrapPadding = skippedPad)
                 this.cursorCol = leftMargin
                 if (_cursorRow + 1 < bottomMargin) this.cursorRow++ else scrollDownOneLine()
             }
         } else if (cursorInLastColumn && displayWidth == 2) {
+            invalidateLastCluster()
             return
         }
 
-        if (isInsertMode && displayWidth > 0) {
+        if (isInsertMode) {
             val destCol = _cursorCol + displayWidth
             if (destCol < rightMargin) screen.blockCopy(
                 _cursorCol,
@@ -1145,10 +1262,8 @@ internal class TerminalEmulator(
             )
         }
 
-        val offsetDueToCombiningChar =
-            (if (displayWidth <= 0 && _cursorCol > 0 && !aboutToAutoWrap) 1 else 0)
         screen.setChar(
-            _cursorCol - offsetDueToCombiningChar,
+            _cursorCol,
             _cursorRow,
             cp,
             rendition.style,
@@ -1156,19 +1271,61 @@ internal class TerminalEmulator(
         )
 
         val previousCol = _cursorCol
-        val wasAboutToAutoWrap = aboutToAutoWrap
-        // cursorCol setter 是 mAboutToAutoWrap 唯一清零属主：必须先经 setter 写列、再在此重建标志。
+        val writtenRow = _cursorRow
+        // cursorCol setter 是 aboutToAutoWrap 和 lastCluster 唯一清零属主：必须先经 setter 写列、再在此重建标志。
         // 顺序不可调换，否则换行标志被写入即清，自动换行失效（Ctrl+R 光标倒退覆盖的根因）。
         this.cursorCol = min(previousCol + displayWidth, rightEdgeExclusive(previousCol) - 1)
-        aboutToAutoWrap = when {
-            displayWidth <= 0 -> wasAboutToAutoWrap
-            autoWrap -> previousCol == rightEdgeExclusive(previousCol) - displayWidth
-            else -> false
-        }
+        aboutToAutoWrap = autoWrap && (previousCol == rightEdgeExclusive(previousCol) - displayWidth)
+        lastClusterRow = writtenRow
+        lastClusterCol = previousCol
+    }
+
+    private fun shouldMergeIntoLastCluster(
+        cp: Int,
+        displayWidth: Int,
+        firstCp: Int,
+        lastCp: Int,
+        cellCodePoints: Int
+    ): Boolean {
+        if (displayWidth <= 0) return true
+        if (WcWidth.isEmojiModifier(cp) &&
+            (WcWidth.isEmojiOrPictographic(firstCp) || WcWidth.isEmojiOrPictographic(lastCp))
+        ) return true
+        if (WcWidth.isZeroWidthJoiner(lastCp) && WcWidth.isEmojiOrPictographic(cp)) return true
+        if (WcWidth.isRegionalIndicator(cp) &&
+            WcWidth.isRegionalIndicator(firstCp) &&
+            cellCodePoints == 1
+        ) return true
+        return false
+    }
+
+    private fun shouldExpandCellToWide(
+        cp: Int,
+        prevWidth: Int,
+        firstCp: Int,
+        lastCp: Int,
+        cellCodePoints: Int
+    ): Boolean {
+        if (prevWidth != 1) return false
+        if (WcWidth.isVariationSelector16(cp) &&
+            !WcWidth.isVariationSelector15(lastCp) &&
+            WcWidth.isVs16WideningCandidate(firstCp)
+        ) return true
+        if (WcWidth.isCombiningEnclosingKeycap(cp) && WcWidth.isKeycapBase(firstCp)) return true
+        if (WcWidth.isEmojiModifier(cp) &&
+            (WcWidth.isEmojiOrPictographic(firstCp) || WcWidth.isEmojiOrPictographic(lastCp))
+        ) return true
+        if (WcWidth.isZeroWidthJoiner(lastCp) && WcWidth.isEmojiOrPictographic(cp)) return true
+        if (WcWidth.isRegionalIndicator(cp) &&
+            WcWidth.isRegionalIndicator(firstCp) &&
+            cellCodePoints == 1
+        ) return true
+        return false
     }
 
     private fun doLinefeed() {
         aboutToAutoWrap = false
+        invalidateLastCluster()
         if (_cursorRow >= bottomMargin) {
             if (_cursorRow != rows - 1) this.cursorRow = _cursorRow + 1
         } else {
@@ -1178,6 +1335,7 @@ internal class TerminalEmulator(
     }
 
     private fun scrollDownOneLine() {
+        invalidateLastCluster()
         scrollCounter.incrementAndGet()
         screen.scrollRegionOneLine(
             topMargin,
@@ -1209,6 +1367,7 @@ internal class TerminalEmulator(
             }
 
             1048 -> if (setting) saveCursor() else restoreCursor()
+            2027 -> invalidateLastCluster()
             47, 1047, 1049 -> {
                 val newScreen = if (setting) altBuffer else mainBuffer
                 if (newScreen != this.screen) {
@@ -1227,6 +1386,7 @@ internal class TerminalEmulator(
                     }
                     this.screen = newScreen
                     aboutToAutoWrap = false
+                    invalidateLastCluster()
                     if (setting) {
                         if (resized) resize(columns, rows, cellWidthPixels, cellHeightPixels)
                     } else {
@@ -1273,8 +1433,10 @@ internal class TerminalEmulator(
         return rightEdge - 1
     }
 
-    private fun blockClear(sx: Int, sy: Int, w: Int, h: Int = 1) =
+    private fun blockClear(sx: Int, sy: Int, w: Int, h: Int = 1) {
+        invalidateLastCluster()
         screen.blockSet(sx, sy, w, h, ' '.code, rendition.eraseFillStyle)
+    }
 
     /** 取走并清零滚动增量。 */
     internal fun takeScrollCounter(): Int = scrollCounter.getAndSet(0)

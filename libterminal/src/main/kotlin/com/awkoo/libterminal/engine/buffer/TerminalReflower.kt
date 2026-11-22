@@ -85,18 +85,24 @@ internal object TerminalReflower {
                 continue
             }
 
+            val oldChars = oldLine.textChars()
             var lastNonSpaceIndex = 0
             if (oldLine.isLineWrap) {
-                lastNonSpaceIndex = oldLine.charLength
+                lastNonSpaceIndex = if (oldLine.hasTrailingWrapPadding && oldLine.columns > 0) {
+                    oldLine.startCharOfColumn(oldLine.columns - 1)
+                } else {
+                    oldLine.charLength
+                }
             } else {
-                oldLine.forEachRun { _, _, charEnd, codePoint, _, rawStyle, _ ->
+                oldLine.forEachCell { _, charStart, charEnd, _, rawStyle, _ ->
                     val style = TextStyle(rawStyle)
 
                     // 扩展槽中的下划线位关闭时的残留颜色不可见，不构成需保留的自定义样式；
                     // 下划线可见（含形状）必伴随 style.effect 的下划线位，已由上一项涵盖
                     val hasCustomStyle = style.backColor != TextStyle.COLOR_INDEX_BACKGROUND
                         || style.effect != 0
-                    if (codePoint != ' '.code || hasCustomStyle) {
+                    val isPlainSpace = (charEnd - charStart == 1 && oldChars[charStart] == ' ')
+                    if (!isPlainSpace || hasCustomStyle) {
                         lastNonSpaceIndex = charEnd
                     }
                     true
@@ -106,8 +112,8 @@ internal object TerminalReflower {
                     if (trackedOldRows[t] != externalOldRow) continue
                     var colCursor = 0
                     var cursorIdx = 0
-                    oldLine.forEachRun { _, _, charEnd, _, width, _, _ ->
-                        if (width > 0) colCursor += width
+                    oldLine.forEachCell { _, _, charEnd, width, _, _ ->
+                        colCursor += width
                         cursorIdx = charEnd
                         colCursor <= trackedOldCols[t]
                     }
@@ -115,29 +121,37 @@ internal object TerminalReflower {
                 }
             }
 
-            oldLine.forEachRun { column, charStart, _, codePoint, width, rawStyle, extEffect ->
-                if (charStart >= lastNonSpaceIndex) return@forEachRun false
+            oldLine.forEachCell { column, charStart, charEnd, width, rawStyle, extEffect ->
+                if (charStart >= lastNonSpaceIndex) return@forEachCell false
 
                 if (currentOutputExternalColumn + width > buffer.columns) {
-                    buffer.setLineWrap(currentOutputExternalRow)
+                    val skippedPad = width == 2 && currentOutputExternalColumn == buffer.columns - 1
+                    buffer.setLineWrap(currentOutputExternalRow, hasTrailingWrapPadding = skippedPad)
                     advanceOutputRow()
                 }
 
-                val offsetDueToCombiningChar =
-                    (if (width <= 0 && currentOutputExternalColumn > 0) 1 else 0)
-                val outputColumn = currentOutputExternalColumn - offsetDueToCombiningChar
-                buffer.setChar(outputColumn, currentOutputExternalRow, codePoint, TextStyle(rawStyle), extEffect)
+                val targetWidth = if (width > buffer.columns) buffer.columns else width
+                buffer.setCell(
+                    column = currentOutputExternalColumn,
+                    row = currentOutputExternalRow,
+                    sourceChars = oldChars,
+                    charStart = charStart,
+                    charEnd = charEnd,
+                    width = targetWidth,
+                    style = TextStyle(rawStyle),
+                    extendedEffect = extEffect
+                )
 
-                if (width > 0) {
-                    for (t in 0 until trackedCount) {
-                        if (!placed[t] && trackedOldRows[t] == externalOldRow && trackedOldCols[t] == column) {
-                            trackedNewCols[t] = currentOutputExternalColumn
-                            trackedNewRows[t] = currentOutputExternalRow
-                            placed[t] = true
-                        }
+                for (t in 0 until trackedCount) {
+                    if (!placed[t] && trackedOldRows[t] == externalOldRow &&
+                        trackedOldCols[t] in column until (column + width)
+                    ) {
+                        trackedNewCols[t] = currentOutputExternalColumn
+                        trackedNewRows[t] = currentOutputExternalRow
+                        placed[t] = true
                     }
-                    currentOutputExternalColumn += width
                 }
+                currentOutputExternalColumn += targetWidth
                 true
             }
             for (t in 0 until trackedCount) {

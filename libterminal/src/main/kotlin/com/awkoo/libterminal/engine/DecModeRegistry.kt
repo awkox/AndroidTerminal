@@ -17,6 +17,7 @@ internal const val DECSET_BIT_LEFTRIGHT_MARGIN_MODE = 1 shl 11
 internal const val DECSET_BIT_RECTANGULAR_CHANGE_ATTRIBUTE = 1 shl 12
 internal const val DECSET_BIT_REVERSE_WRAPAROUND = 1 shl 14
 internal const val DECSET_BIT_ALTERNATE_SCREEN = 1 shl 15
+internal const val DECSET_BIT_GRAPHEME_CLUSTERING = 1 shl 16
 
 /** 鼠标追踪三模式（1000/1002/1003）互斥所需的位集合。 */
 private val MOUSE_TRACKING_MASK =
@@ -56,10 +57,10 @@ internal class DecModeRegistry {
     /** 当前全部模式位快照。 */
     val current: Int get() = currentFlags
 
-    /** 清除并复位为默认状态：仅保留自动换行与光标可见。 */
+    /** 清除并复位为默认状态：保留自动换行、光标可见与字素簇宽度处理（对齐桌面终端）。 */
     fun resetDefault() {
         savedFlags = 0
-        currentFlags = DECSET_BIT_AUTOWRAP or DECSET_BIT_CURSOR_ENABLED
+        currentFlags = DECSET_BIT_AUTOWRAP or DECSET_BIT_CURSOR_ENABLED or DECSET_BIT_GRAPHEME_CLUSTERING
     }
 
     /** 仅恢复自动换行与原点模式两个位（光标恢复专用）。 */
@@ -97,6 +98,7 @@ internal class DecModeRegistry {
         1004 -> DECSET_BIT_SEND_FOCUS_EVENTS
         1006 -> DECSET_BIT_MOUSE_PROTOCOL_SGR
         2004 -> DECSET_BIT_BRACKETED_PASTE_MODE
+        2027 -> DECSET_BIT_GRAPHEME_CLUSTERING
         47, 1047, 1049 -> DECSET_BIT_ALTERNATE_SCREEN
         else -> -1
     }

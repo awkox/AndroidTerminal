@@ -296,4 +296,64 @@ class TerminalRowTest {
         assertTrue(row.isBlank)
         assertEquals("    ", row.text())
     }
+
+    @Test
+    fun appendCodePointToCell_expandToWide_absorbsNextCellAndUpdatesOffsets() {
+        val row = newBlankRow(6)
+        row.setChar(0, 0x2764, TextStyle.NORMAL)
+        row.setChar(1, 'x'.code, TextStyle.NORMAL)
+        row.setChar(2, 'y'.code, TextStyle.NORMAL)
+
+        row.appendCodePointToCell(0, 0xFE0F, expandToWide = true, style = TextStyle.NORMAL)
+
+        assertEquals(2, row.getCellWidth(0))
+        assertEquals(2, row.getCellWidth(1))
+        assertEquals(0, row.startCharOfColumn(0))
+        assertEquals(0, row.startCharOfColumn(1))
+        assertEquals(2, row.endCharOfColumn(0))
+        assertEquals(2, row.startCharOfColumn(2))
+        assertEquals('y', row.textChars()[2])
+    }
+
+    @Test
+    fun appendCodePointToCell_expandToWide_overWideNextCell_splitsRemainingHalf() {
+        val row = newBlankRow(6)
+        row.setChar(0, 0x2764, TextStyle.NORMAL)
+        row.setChar(1, 0x4E2D, TextStyle.NORMAL)
+        row.setChar(3, 'z'.code, TextStyle.NORMAL)
+
+        row.appendCodePointToCell(0, 0xFE0F, expandToWide = true, style = TextStyle.NORMAL)
+
+        assertEquals(2, row.getCellWidth(0))
+        assertEquals(1, row.getCellWidth(2))
+        assertEquals(' '.code, row.getCellFirstCodePoint(2))
+        assertEquals('z'.code, row.getCellFirstCodePoint(3))
+    }
+
+    @Test
+    fun forEachCell_yieldsAtomicClustersAndWidths() {
+        val row = newBlankRow(6)
+        val family = "👨\u200D👩\u200D👧".toCharArray()
+        row.setChar(0, 0x2764, TextStyle.NORMAL)
+        row.appendCodePointToCell(0, 0xFE0F, expandToWide = true, style = TextStyle.NORMAL)
+        row.setCell(2, family, 0, family.size, 2, TextStyle.NORMAL)
+        row.setChar(4, 'a'.code, TextStyle.NORMAL)
+
+        val cells = mutableListOf<Triple<Int, Int, String>>()
+        val text = row.textChars()
+        row.forEachCell { col, charStart, charEnd, width, _, _ ->
+            cells += Triple(col, width, String(text, charStart, charEnd - charStart))
+            true
+        }
+
+        assertEquals(
+            listOf(
+                Triple(0, 2, "\u2764\uFE0F"),
+                Triple(2, 2, "👨\u200D👩\u200D👧"),
+                Triple(4, 1, "a"),
+                Triple(5, 1, " ")
+            ),
+            cells
+        )
+    }
 }

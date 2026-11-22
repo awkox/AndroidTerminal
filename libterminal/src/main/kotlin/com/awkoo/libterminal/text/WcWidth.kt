@@ -39,7 +39,7 @@ internal object WcWidth {
         0x00825, 0x00827,  // Samaritan Vowel Sign Sho..Samaritan Vowel Sign U
         0x00829, 0x0082d,  // Samaritan Vowel Sign Lon..Samaritan Mark Nequdaa
         0x00859, 0x0085b,  // Mandaic Affrication Mark..Mandaic Gemination Mark
-        0x00898, 0x0089f,  // Arabic Small High Word A..Arabic Half Madda Over M
+        0x00897, 0x0089f,  // Arabic Pepet..Arabic Half Madda Over M
         0x008ca, 0x008e1,  // Arabic Small High Farsi ..Arabic Small High Sign S
         0x008e3, 0x00902,  // Arabic Turned Damma Belo..Devanagari Sign Anusvara
         0x0093a, 0x0093a,  // Devanagari Vowel Sign Oe..Devanagari Vowel Sign Oe
@@ -234,6 +234,7 @@ internal object WcWidth {
         0x10a3f, 0x10a3f,  // Kharoshthi Virama       ..Kharoshthi Virama
         0x10ae5, 0x10ae6,  // Manichaean Abbreviation ..Manichaean Abbreviation
         0x10d24, 0x10d27,  // Hanifi Rohingya Sign Har..Hanifi Rohingya Sign Tas
+        0x10d69, 0x10d6d,  // Garay Vowel Sign E      ..Garay Consonant Nasali
         0x10eab, 0x10eac,  // Yezidi Combining Hamza M..Yezidi Combining Madda M
         0x10efd, 0x10eff,  // (nil)                   ..(nil)
         0x10f46, 0x10f50,  // Sogdian Combining Dot Be..Sogdian Combining Stroke
@@ -266,6 +267,10 @@ internal object WcWidth {
         0x11340, 0x11340,  // Grantha Vowel Sign Ii   ..Grantha Vowel Sign Ii
         0x11366, 0x1136c,  // Combining Grantha Digit ..Combining Grantha Digit
         0x11370, 0x11374,  // Combining Grantha Letter..Combining Grantha Letter
+        0x113bb, 0x113c0,  // Tulu-Tigalari Vowel Sign..Tulu-Tigalari Vowel Sign
+        0x113ce, 0x113ce,  // Tulu-Tigalari Sign Viram..Tulu-Tigalari Sign Viram
+        0x113d0, 0x113d0,  // Tulu-Tigalari Conjoiner ..Tulu-Tigalari Conjoiner
+        0x113e1, 0x113e2,  // Tulu-Tigalari Vedic Tone..Tulu-Tigalari Vedic Tone
         0x11438, 0x1143f,  // Newa Vowel Sign U       ..Newa Vowel Sign Ai
         0x11442, 0x11444,  // Newa Sign Virama        ..Newa Sign Anusvara
         0x11446, 0x11446,  // Newa Sign Nukta         ..Newa Sign Nukta
@@ -357,6 +362,7 @@ internal object WcWidth {
         0x1e4ec, 0x1e4ef,  // (nil)                   ..(nil)
         0x1e8d0, 0x1e8d6,  // Mende Kikakui Combining ..Mende Kikakui Combining
         0x1e944, 0x1e94a,  // Adlam Alif Lengthener   ..Adlam Nukta
+        0xe0001, 0xe007f,  // Language Tag            ..Cancel Tag (Emoji Subdivision Tags)
         0xe0100, 0xe01ef,  // Variation Selector-17   ..Variation Selector-256
     ).also {
         require(it.size % 2 == 0) { "ZERO_WIDTH array length must be even" }
@@ -404,13 +410,14 @@ internal object WcWidth {
         0x02e80, 0x02e99,  // Cjk Radical Repeat      ..Cjk Radical Rap
         0x02e9b, 0x02ef3,  // Cjk Radical Choke       ..Cjk Radical C-simplified
         0x02f00, 0x02fd5,  // Kangxi Radical One      ..Kangxi Radical Flute
-        0x02ff0, 0x02ffb,  // Ideographic Description ..Ideographic Description
+        0x02ff0, 0x02fff,  // Ideographic Description ..Ideographic Description
         0x03000, 0x0303e,  // Ideographic Space       ..Ideographic Variation In
         0x03041, 0x03096,  // Hiragana Letter Small A ..Hiragana Letter Small Ke
         0x03099, 0x030ff,  // Combining Katakana-hirag..Katakana Digraph Koto
         0x03105, 0x0312f,  // Bopomofo Letter B       ..Bopomofo Letter Nn
         0x03131, 0x0318e,  // Hangul Letter Kiyeok    ..Hangul Letter Araeae
         0x03190, 0x031e3,  // Ideographic Annotation L..Cjk Stroke Q
+        0x031ef, 0x031ef,  // Ideographic Description ..Ideographic Description
         0x031f0, 0x0321e,  // Katakana Letter Small Ku..Parenthesized Korean Cha
         0x03220, 0x03247,  // Parenthesized Ideograph ..Circled Ideograph Koto
         0x03250, 0x04dbf,  // Partnership Sign        ..Cjk Unified Ideograph-4d
@@ -479,16 +486,136 @@ internal object WcWidth {
         0x1f93c, 0x1f945,  // Wrestlers               ..Goal Net
         0x1f947, 0x1f9ff,  // First Place Medal       ..Nazar Amulet
         0x1fa70, 0x1fa7c,  // Ballet Shoes            ..Crutch
-        0x1fa80, 0x1fa88,  // Yo-yo                   ..(nil)
-        0x1fa90, 0x1fabd,  // Ringed Planet           ..(nil)
-        0x1fabf, 0x1fac5,  // (nil)                   ..Person With Crown
-        0x1face, 0x1fadb,  // (nil)                   ..(nil)
-        0x1fae0, 0x1fae8,  // Melting Face            ..(nil)
+        0x1fa80, 0x1fa89,  // Yo-yo                   ..Harp
+        0x1fa8f, 0x1fa8f,  // Shovel                  ..Shovel
+        0x1fa90, 0x1fabe,  // Ringed Planet           ..Leafless Tree
+        0x1fabf, 0x1fac6,  // Grey Wing               ..Fingerprint
+        0x1face, 0x1fadc,  // Moose                   ..Root Vegetable
+        0x1fadf, 0x1fadf,  // Splatter                ..Splatter
+        0x1fae0, 0x1fae9,  // Melting Face            ..Face With Bags Under Eyes
         0x1faf0, 0x1faf8,  // Hand With Index Finger A..(nil)
         0x20000, 0x2fffd,  // Cjk Unified Ideograph-20..(nil)
         0x30000, 0x3fffd,  // Cjk Unified Ideograph-30..(nil)
     ).also {
         require(it.size % 2 == 0) { "WIDE_EASTASIAN array length must be even" }
+    }
+
+    // Unicode 16.0 中默认文本呈现（不在 WIDE_EASTASIAN 中）但接 U+FE0F 后切换为彩色双宽 Emoji 的码点表
+    private val VS16_EMOJI_CANDIDATE = intArrayOf(
+        0x000a9, 0x000a9,
+        0x000ae, 0x000ae,
+        0x0203c, 0x0203c,
+        0x02049, 0x02049,
+        0x02122, 0x02122,
+        0x02139, 0x02139,
+        0x02194, 0x02199,
+        0x021a9, 0x021aa,
+        0x02328, 0x02328,
+        0x023cf, 0x023cf,
+        0x023ed, 0x023ef,
+        0x023f1, 0x023f2,
+        0x023f8, 0x023fa,
+        0x024c2, 0x024c2,
+        0x025aa, 0x025ab,
+        0x025b6, 0x025b6,
+        0x025c0, 0x025c0,
+        0x025fb, 0x025fc,
+        0x02600, 0x02604,
+        0x0260e, 0x0260e,
+        0x02611, 0x02611,
+        0x02618, 0x02618,
+        0x0261d, 0x0261d,
+        0x02620, 0x02620,
+        0x02622, 0x02623,
+        0x02626, 0x02626,
+        0x0262a, 0x0262a,
+        0x0262e, 0x0262f,
+        0x02638, 0x0263a,
+        0x02640, 0x02640,
+        0x02642, 0x02642,
+        0x0265f, 0x02660,
+        0x02663, 0x02663,
+        0x02665, 0x02666,
+        0x02668, 0x02668,
+        0x0267b, 0x0267b,
+        0x0267e, 0x0267e,
+        0x02692, 0x02692,
+        0x02694, 0x02697,
+        0x02699, 0x02699,
+        0x0269b, 0x0269c,
+        0x026a0, 0x026a0,
+        0x026a7, 0x026a7,
+        0x026b0, 0x026b1,
+        0x026c8, 0x026c8,
+        0x026cf, 0x026cf,
+        0x026d1, 0x026d1,
+        0x026d3, 0x026d3,
+        0x026e9, 0x026e9,
+        0x026f0, 0x026f1,
+        0x026f4, 0x026f4,
+        0x026f7, 0x026f9,
+        0x02702, 0x02702,
+        0x02708, 0x02709,
+        0x0270c, 0x0270f,
+        0x02712, 0x02712,
+        0x02714, 0x02714,
+        0x02716, 0x02716,
+        0x0271d, 0x0271d,
+        0x02721, 0x02721,
+        0x02733, 0x02734,
+        0x02744, 0x02744,
+        0x02747, 0x02747,
+        0x02763, 0x02764,
+        0x027a1, 0x027a1,
+        0x02934, 0x02935,
+        0x02b05, 0x02b07,
+        0x03030, 0x03030,
+        0x0303d, 0x0303d,
+        0x03297, 0x03297,
+        0x03299, 0x03299,
+        0x1f170, 0x1f171,
+        0x1f17e, 0x1f17f,
+        0x1f321, 0x1f321,
+        0x1f324, 0x1f32c,
+        0x1f336, 0x1f336,
+        0x1f37d, 0x1f37d,
+        0x1f396, 0x1f397,
+        0x1f399, 0x1f39b,
+        0x1f39e, 0x1f39f,
+        0x1f3cb, 0x1f3ce,
+        0x1f3d4, 0x1f3df,
+        0x1f3f3, 0x1f3f3,
+        0x1f3f5, 0x1f3f5,
+        0x1f3f7, 0x1f3f7,
+        0x1f441, 0x1f441,
+        0x1f4fd, 0x1f4fd,
+        0x1f549, 0x1f54a,
+        0x1f56f, 0x1f570,
+        0x1f573, 0x1f579,
+        0x1f587, 0x1f587,
+        0x1f58a, 0x1f58d,
+        0x1f590, 0x1f590,
+        0x1f5a5, 0x1f5a5,
+        0x1f5a8, 0x1f5a8,
+        0x1f5b1, 0x1f5b2,
+        0x1f5bc, 0x1f5bc,
+        0x1f5c2, 0x1f5c4,
+        0x1f5d1, 0x1f5d3,
+        0x1f5dc, 0x1f5de,
+        0x1f5e1, 0x1f5e1,
+        0x1f5e3, 0x1f5e3,
+        0x1f5e8, 0x1f5e8,
+        0x1f5ef, 0x1f5ef,
+        0x1f5f3, 0x1f5f3,
+        0x1f5fa, 0x1f5fa,
+        0x1f6cb, 0x1f6cb,
+        0x1f6cd, 0x1f6cf,
+        0x1f6e0, 0x1f6e5,
+        0x1f6e9, 0x1f6e9,
+        0x1f6f0, 0x1f6f0,
+        0x1f6f3, 0x1f6f3,
+    ).also {
+        require(it.size % 2 == 0) { "VS16_EMOJI_CANDIDATE array length must be even" }
     }
 
     private fun intable(table: IntArray, c: Int): Boolean {
@@ -567,4 +694,28 @@ internal object WcWidth {
         }
         return count
     }
+
+    fun isVariationSelector16(cp: Int): Boolean = cp == 0xFE0F
+
+    fun isVariationSelector15(cp: Int): Boolean = cp == 0xFE0E
+
+    fun isZeroWidthJoiner(cp: Int): Boolean = cp == 0x200D
+
+    fun isCombiningEnclosingKeycap(cp: Int): Boolean = cp == 0x20E3
+
+    fun isKeycapBase(cp: Int): Boolean =
+        cp in '0'.code..'9'.code || cp == '#'.code || cp == '*'.code
+
+    fun isEmojiModifier(cp: Int): Boolean = cp in 0x1F3FB..0x1F3FF
+
+    fun isRegionalIndicator(cp: Int): Boolean = cp in 0x1F1E6..0x1F1FF
+
+    fun isVs16WideningCandidate(cp: Int): Boolean = intable(VS16_EMOJI_CANDIDATE, cp)
+
+    fun isEmojiOrPictographic(cp: Int): Boolean =
+        cp == 0x00A9 ||
+            cp == 0x00AE ||
+            intable(VS16_EMOJI_CANDIDATE, cp) ||
+            (cp in 0x2300..0x2BFF && intable(WIDE_EASTASIAN, cp)) ||
+            (cp in 0x1F000..0x1FAFF && (intable(WIDE_EASTASIAN, cp) || isEmojiModifier(cp)))
 }
