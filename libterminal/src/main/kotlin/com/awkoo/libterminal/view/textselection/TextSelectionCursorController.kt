@@ -46,6 +46,7 @@ internal interface SelectionHost {
     fun copyTextToClipboard()
     fun pasteTextFromClipboard()
     fun stopTextSelectionMode()
+    fun onSelectionSnapshotReleased()
 }
 
 private class TerminalViewSelectionHost(
@@ -73,6 +74,7 @@ private class TerminalViewSelectionHost(
     override fun copyTextToClipboard() = terminalView.copyTextToClipboard()
     override fun pasteTextFromClipboard() = terminalView.pasteTextFromClipboard()
     override fun stopTextSelectionMode() = terminalView.stopTextSelectionMode()
+    override fun onSelectionSnapshotReleased() = terminalView.onSelectionSnapshotReleased()
 }
 
 internal class TextSelectionCursorController internal constructor(
@@ -89,7 +91,9 @@ internal class TextSelectionCursorController internal constructor(
     private val startHandle: SelectionHandle = handleFactory(this, TextSelectionHandleView.LEFT)
     private val endHandle: SelectionHandle = handleFactory(this, TextSelectionHandleView.RIGHT)
     private var isSelectingText = false
-    private var pausedEmulator: TerminalEmulator? = null
+    private var frozenEmulator: TerminalEmulator? = null
+    internal var frozenSnapshot: TerminalEmulator.FrozenScreenSnapshot? = null
+        private set
 
     private val handleHeight: Int
         get() = max(startHandle.handleHeight, endHandle.handleHeight)
@@ -108,11 +112,10 @@ internal class TextSelectionCursorController internal constructor(
     internal fun showAt(x: Float, y: Float) {
         if (isActive) hide()
 
-        // 触发选择的瞬间最先冻结屏幕，并记住实际冻结的模拟器实例，确保退出时 1:1 精准解冻
         val emulator = host.emulator
         emulator?.let {
-            it.withWriteLock { it.setInputPaused(true) }
-            pausedEmulator = it
+            frozenSnapshot = it.withWriteLock { it.captureFrozenSnapshot() }
+            frozenEmulator = it
         }
 
         setInitialTextSelectionPosition(x, y)
@@ -140,10 +143,14 @@ internal class TextSelectionCursorController internal constructor(
         selectionStartCol = -1
         isSelectingText = false
 
-        pausedEmulator?.let { emulator ->
-            pausedEmulator = null
-            emulator.withWriteLock { emulator.setInputPaused(false) }
+        val snapshot = frozenSnapshot
+        val emulator = frozenEmulator
+        frozenSnapshot = null
+        frozenEmulator = null
+        if (snapshot != null && emulator != null) {
+            emulator.withWriteLock { emulator.releaseFrozenSnapshot(snapshot) }
         }
+        host.onSelectionSnapshotReleased()
 
         return true
     }
@@ -186,44 +193,40 @@ internal class TextSelectionCursorController internal constructor(
         setInitialTextSelectionPosition(event.x, event.y)
 
     private fun setInitialTextSelectionPosition(x: Float, y: Float) {
-        val emulator = host.emulator ?: return
+        val snapshot = frozenSnapshot ?: return
+        val screen = snapshot.buffer
+        val columns = snapshot.columns
 
-        emulator.withReadLock {
-            val screen = emulator.screen
+        val coord = host.bufferCellAt(x, y)
+        selectionStartCol = coord.col
+        selectionStartRow = coord.row
+        selectionEndCol = coord.col
+        selectionEndRow = coord.row
 
-            val coord = host.bufferCellAt(x, y)
-            selectionStartCol = coord.col
-            selectionStartRow = coord.row
-            selectionEndCol = coord.col
-            selectionEndRow = coord.row
-
-            if (!screen.isCellBlank(selectionStartCol, selectionStartRow)) {
-                // 左扩：
-                while (true) {
-                    if (selectionStartCol > 0) {
-                        if (!screen.isCellBlank(selectionStartCol - 1, selectionStartRow)) {
-                            selectionStartCol--
-                        } else break
-                    } else if (screen.getLineWrap(selectionStartRow - 1) &&
-                        !screen.isCellBlank(emulator.columns - 1, selectionStartRow - 1)
-                    ) {
-                        selectionStartRow--
-                        selectionStartCol = emulator.columns - 1
+        if (!screen.isCellBlank(selectionStartCol, selectionStartRow)) {
+            while (true) {
+                if (selectionStartCol > 0) {
+                    if (!screen.isCellBlank(selectionStartCol - 1, selectionStartRow)) {
+                        selectionStartCol--
                     } else break
-                }
-                // 右扩：
-                while (true) {
-                    if (selectionEndCol < emulator.columns - 1) {
-                        if (!screen.isCellBlank(selectionEndCol + 1, selectionEndRow)) {
-                            selectionEndCol++
-                        } else break
-                    } else if (screen.getLineWrap(selectionEndRow) &&
-                        !screen.isCellBlank(0, selectionEndRow + 1)
-                    ) {
-                        selectionEndRow++
-                        selectionEndCol = 0
+                } else if (screen.getLineWrap(selectionStartRow - 1) &&
+                    !screen.isCellBlank(columns - 1, selectionStartRow - 1)
+                ) {
+                    selectionStartRow--
+                    selectionStartCol = columns - 1
+                } else break
+            }
+            while (true) {
+                if (selectionEndCol < columns - 1) {
+                    if (!screen.isCellBlank(selectionEndCol + 1, selectionEndRow)) {
+                        selectionEndCol++
                     } else break
-                }
+                } else if (screen.getLineWrap(selectionEndRow) &&
+                    !screen.isCellBlank(0, selectionEndRow + 1)
+                ) {
+                    selectionEndRow++
+                    selectionEndCol = 0
+                } else break
             }
         }
     }
@@ -306,45 +309,42 @@ internal class TextSelectionCursorController internal constructor(
     }
 
     override fun updatePosition(handle: SelectionHandle, x: Int, y: Int) {
-        val emulator = host.emulator ?: return
+        val snapshot = frozenSnapshot ?: return
+        val screen = snapshot.buffer
+        val isStart = handle === startHandle
 
-        emulator.withReadLock {
-            val screen = emulator.screen
-            val isStart = handle === startHandle
+        val coord = host.bufferCellAt(x.toFloat(), y.toFloat())
+        var curX = coord.col
+        var curY = coord.row
 
-            val coord = host.bufferCellAt(x.toFloat(), y.toFloat())
-            var curX = coord.col
-            var curY = coord.row
-
-            if (isStart) {
-                if (curY > selectionEndRow || (curY == selectionEndRow && curX > selectionEndCol)) {
-                    curY = selectionEndRow
-                    curX = selectionEndCol
-                }
-                selectionStartRow = curY
-                selectionStartCol = curX
-            } else {
-                if (curY < selectionStartRow || (curY == selectionStartRow && curX < selectionStartCol)) {
-                    curY = selectionStartRow
-                    curX = selectionStartCol
-                }
-                selectionEndRow = curY
-                selectionEndCol = curX
+        if (isStart) {
+            if (curY > selectionEndRow || (curY == selectionEndRow && curX > selectionEndCol)) {
+                curY = selectionEndRow
+                curX = selectionEndCol
             }
-
-            if (!emulator.isAlternateBufferActive) {
-                if (curY <= host.topRow) {
-                    host.scrollbackBy(1)
-                } else if (curY >= host.topRow + emulator.rows) {
-                    host.scrollbackBy(-1)
-                }
+            selectionStartRow = curY
+            selectionStartCol = curX
+        } else {
+            if (curY < selectionStartRow || (curY == selectionStartRow && curX < selectionStartCol)) {
+                curY = selectionStartRow
+                curX = selectionStartCol
             }
+            selectionEndRow = curY
+            selectionEndCol = curX
+        }
 
-            if (isStart) {
-                selectionStartCol = snapColumnToCharBoundary(screen, selectionStartRow, selectionStartCol, SnapAlign.Start)
-            } else {
-                selectionEndCol = snapColumnToCharBoundary(screen, selectionEndRow, selectionEndCol, SnapAlign.End)
+        if (!snapshot.isAlternateBufferActive) {
+            if (curY <= host.topRow) {
+                host.scrollbackBy(1)
+            } else if (curY >= host.topRow + snapshot.rows) {
+                host.scrollbackBy(-1)
             }
+        }
+
+        if (isStart) {
+            selectionStartCol = snapColumnToCharBoundary(screen, selectionStartRow, selectionStartCol, SnapAlign.Start)
+        } else {
+            selectionEndCol = snapColumnToCharBoundary(screen, selectionEndRow, selectionEndCol, SnapAlign.End)
         }
 
         host.invalidate()
@@ -352,11 +352,6 @@ internal class TextSelectionCursorController internal constructor(
 
     private fun snapColumnToCharBoundary(screen: TerminalBuffer, cy: Int, cx: Int, align: SnapAlign): Int =
         screen.snapToColumn(cy, cx, align)
-
-    fun shiftSelectionRows(rowShift: Int) {
-        selectionStartRow -= rowShift
-        selectionEndRow -= rowShift
-    }
 
     override fun onTouchModeChanged(isInTouchMode: Boolean) {
         if (!isInTouchMode) host.stopTextSelectionMode()
@@ -374,9 +369,13 @@ internal class TextSelectionCursorController internal constructor(
 
     val selectedText: String
         get() {
+            val snapshot = frozenSnapshot
+            if (snapshot != null) {
+                return snapshot.buffer.getSelectedText(selectionStartCol, selectionStartRow, selectionEndCol, selectionEndRow)
+            }
             val emulator = host.emulator ?: return ""
-            emulator.withReadLock {
-                return emulator.getSelectedText(selectionStartCol, selectionStartRow, selectionEndCol, selectionEndRow)
+            return emulator.withReadLock {
+                emulator.getSelectedText(selectionStartCol, selectionStartRow, selectionEndCol, selectionEndRow)
             }
         }
 

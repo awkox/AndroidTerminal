@@ -98,6 +98,16 @@ internal class TerminalTouchHandler(
         val up = rowsDown < 0
         val amount = abs(rowsDown)
 
+        if (view.isSelectingText) {
+            if (!view.isActiveViewAlternateBuffer) {
+                repeat(amount) {
+                    view.scrollbackBy(if (up) 1 else -1)
+                    if (!view.awakenScrollbars()) view.invalidate()
+                }
+            }
+            return
+        }
+
         // 在锁外计算鼠标坐标：视口空间只读渲染器字体度量，不触碰模拟器尺寸，无并发竞争
         val coord = view.viewportCellAt(pointerX, pointerY)
         var scrollX = coord.col

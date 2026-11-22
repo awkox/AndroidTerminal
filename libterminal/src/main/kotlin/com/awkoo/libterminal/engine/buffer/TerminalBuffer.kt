@@ -9,13 +9,29 @@ import kotlin.math.min
  *
  * 管理屏幕可见行和滚动历史，支持文本选择、行列操作、块复制/填充和上下滚动。
  */
-internal class TerminalBuffer(
+internal class TerminalBuffer private constructor(
     @Volatile @JvmField var columns: Int,
     @JvmField var totalRows: Int,
-    @Volatile @JvmField var screenRows: Int
+    @Volatile @JvmField var screenRows: Int,
+    initialLines: Array<TerminalRow?>?,
+    initialScreenFirstRow: Int,
+    initialActiveTranscriptRows: Int
 ) {
+    constructor(
+        columns: Int,
+        totalRows: Int,
+        screenRows: Int
+    ) : this(
+        columns = columns,
+        totalRows = totalRows,
+        screenRows = screenRows,
+        initialLines = null,
+        initialScreenFirstRow = 0,
+        initialActiveTranscriptRows = 0
+    )
+
     @JvmField
-    var lines: Array<TerminalRow?> = arrayOfNulls(totalRows)
+    var lines: Array<TerminalRow?> = initialLines ?: arrayOfNulls(totalRows)
 
     /**
      * 只读路径用的共享空白行：列宽与当前 mColumns 一致，不写入 mLines。
@@ -26,13 +42,40 @@ internal class TerminalBuffer(
     private var sharedBlankRow: TerminalRow = TerminalRow(columns, TextStyle.NORMAL)
 
     @Volatile
-    var activeTranscriptRows: Int = 0
+    var activeTranscriptRows: Int = initialActiveTranscriptRows
         private set
 
-    private var screenFirstRow = 0
+    private var screenFirstRow = initialScreenFirstRow
 
     init {
-        blockSet(0, 0, columns, screenRows, ' '.code, TextStyle.NORMAL)
+        if (initialLines == null) {
+            blockSet(0, 0, columns, screenRows, ' '.code, TextStyle.NORMAL)
+        }
+    }
+
+    fun createFrozenSnapshot(): TerminalBuffer {
+        val historyRows = activeTranscriptRows
+        val snapshotTotalRows = max(1, historyRows + screenRows)
+        val snapshotLines = arrayOfNulls<TerminalRow>(snapshotTotalRows)
+        for (extRow in -historyRows until screenRows) {
+            val row = lines[externalToInternalRow(extRow)] ?: continue
+            row.retainSnapshotRef()
+            snapshotLines[historyRows + extRow] = row
+        }
+        return TerminalBuffer(
+            columns = columns,
+            totalRows = snapshotTotalRows,
+            screenRows = screenRows,
+            initialLines = snapshotLines,
+            initialScreenFirstRow = historyRows,
+            initialActiveTranscriptRows = historyRows
+        )
+    }
+
+    fun releaseFrozenSnapshot() {
+        for (i in lines.indices) {
+            lines[i]?.releaseSnapshotRef()
+        }
     }
 
     /**
@@ -204,8 +247,7 @@ internal class TerminalBuffer(
             val actualShift = max(shiftDownOfTopRow, -this.activeTranscriptRows)
             if (shiftDownOfTopRow != actualShift) {
                 for (i in 0..<actualShift - shiftDownOfTopRow)
-                    allocateFullLineIfNecessary((screenFirstRow + screenRows + i) % totalRows)
-                        .clear(currentStyle)
+                    clearInternalRow((screenFirstRow + screenRows + i) % totalRows, currentStyle)
                 shiftDownOfTopRow = actualShift
             }
         }
@@ -336,10 +378,18 @@ internal class TerminalBuffer(
         clearRow(bottomMargin - 1, style)
     }
 
-    /** 把指定外行复位为空白行：行对象存在时就地 [TerminalRow.clear]，否则分配新行。 */
+    /** 把指定外行复位为空白行：未被快照共享时就地清零，否则替换为新行以免污染只读快照。 */
     private fun clearRow(externalRow: Int, style: TextStyle) {
-        val internal = externalToInternalRow(externalRow)
-        lines[internal]?.clear(style) ?: run { lines[internal] = TerminalRow(columns, style) }
+        clearInternalRow(externalToInternalRow(externalRow), style)
+    }
+
+    private fun clearInternalRow(internal: Int, style: TextStyle) {
+        val existing = lines[internal]
+        if (existing == null || existing.isSharedWithSnapshot) {
+            lines[internal] = TerminalRow(columns, style)
+        } else {
+            existing.clear(style)
+        }
     }
 
     /** 列区间是否覆盖整行：只有整行搬移才能让行级元数据随行走。 */
@@ -399,7 +449,17 @@ internal class TerminalBuffer(
     }
 
     fun allocateFullLineIfNecessary(row: Int): TerminalRow {
-        return lines[row] ?: TerminalRow(columns, TextStyle.NORMAL).also { lines[row] = it }
+        val existing = lines[row]
+        if (existing == null) {
+            return TerminalRow(columns, TextStyle.NORMAL).also { lines[row] = it }
+        }
+        if (existing.isSharedWithSnapshot) {
+            val copy = TerminalRow(columns, TextStyle.NORMAL)
+            copy.copySnapshotFrom(existing)
+            lines[row] = copy
+            return copy
+        }
+        return existing
     }
 
     fun setChar(column: Int, row: Int, codePoint: Int, style: TextStyle, extendedEffect: Long = 0L) {

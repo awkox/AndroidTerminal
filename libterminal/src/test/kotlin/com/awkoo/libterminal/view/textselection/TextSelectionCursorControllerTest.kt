@@ -67,9 +67,15 @@ class TextSelectionCursorControllerTest {
         override fun copyTextToClipboard() {}
         override fun pasteTextFromClipboard() {}
 
+        var releasedCount = 0
+
         override fun stopTextSelectionMode() {
             stopCount++
             controller.hide()
+        }
+
+        override fun onSelectionSnapshotReleased() {
+            releasedCount++
         }
     }
 
@@ -84,77 +90,91 @@ class TextSelectionCursorControllerTest {
     }
 
     @Test
-    fun immediateHide_afterShow_succeedsHandlesHiddenAndUnpausesEmulator() {
+    fun immediateHide_afterShow_succeedsHandlesHiddenAndReleasesFrozenSnapshot() {
         val f = EmulatorFixture()
         f.feed("hello")
-        val (controller, _, handles) = createController(f.emulator)
+        val initialRow = f.emulator.screen.getRowForRead(0)
+        val (controller, host, handles) = createController(f.emulator)
 
         controller.showAt(0f, 0f)
         assertTrue(controller.isActive)
+        assertTrue(initialRow.isSharedWithSnapshot)
 
-        f.feed("world")
-        assertEquals("hello", f.rowText(0))
+        f.feed("\u001b[2J\u001b[Hworld")
+        assertEquals("world", f.rowText(0))
+        assertEquals("hello", controller.selectedText)
 
         assertTrue(controller.hide())
         assertFalse(controller.isActive)
+        assertFalse(initialRow.isSharedWithSnapshot)
+        assertEquals(1, host.releasedCount)
         assertEquals(1, handles.first.hideCount)
         assertEquals(1, handles.second.hideCount)
-        assertEquals("helloworld", f.rowText(0))
     }
 
     @Test
-    fun hideAfterEmulatorSwappedOrDetached_unpausesOriginalPausedEmulator() {
+    fun hideAfterEmulatorSwappedOrDetached_releasesOriginalFrozenSnapshot() {
         val f1 = EmulatorFixture()
         val f2 = EmulatorFixture()
         f1.feed("one")
+        val originalRow = f1.emulator.screen.getRowForRead(0)
         val (controller, host, _) = createController(f1.emulator)
 
         controller.showAt(0f, 0f)
+        assertTrue(originalRow.isSharedWithSnapshot)
         f1.feed("two")
-        assertEquals("one", f1.rowText(0))
+        assertEquals("onetwo", f1.rowText(0))
+        assertEquals("one", controller.selectedText)
 
         host.emulator = f2.emulator
         host.emulator = null
 
         assertTrue(controller.hide())
         assertFalse(controller.isActive)
-        assertEquals("onetwo", f1.rowText(0))
+        assertFalse(originalRow.isSharedWithSnapshot)
+        assertEquals(1, host.releasedCount)
         assertEquals("", f2.rowText(0))
     }
 
     @Test
-    fun onDestroyActionMode_immediatelyAfterShow_exitsSelectionAndUnpauses() {
+    fun onDestroyActionMode_immediatelyAfterShow_exitsSelectionAndReleasesSnapshot() {
         val f = EmulatorFixture()
         f.feed("abc")
+        val initialRow = f.emulator.screen.getRowForRead(0)
         val (controller, host, handles) = createController(f.emulator)
 
         controller.showAt(0f, 0f)
         f.feed("def")
-        assertEquals("abc", f.rowText(0))
+        assertEquals("abcdef", f.rowText(0))
+        assertEquals("abc", controller.selectedText)
 
         host.lastActionModeCallback?.onDestroyActionMode(null)
 
         assertEquals(1, host.stopCount)
+        assertEquals(1, host.releasedCount)
         assertFalse(controller.isActive)
+        assertFalse(initialRow.isSharedWithSnapshot)
         assertEquals(1, handles.first.hideCount)
         assertEquals(1, handles.second.hideCount)
-        assertEquals("abcdef", f.rowText(0))
     }
 
     @Test
-    fun onTouchModeChangedFalse_immediatelyAfterShow_exitsSelectionAndUnpauses() {
+    fun onTouchModeChangedFalse_immediatelyAfterShow_exitsSelectionAndReleasesSnapshot() {
         val f = EmulatorFixture()
         f.feed("xyz")
-        val (controller, _, _) = createController(f.emulator)
+        val initialRow = f.emulator.screen.getRowForRead(0)
+        val (controller, host, _) = createController(f.emulator)
 
         controller.showAt(0f, 0f)
         f.feed("123")
-        assertEquals("xyz", f.rowText(0))
+        assertEquals("xyz123", f.rowText(0))
+        assertEquals("xyz", controller.selectedText)
 
         controller.onTouchModeChanged(false)
 
         assertFalse(controller.isActive)
-        assertEquals("xyz123", f.rowText(0))
+        assertFalse(initialRow.isSharedWithSnapshot)
+        assertEquals(1, host.releasedCount)
     }
 
     @Test

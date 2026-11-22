@@ -52,6 +52,19 @@ internal class TerminalRow(
     var version: Long = 0L
         private set
 
+    private var snapshotRefCount: Int = 0
+
+    val isSharedWithSnapshot: Boolean
+        get() = snapshotRefCount > 0
+
+    internal fun retainSnapshotRef() {
+        snapshotRefCount++
+    }
+
+    internal fun releaseSnapshotRef() {
+        if (snapshotRefCount > 0) snapshotRefCount--
+    }
+
     private var lineWrap = false
 
     /** [lineWrap] 的唯一读口。 */

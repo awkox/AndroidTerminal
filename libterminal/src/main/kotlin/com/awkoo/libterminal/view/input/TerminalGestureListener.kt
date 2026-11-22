@@ -84,12 +84,13 @@ internal class TerminalGestureListener(
         // 上一次惯性滚动未结束时不启动新的滚动
         if (!scroller.isFinished) return true
 
-        val mouseTrackingAtStartOfFling = emulator.isMouseTrackingActive
+        val selecting = view.isSelectingText
+        val mouseTrackingAtStartOfFling = !selecting && emulator.isMouseTrackingActive
         val flingScale = 0.25f
         if (mouseTrackingAtStartOfFling) {
             scroller.fling(0, 0, 0, -(velocityY * flingScale).toInt(), 0, 0, -emulator.rows / 2, emulator.rows / 2)
         } else {
-            scroller.fling(0, view.topRow, 0, -(velocityY * flingScale).toInt(), 0, 0, -emulator.screen.activeTranscriptRows, 0)
+            scroller.fling(0, view.topRow, 0, -(velocityY * flingScale).toInt(), 0, 0, -view.maxScrollback, 0)
         }
 
         val eventDownTime = e.downTime
@@ -99,7 +100,7 @@ internal class TerminalGestureListener(
             private var lastY = 0
 
             override fun run() {
-                if (mouseTrackingAtStartOfFling != emulator.isMouseTrackingActive) {
+                if (!selecting && mouseTrackingAtStartOfFling != emulator.isMouseTrackingActive) {
                     scroller.abortAnimation()
                     return
                 }

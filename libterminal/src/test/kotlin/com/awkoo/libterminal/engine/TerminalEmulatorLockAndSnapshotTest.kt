@@ -58,53 +58,47 @@ class TerminalEmulatorLockAndSnapshotTest {
     }
 
     @Test
-    fun deferredResume_preservesFifoOrderAcrossSlicedDrainAndLiveAppend() {
-        var resumeCalls = 0
-        val emulator = TerminalEmulator(
-            writeString = {},
-            writeByteArray = {},
-            maxTranscriptRows = 20,
-            onDeferredResumeRequested = { resumeCalls++ }
-        ).apply { resize(20, 4, 10, 20) }
+    fun captureFromFrozen_isolatesRenderSnapshotAcrossConcurrentWrites() {
+        val f = EmulatorFixture(columns = 20, rows = 4, maxTranscriptRows = 20)
+        f.feed("first line\r\nsecond line")
 
-        emulator.setInputPaused(true)
-        emulator.append("AB".toByteArray(), 2)
-        emulator.append("CD".toByteArray(), 2)
-        emulator.setInputPaused(false)
+        val frozen = f.emulator.withWriteLock { f.emulator.captureFrozenSnapshot() }
+        try {
+            f.emulator.withWriteLock {
+                repeat(10) { idx ->
+                    val line = "\r\nlive_$idx".toByteArray()
+                    f.emulator.append(line, line.size)
+                }
+            }
 
-        assertEquals(1, resumeCalls)
-        assertTrue(emulator.hasReadyPausedBacklog())
-        assertEquals("", String(emulator.screen.getRowForRead(0).textChars()).trimEnd())
-
-        emulator.append("EF".toByteArray(), 2)
-        assertTrue(emulator.drainPausedSlice(2))
-        assertEquals("AB", String(emulator.screen.getRowForRead(0).textChars()).trimEnd())
-
-        assertTrue(emulator.drainPausedSlice(2))
-        assertEquals("ABCD", String(emulator.screen.getRowForRead(0).textChars()).trimEnd())
-
-        assertFalse(emulator.drainPausedSlice(2))
-        assertFalse(emulator.hasReadyPausedBacklog())
-        assertEquals("ABCDEF", String(emulator.screen.getRowForRead(0).textChars()).trimEnd())
+            val renderSnapshot = TerminalRenderSnapshot()
+            renderSnapshot.captureFromFrozen(frozen) { 0 }
+            assertEquals("first line", String(renderSnapshot.rowAt(0).textChars()).trimEnd())
+            assertEquals("second line", String(renderSnapshot.rowAt(1).textChars()).trimEnd())
+        } finally {
+            f.emulator.withWriteLock { f.emulator.releaseFrozenSnapshot(frozen) }
+        }
     }
 
     @Test
-    fun pausedQueue_capsMemoryAndRetainsLatestSuffix() {
-        val f = EmulatorFixture(columns = 32, rows = 4)
-        f.emulator.setInputPaused(true)
+    fun nestedFrozenSnapshots_keepRowSharedUntilAllReleased() {
+        val f = EmulatorFixture(columns = 16, rows = 4)
+        f.feed("shared")
+        val originalRow = f.emulator.screen.getRowForRead(0)
 
-        val filler = ByteArray(256 * 1024) { 'x'.code.toByte() }
-        repeat(10) {
-            f.emulator.append(filler, filler.size)
-        }
-        val marker = "\r\nTAIL_MARKER".toByteArray()
-        f.emulator.append(marker, marker.size)
-        f.emulator.setInputPaused(false)
+        val snap1 = f.emulator.captureFrozenSnapshot()
+        val snap2 = f.emulator.captureFrozenSnapshot()
+        assertTrue(originalRow.isSharedWithSnapshot)
 
-        val screen = (0 until f.rows).joinToString("\n") {
-            String(f.emulator.screen.getRowForRead(it).textChars()).trimEnd()
-        }
-        assertTrue("expected TAIL_MARKER on screen, got:\n$screen", screen.contains("TAIL_MARKER"))
+        f.emulator.releaseFrozenSnapshot(snap1)
+        assertTrue(originalRow.isSharedWithSnapshot)
+
+        f.feed("_mut")
+        assertEquals("shared", String(snap2.buffer.getRowForRead(0).textChars()).trimEnd())
+        assertEquals("shared_mut", f.rowText(0))
+
+        f.emulator.releaseFrozenSnapshot(snap2)
+        assertFalse(originalRow.isSharedWithSnapshot)
     }
 
     @Test(timeout = 10_000)

@@ -1,73 +1,120 @@
 package com.awkoo.libterminal.engine
 
+import com.awkoo.libterminal.view.render.TerminalRenderSnapshot
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * 输入冻结/重放：选择文本期间屏幕静止，解冻后按序重放。
+ * 写时复制（CoW）屏幕快照冻结：选择文本期间后端持续完整解析协议，
+ * 冻结视图保持静止与一致，释放后恢复就地写入。
  */
 class TerminalEmulatorFreezeTest {
 
-    private val f = EmulatorFixture()
+    private val f = EmulatorFixture(columns = 12, rows = 4, maxTranscriptRows = 10)
 
     private val emulator get() = f.emulator
 
     @Test
-    fun paused_appendDoesNotChangeScreen() {
-        f.feed("A")
-        emulator.setInputPaused(true)
+    fun frozenSnapshot_isolatesSubsequentAppendsAndClears() {
+        f.feed("hello")
+        val snapshot = emulator.captureFrozenSnapshot()
+        try {
+            f.feed(" world\u001b[2J\u001b[Hcleared")
 
-        f.feed("BC")
-
-        assertEquals("A", f.rowText(0))
+            assertEquals("cleared", f.rowText(0))
+            assertEquals("hello", snapshot.buffer.getSelectedText(0, 0, 11, 0))
+            assertEquals("hello", String(snapshot.buffer.getRowForRead(0).textChars()).trimEnd())
+        } finally {
+            emulator.releaseFrozenSnapshot(snapshot)
+        }
     }
 
     @Test
-    fun unpause_replaysBufferedChunksInOrder() {
-        f.feed("A")
-        emulator.setInputPaused(true)
-        f.feed("B")
-        f.feed("C")
+    fun frozenSnapshot_continuesHandlingProtocolQueriesAndAltScreen() {
+        f.feed("main")
+        val snapshot = emulator.captureFrozenSnapshot()
+        try {
+            f.clearWritten()
+            f.feed("\u001b[?1049h\u001b[Halt\u001b[6n\u001b[?1049l_done")
 
-        emulator.setInputPaused(false)
-
-        assertEquals("ABC", f.rowText(0))
+            assertTrue("DSR query must be answered immediately while frozen: ${f.writtenText}", f.writtenText.contains("\u001b[1;4R"))
+            assertFalse(emulator.isAlternateBufferActive)
+            assertEquals("main_done", f.rowText(0))
+            assertEquals("main", snapshot.buffer.getSelectedText(0, 0, 11, 0))
+            assertFalse(snapshot.isAlternateBufferActive)
+        } finally {
+            emulator.releaseFrozenSnapshot(snapshot)
+        }
     }
 
     @Test
-    fun pauseDuringEscapeSequence_keepsParserStateConsistent() {
-        f.feed("\u001b[3")
-        emulator.setInputPaused(true)
+    fun frozenSnapshot_preservesScrolledOutHistoryRows() {
+        for (i in 0 until 8) {
+            f.feed("line$i\r\n")
+        }
+        val snapshot = emulator.captureFrozenSnapshot()
+        val expectedTop = -snapshot.buffer.activeTranscriptRows
+        val expectedFirstHistory = String(snapshot.buffer.getRowForRead(expectedTop).textChars()).trimEnd()
+        val expectedLastVisible = String(snapshot.buffer.getRowForRead(expectedTop + 3).textChars()).trimEnd()
+        try {
+            for (i in 8 until 25) {
+                f.feed("line$i\r\n")
+            }
 
-        f.feed("1mX")
-        assertEquals("", f.rowText(0))
-
-        emulator.setInputPaused(false)
-
-        // 冻结前的半截 CSI 与冻结期间的字节按原顺序拼接解析：SGR 31m 后写入 X
-        assertEquals("X", f.rowText(0))
-        assertEquals(1, emulator.screen.getStyleAt(0, 0).foreColor)
+            val renderSnapshot = TerminalRenderSnapshot()
+            renderSnapshot.captureFromFrozen(snapshot) { expectedTop }
+            assertEquals(expectedFirstHistory, String(renderSnapshot.rowAt(0).textChars()).trimEnd())
+            assertEquals(expectedLastVisible, String(renderSnapshot.rowAt(3).textChars()).trimEnd())
+            assertEquals("line22", f.rowText(0))
+        } finally {
+            emulator.releaseFrozenSnapshot(snapshot)
+        }
     }
 
     @Test
-    fun repeatedPauseResume_isIdempotent() {
-        emulator.setInputPaused(true)
-        emulator.setInputPaused(true)
-        f.feed("A")
-        emulator.setInputPaused(false)
-        emulator.setInputPaused(false)
+    fun releaseFrozenSnapshot_restoresInPlaceRowMutation() {
+        f.feed("abc")
+        val rowBeforeFreeze = emulator.screen.getRowForRead(0)
+        val snapshot = emulator.captureFrozenSnapshot()
+        assertTrue(rowBeforeFreeze.isSharedWithSnapshot)
 
-        assertEquals("A", f.rowText(0))
+        f.feed("def")
+        val rowDuringFreeze = emulator.screen.getRowForRead(0)
+        assertNotEquals(rowBeforeFreeze.id, rowDuringFreeze.id)
+        assertEquals("abc", String(snapshot.buffer.getRowForRead(0).textChars()).trimEnd())
+        assertEquals("abcdef", f.rowText(0))
+
+        emulator.releaseFrozenSnapshot(snapshot)
+        assertFalse(rowBeforeFreeze.isSharedWithSnapshot)
+
+        val snapshot2 = emulator.captureFrozenSnapshot()
+        assertTrue(rowDuringFreeze.isSharedWithSnapshot)
+        emulator.releaseFrozenSnapshot(snapshot2)
+        assertFalse(rowDuringFreeze.isSharedWithSnapshot)
+
+        val idBeforeWrite = rowDuringFreeze.id
+        f.feed("g")
+        assertEquals(idBeforeWrite, emulator.screen.getRowForRead(0).id)
+        assertEquals("abcdefg", f.rowText(0))
     }
 
     @Test
-    fun pauseKeepsCursorFrozenToo() {
-        f.feed("ab")
-        emulator.setInputPaused(true)
+    fun frozenSnapshot_isolatesResizeAndReflow() {
+        f.feed("abcdefghijklmno")
+        val snapshot = emulator.captureFrozenSnapshot()
+        try {
+            emulator.resize(6, 4, 10, 20)
 
-        f.feed("\u001b[5;5H")
-
-        assertEquals(0, emulator.cursorRow)
-        assertEquals(2, emulator.cursorCol)
+            assertEquals(12, snapshot.columns)
+            assertEquals("abcdefghijkl", String(snapshot.buffer.getRowForRead(0).textChars()).trimEnd())
+            assertEquals("mno", String(snapshot.buffer.getRowForRead(1).textChars()).trimEnd())
+            assertEquals(6, emulator.columns)
+            assertEquals("abcdef", f.rowText(0))
+        } finally {
+            emulator.releaseFrozenSnapshot(snapshot)
+        }
     }
 }

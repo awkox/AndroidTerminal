@@ -153,6 +153,8 @@ class TerminalView(
             textBlinker.stop()
             sessionBinder.bind(value)
             scrollbackOffset = 0
+            hasPendingOutputDuringSelection = false
+            pendingAutoScrollRowsDuringSelection = 0
             keyProcessor.reset()
             field = value
 
@@ -271,11 +273,7 @@ class TerminalView(
 
     /** 手动退出文本选择模式（隐藏选择手柄与浮动工具栏）。 */
     fun stopTextSelectionMode() {
-        if (textSelectionCursorController.hide()) invalidate()
-    }
-
-    private fun decrementYTextSelectionCursors(decrement: Int) {
-        textSelectionCursorController.shiftSelectionRows(decrement)
+        textSelectionCursorController.hide()
     }
 
     private val textSelectionActionMode: ActionMode?
@@ -311,12 +309,22 @@ class TerminalView(
         emulator?.toggleAutoScrollDisabled()
     }
 
+    private val frozenSelectionSnapshot: TerminalEmulator.FrozenScreenSnapshot?
+        get() = textSelectionCursorController.frozenSnapshot
+
+    internal val isActiveViewAlternateBuffer: Boolean
+        get() = frozenSelectionSnapshot?.isAlternateBufferActive ?: (emulator?.isAlternateBufferActive == true)
+
     /** 距屏幕底部的回滚行数，0 表示跟随到底部。 */
     private var scrollbackOffset: Int = 0
+    private var hasPendingOutputDuringSelection: Boolean = false
+    private var pendingAutoScrollRowsDuringSelection: Int = 0
 
     /** 当前可回滚的最大行数。 */
-    private val maxScrollback: Int
-        get() = emulator?.screen?.activeTranscriptRows ?: 0
+    internal val maxScrollback: Int
+        get() = frozenSelectionSnapshot?.buffer?.activeTranscriptRows
+            ?: emulator?.screen?.activeTranscriptRows
+            ?: 0
 
     /** 当前顶行的外部行号，恒 ≤ 0；读取时按当前历史行数夹取，始终落在合法域内。 */
     internal val topRow: Int
@@ -327,46 +335,59 @@ class TerminalView(
         scrollbackOffset = (scrollbackOffset + deltaRows).coerceIn(0, maxScrollback)
     }
 
-    override fun computeVerticalScrollRange() = emulator?.let { emu ->
-        emu.withReadLock { emu.screen.activeRows }
-    } ?: 1
+    override fun computeVerticalScrollRange(): Int {
+        frozenSelectionSnapshot?.let { return it.buffer.activeRows }
+        return emulator?.let { emu ->
+            emu.withReadLock { emu.screen.activeRows }
+        } ?: 1
+    }
 
-    override fun computeVerticalScrollExtent() = emulator?.rows ?: 1
+    override fun computeVerticalScrollExtent(): Int =
+        frozenSelectionSnapshot?.rows ?: emulator?.rows ?: 1
 
     override fun computeVerticalScrollOffset(): Int {
+        frozenSelectionSnapshot?.let { return it.buffer.activeRows + this.topRow - it.rows }
         val emulator = emulator ?: return 1
         return emulator.withReadLock {
             emulator.screen.activeRows + this.topRow - emulator.rows
         }
     }
 
+    internal fun onSelectionSnapshotReleased() {
+        if (hasPendingOutputDuringSelection) {
+            hasPendingOutputDuringSelection = false
+            onScreenUpdated()
+        } else {
+            pendingAutoScrollRowsDuringSelection = 0
+            invalidate()
+        }
+    }
+
     private fun onScreenUpdated(skipScrolling: Boolean = false) {
         val emulator = emulator ?: return
-        var skipScrolling = skipScrolling
-        var shouldStopSelection = false
+        if (isSelectingText) {
+            hasPendingOutputDuringSelection = true
+            if (emulator.isAutoScrollDisabled) {
+                pendingAutoScrollRowsDuringSelection += emulator.takeScrollCounter()
+            }
+            return
+        }
 
+        var skipScrolling = skipScrolling
         emulator.withReadLock {
             val rowsInHistory = maxScrollback
             scrollbackOffset = scrollbackOffset.coerceAtMost(rowsInHistory)
 
-            val rowShift = emulator.takeScrollCounter()
-            if (this.isSelectingText || emulator.isAutoScrollDisabled) {
+            val rowShift = pendingAutoScrollRowsDuringSelection + emulator.takeScrollCounter()
+            pendingAutoScrollRowsDuringSelection = 0
+            if (emulator.isAutoScrollDisabled) {
                 if (scrollbackOffset + rowShift > rowsInHistory) {
-                    if (this.isSelectingText) shouldStopSelection = true
-                    if (emulator.isAutoScrollDisabled) {
-                        scrollbackOffset = rowsInHistory
-                        skipScrolling = true
-                    }
+                    scrollbackOffset = rowsInHistory
                 } else {
-                    skipScrolling = true
                     scrollbackOffset += rowShift
-                    decrementYTextSelectionCursors(rowShift)
                 }
+                skipScrolling = true
             }
-        }
-
-        if (shouldStopSelection) {
-            stopTextSelectionMode()
         }
 
         if (!skipScrolling && this.scrollbackOffset != 0) {
@@ -399,6 +420,11 @@ class TerminalView(
         val renderer = renderer
         val column = CellPoint.xToColumn(x, renderer.fontWidth)
         val viewportRow = CellPoint.yToRow(y, renderer.fontLineSpacing, renderer.baselineOffset)
+        frozenSelectionSnapshot?.let { frozen ->
+            val row = viewportRow + topRow
+            val screen = frozen.buffer
+            return CursorCoord.pack(screen.clampColumn(column), screen.clampRow(row))
+        }
         val emulator = emulator ?: return CursorCoord.pack(column, viewportRow + topRow)
         return emulator.withReadLock {
             val row = viewportRow + topRow
@@ -409,7 +435,7 @@ class TerminalView(
 
     /** 单元格列 → 像素边界；末列之后的右边界传 `columns`。 */
     internal fun getPointX(cx: Int): Int {
-        val columns = emulator?.columns ?: 0
+        val columns = frozenSelectionSnapshot?.columns ?: emulator?.columns ?: 0
         val clamped = if (columns == 0) cx else cx.coerceAtMost(columns)
         return CellPoint.columnToX(clamped, renderer.fontWidth)
     }
@@ -508,7 +534,12 @@ class TerminalView(
         val resolver = currentPalette ?: return
         val sel = selectionBoundsScratch
         textSelectionCursorController.getSelectors(sel)
-        renderSnapshot.captureFrom(emulator) { this.topRow }
+        val frozen = frozenSelectionSnapshot
+        if (frozen != null) {
+            renderSnapshot.captureFromFrozen(frozen) { this.topRow }
+        } else {
+            renderSnapshot.captureFrom(emulator) { this.topRow }
+        }
         canvas.drawColor(resolver.background)
         renderer.render(renderSnapshot, resolver, canvas, sel[0], sel[1], sel[2], sel[3])
         textSelectionCursorController.render()
@@ -529,6 +560,7 @@ class TerminalView(
         val newRows = max(4, (viewHeight - renderer.baselineOffset) / renderer.fontLineSpacing)
 
         if (newColumns != emulator.columns || newRows != emulator.rows) {
+            if (isSelectingText) stopTextSelectionMode()
             currentSession.updateSize(newColumns, newRows, renderer.fontWidth.toInt(), renderer.fontLineSpacing)
             scrollbackOffset = 0
             scrollTo(0, 0)
