@@ -498,7 +498,7 @@ internal class TerminalRow(
 
     /**
      * 将 [codePoint] 追加合并到 [column] 所属的单元格集群中；若 [expandToWide] 为 true 且该格当前为单宽，
-     * 则就地吸收右侧相邻格扩展为 2 列宽。
+     * 则就地吸收右侧相邻格扩展为 2 列宽。若已达 [MAX_CELL_CODEPOINTS] 上限则返回 false 且不变更行状态。
      */
     fun appendCodePointToCell(
         column: Int,
@@ -506,8 +506,18 @@ internal class TerminalRow(
         expandToWide: Boolean,
         style: TextStyle,
         extendedEffect: Long = 0L
-    ) {
+    ): Boolean {
         require(column in 0 until columns) { "TerminalRow.appendCodePointToCell(): column=$column" }
+        val existingCounts = cellCharCounts
+        if (existingCounts != null) {
+            val cellCol = getCellStartColAt(column)
+            val oldCharCount = existingCounts[cellCol]
+            val oldStartIdx = findStartOfColumn(cellCol)
+            if (Character.codePointCount(text, oldStartIdx, oldCharCount) >= MAX_CELL_CODEPOINTS) {
+                return false
+            }
+        }
+
         val ext = normalizeExtendedEffect(style.value, extendedEffect)
         hasNonOneWidthOrSurrogateChars = true
         val counts = ensureCellCharCounts()
@@ -519,11 +529,6 @@ internal class TerminalRow(
 
         val oldCharCount = counts[cellCol]
         val oldStartIdx = findStartOfColumn(cellCol)
-        if (Character.codePointCount(text, oldStartIdx, oldCharCount) >= MAX_CELL_CODEPOINTS) {
-            version++
-            return
-        }
-
         val cpChars = Character.charCount(codePoint)
         val oldWidth = if (cellCol + 1 < columns && counts[cellCol + 1] == 0) 2 else 1
 
@@ -559,6 +564,7 @@ internal class TerminalRow(
             counts[cellCol] = oldCharCount + cpChars
         }
         version++
+        return true
     }
 
     private fun markNonBlankIfNeeded(codePoint: Int, style: TextStyle) {
@@ -740,7 +746,7 @@ internal class TerminalRow(
     companion object {
         private val nextRowId = AtomicLong(0L)
         private const val SPARE_CAPACITY_FACTOR = 1.5f
-        private const val MAX_CELL_CODEPOINTS = 32
+        internal const val MAX_CELL_CODEPOINTS = 32
         private val SPACE_CHAR_ARRAY = charArrayOf(' ')
     }
 }

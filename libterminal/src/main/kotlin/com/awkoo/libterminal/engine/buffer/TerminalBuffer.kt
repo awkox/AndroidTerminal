@@ -494,12 +494,12 @@ internal class TerminalBuffer private constructor(
         expandToWide: Boolean,
         style: TextStyle,
         extendedEffect: Long = 0L
-    ) {
+    ): Boolean {
         require(!(row !in 0..<screenRows || column < 0 || column >= columns)) {
             "TerminalBuffer.appendCodePointToCell(): row=$row, column=$column, screenRows=$screenRows, columns=$columns"
         }
         val internal = externalToInternalRow(row)
-        allocateFullLineIfNecessary(internal).appendCodePointToCell(column, codePoint, expandToWide, style, extendedEffect)
+        return allocateFullLineIfNecessary(internal).appendCodePointToCell(column, codePoint, expandToWide, style, extendedEffect)
     }
 
     fun getCellStartColAt(row: Int, column: Int): Int =

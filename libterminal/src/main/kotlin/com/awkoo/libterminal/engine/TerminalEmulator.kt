@@ -79,10 +79,12 @@ internal class TerminalEmulator(
     private var aboutToAutoWrap = false
     private var lastClusterRow = -1
     private var lastClusterCol = -1
+    private var lastClusterEndsWithPrepend = false
 
     private fun invalidateLastCluster() {
         lastClusterRow = -1
         lastClusterCol = -1
+        lastClusterEndsWithPrepend = false
     }
 
     /**
@@ -1154,82 +1156,91 @@ internal class TerminalEmulator(
         if (graphemeClustering &&
             lastClusterRow == _cursorRow &&
             lastClusterCol in 0 until columns &&
-            GraphemeBreak.mayMerge(cp, displayWidth)
+            GraphemeBreak.mayMerge(cp, lastClusterEndsWithPrepend)
         ) {
-            val prevWidth = screen.getCellWidth(lastClusterRow, lastClusterCol)
             val cellChars = screen.copyCellChars(lastClusterRow, lastClusterCol)
-            if (GraphemeBreak.shouldMerge(cellChars, cp, displayWidth)) {
-                val expandToWide = GraphemeBreak.shouldExpandToWide(cellChars, prevWidth, cp)
-                val existingStyle = screen.getStyleAt(lastClusterRow, lastClusterCol)
-                val existingExt = screen.getExtendedEffectAt(lastClusterRow, lastClusterCol)
-                val rightEdge = rightEdgeExclusive(lastClusterCol)
-                val leftEdge = leftEdgeInclusive(lastClusterCol)
-                val canExpandHere = expandToWide && lastClusterCol < rightEdge - 1
-                val canWrapAndExpand = expandToWide &&
-                    lastClusterCol == rightEdge - 1 &&
-                    autoWrap &&
-                    (rightEdge - leftEdge) >= 2
+            if (GraphemeBreak.shouldMerge(cellChars, cp)) {
+                if (Character.codePointCount(cellChars, 0, cellChars.size) <
+                    com.awkoo.libterminal.engine.buffer.TerminalRow.MAX_CELL_CODEPOINTS
+                ) {
+                    val prevWidth = screen.getCellWidth(lastClusterRow, lastClusterCol)
+                    val expandToWide = GraphemeBreak.shouldExpandToWide(cellChars, prevWidth, cp)
+                    val existingStyle = screen.getStyleAt(lastClusterRow, lastClusterCol)
+                    val existingExt = screen.getExtendedEffectAt(lastClusterRow, lastClusterCol)
+                    val rightEdge = rightEdgeExclusive(lastClusterCol)
+                    val leftEdge = leftEdgeInclusive(lastClusterCol)
+                    val canExpandHere = expandToWide && lastClusterCol < rightEdge - 1
+                    val canWrapAndExpand = expandToWide &&
+                        lastClusterCol == rightEdge - 1 &&
+                        autoWrap &&
+                        (rightEdge - leftEdge) >= 2
 
-                if (canWrapAndExpand) {
-                    val cpChars = Character.toChars(cp)
-                    val combined = CharArray(cellChars.size + cpChars.size)
-                    cellChars.copyInto(combined, 0)
-                    cpChars.copyInto(combined, cellChars.size)
+                    if (canWrapAndExpand) {
+                        val cpChars = Character.toChars(cp)
+                        val combined = CharArray(cellChars.size + cpChars.size)
+                        cellChars.copyInto(combined, 0)
+                        cpChars.copyInto(combined, cellChars.size)
 
-                    screen.setChar(lastClusterCol, lastClusterRow, ' '.code, rendition.eraseFillStyle)
-                    screen.setLineWrap(lastClusterRow, hasTrailingWrapPadding = lastClusterCol == columns - 1)
-                    this.cursorCol = leftMargin
-                    if (_cursorRow + 1 < bottomMargin) this.cursorRow++ else scrollDownOneLine()
+                        screen.setChar(lastClusterCol, lastClusterRow, ' '.code, rendition.eraseFillStyle)
+                        screen.setLineWrap(lastClusterRow, hasTrailingWrapPadding = lastClusterCol == columns - 1)
+                        this.cursorCol = leftMargin
+                        if (_cursorRow + 1 < bottomMargin) this.cursorRow++ else scrollDownOneLine()
 
-                    val targetRow = _cursorRow
-                    val targetCol = _cursorCol
-                    if (isInsertMode && targetCol + 2 < rightMargin) {
+                        val targetRow = _cursorRow
+                        val targetCol = _cursorCol
+                        if (isInsertMode && targetCol + 2 < rightMargin) {
+                            screen.blockCopy(
+                                targetCol,
+                                targetRow,
+                                rightMargin - (targetCol + 2),
+                                1,
+                                targetCol + 2,
+                                targetRow
+                            )
+                        }
+                        screen.setCell(targetCol, targetRow, combined, 0, combined.size, 2, existingStyle, existingExt)
+                        val newRightEdge = rightEdgeExclusive(targetCol)
+                        this.cursorCol = min(targetCol + 2, newRightEdge - 1)
+                        aboutToAutoWrap = targetCol == newRightEdge - 2
+                        lastClusterRow = targetRow
+                        lastClusterCol = targetCol
+                        lastClusterEndsWithPrepend = GraphemeBreak.isPrepend(cp)
+                        return
+                    }
+
+                    if (canExpandHere && isInsertMode && _cursorCol + 1 < rightMargin) {
                         screen.blockCopy(
-                            targetCol,
-                            targetRow,
-                            rightMargin - (targetCol + 2),
+                            _cursorCol,
+                            _cursorRow,
+                            rightMargin - (_cursorCol + 1),
                             1,
-                            targetCol + 2,
-                            targetRow
+                            _cursorCol + 1,
+                            _cursorRow
                         )
                     }
-                    screen.setCell(targetCol, targetRow, combined, 0, combined.size, 2, existingStyle, existingExt)
-                    val newRightEdge = rightEdgeExclusive(targetCol)
-                    this.cursorCol = min(targetCol + 2, newRightEdge - 1)
-                    aboutToAutoWrap = targetCol == newRightEdge - 2
-                    lastClusterRow = targetRow
-                    lastClusterCol = targetCol
-                    return
-                }
 
-                if (canExpandHere && isInsertMode && _cursorCol + 1 < rightMargin) {
-                    screen.blockCopy(
-                        _cursorCol,
-                        _cursorRow,
-                        rightMargin - (_cursorCol + 1),
-                        1,
-                        _cursorCol + 1,
-                        _cursorRow
-                    )
+                    val mergedCol = lastClusterCol
+                    val mergedRow = lastClusterRow
+                    if (screen.appendCodePointToCell(
+                            mergedCol,
+                            mergedRow,
+                            cp,
+                            expandToWide = canExpandHere,
+                            style = existingStyle,
+                            extendedEffect = existingExt
+                        )
+                    ) {
+                        if (canExpandHere) {
+                            this.cursorCol = min(mergedCol + 2, rightEdge - 1)
+                            aboutToAutoWrap = autoWrap && (mergedCol == rightEdge - 2)
+                        }
+                        lastClusterRow = mergedRow
+                        lastClusterCol = mergedCol
+                        lastClusterEndsWithPrepend = GraphemeBreak.isPrepend(cp)
+                        return
+                    }
                 }
-
-                val mergedCol = lastClusterCol
-                val mergedRow = lastClusterRow
-                screen.appendCodePointToCell(
-                    mergedCol,
-                    mergedRow,
-                    cp,
-                    expandToWide = canExpandHere,
-                    style = existingStyle,
-                    extendedEffect = existingExt
-                )
-                if (canExpandHere) {
-                    this.cursorCol = min(mergedCol + 2, rightEdge - 1)
-                    aboutToAutoWrap = autoWrap && (mergedCol == rightEdge - 2)
-                }
-                lastClusterRow = mergedRow
-                lastClusterCol = mergedCol
-                return
+                invalidateLastCluster()
             }
         }
 
@@ -1241,17 +1252,20 @@ internal class TerminalEmulator(
             ) {
                 val mergedCol = lastClusterCol
                 val mergedRow = lastClusterRow
-                screen.appendCodePointToCell(
-                    mergedCol,
-                    mergedRow,
-                    cp,
-                    expandToWide = false,
-                    style = screen.getStyleAt(mergedRow, mergedCol),
-                    extendedEffect = screen.getExtendedEffectAt(mergedRow, mergedCol)
-                )
-                lastClusterRow = mergedRow
-                lastClusterCol = mergedCol
-                return
+                if (screen.appendCodePointToCell(
+                        mergedCol,
+                        mergedRow,
+                        cp,
+                        expandToWide = false,
+                        style = screen.getStyleAt(mergedRow, mergedCol),
+                        extendedEffect = screen.getExtendedEffectAt(mergedRow, mergedCol)
+                    )
+                ) {
+                    lastClusterRow = mergedRow
+                    lastClusterCol = mergedCol
+                    lastClusterEndsWithPrepend = false
+                    return
+                }
             }
             invalidateLastCluster()
             return
@@ -1296,8 +1310,13 @@ internal class TerminalEmulator(
         // 顺序不可调换，否则换行标志被写入即清，自动换行失效（Ctrl+R 光标倒退覆盖的根因）。
         this.cursorCol = min(previousCol + displayWidth, rightEdgeExclusive(previousCol) - 1)
         aboutToAutoWrap = autoWrap && (previousCol == rightEdgeExclusive(previousCol) - displayWidth)
-        lastClusterRow = writtenRow
-        lastClusterCol = previousCol
+        if (graphemeClustering && GraphemeBreak.gcbClass(cp) == GraphemeBreak.GcbClass.CONTROL) {
+            invalidateLastCluster()
+        } else {
+            lastClusterRow = writtenRow
+            lastClusterCol = previousCol
+            lastClusterEndsWithPrepend = graphemeClustering && GraphemeBreak.isPrepend(cp)
+        }
     }
 
     private fun doLinefeed() {

@@ -356,4 +356,21 @@ class TerminalRowTest {
             cells
         )
     }
+
+    @Test
+    fun appendCodePointToCell_returnsFalseAtCapWithoutMutatingVersionOrStyle() {
+        val row = newBlankRow(4)
+        row.setChar(0, 'a'.code, TextStyle.NORMAL)
+        repeat(TerminalRow.MAX_CELL_CODEPOINTS - 1) {
+            assertTrue(row.appendCodePointToCell(0, 0x0301, expandToWide = false, style = TextStyle.NORMAL))
+        }
+        val versionAtCap = row.version
+        val newStyle = TextStyle.encode(2, 3, TextStyle.CHARACTER_ATTRIBUTE_BOLD)
+
+        assertFalse(row.appendCodePointToCell(0, 0x0302, expandToWide = true, style = newStyle))
+        assertEquals(versionAtCap, row.version)
+        assertEquals(TerminalRow.MAX_CELL_CODEPOINTS, row.getCellCodePointCount(0))
+        assertEquals(1, row.getCellWidth(0))
+        assertEquals(TextStyle.NORMAL, row.getStyle(0))
+    }
 }

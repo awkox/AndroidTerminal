@@ -262,4 +262,62 @@ class TerminalEmulatorClusterTest {
         assertEquals("\u2764\u0301\uFE0F", String(row1.copyCellChars(0)))
         assertEquals("y", String(row1.copyCellChars(1)))
     }
+
+    @Test
+    fun spacingMarkAndPrepend_followGb9aAndGb9bInMode2027() {
+        f.feed("\u0915\u093Ex\r\n\u0600" + "1y\r\n\u0600\u4E2Dz")
+
+        val row0 = emulator.screen.getRowForRead(0)
+        assertEquals(1, row0.getCellWidth(0))
+        assertEquals("\u0915\u093E", String(row0.copyCellChars(0)))
+        assertEquals("x", String(row0.copyCellChars(1)))
+
+        val row1 = emulator.screen.getRowForRead(1)
+        assertEquals(1, row1.getCellWidth(0))
+        assertEquals("\u0600" + "1", String(row1.copyCellChars(0)))
+        assertEquals("y", String(row1.copyCellChars(1)))
+
+        val row2 = emulator.screen.getRowForRead(2)
+        assertEquals(2, row2.getCellWidth(0))
+        assertEquals("\u0600\u4E2D", String(row2.copyCellChars(0)))
+        assertEquals("z", String(row2.copyCellChars(2)))
+    }
+
+    @Test
+    fun softHyphen_rendersAsColumnAndBreaksCluster() {
+        f.feed("a\u00AD\u0301b")
+
+        val row0 = emulator.screen.getRowForRead(0)
+        assertEquals("a", String(row0.copyCellChars(0)))
+        assertEquals("\u00AD", String(row0.copyCellChars(1)))
+        assertEquals("b", String(row0.copyCellChars(2)))
+        assertEquals(3, emulator.cursorCol)
+    }
+
+    @Test
+    fun cellCodePointCapReached_breaksClusterAndKeepsCursorAndWidthInSync() {
+        val zwjChain = buildString {
+            append("\uD83D\uDC68")
+            repeat(15) { append("\u200D\uD83D\uDC68") }
+            append("\u200D")
+            append("\uD83D\uDC69")
+            append("x")
+        }
+        f.feed(zwjChain)
+
+        val row0 = emulator.screen.getRowForRead(0)
+        assertEquals(32, row0.getCellCodePointCount(0))
+        assertEquals(2, row0.getCellWidth(0))
+        assertEquals("\uD83D\uDC69", String(row0.copyCellChars(2)))
+        assertEquals(2, row0.getCellWidth(2))
+        assertEquals("x", String(row0.copyCellChars(4)))
+        assertEquals(5, emulator.cursorCol)
+
+        f.feed("\r\na" + "\u0301".repeat(40) + "b")
+        val row1 = emulator.screen.getRowForRead(1)
+        assertEquals(32, row1.getCellCodePointCount(0))
+        assertEquals(1, row1.getCellWidth(0))
+        assertEquals("b", String(row1.copyCellChars(1)))
+        assertEquals(2, emulator.cursorCol)
+    }
 }
