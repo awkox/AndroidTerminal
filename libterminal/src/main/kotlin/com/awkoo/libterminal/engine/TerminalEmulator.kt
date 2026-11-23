@@ -10,6 +10,7 @@ import com.awkoo.libterminal.engine.buffer.TerminalBuffer
 import com.awkoo.libterminal.engine.buffer.CursorCoord
 import com.awkoo.libterminal.color.SparsePalette
 import com.awkoo.libterminal.color.TerminalColorScheme
+import com.awkoo.libterminal.text.GraphemeBreak
 import com.awkoo.libterminal.text.TextStyle
 import com.awkoo.libterminal.text.Utf8Decoder
 import com.awkoo.libterminal.text.WcWidth
@@ -490,6 +491,7 @@ internal class TerminalEmulator(
             '6' -> if (_cursorCol > leftEdgeInclusive(_cursorCol)) {
                 this.cursorCol = _cursorCol - 1
             } else if (_cursorCol == leftMargin && _cursorRow in topMargin until bottomMargin) {
+                invalidateLastCluster()
                 val height = bottomMargin - topMargin
                 screen.insertColumns(leftMargin, topMargin, 1, height, rightMargin, rendition.styleWithoutEffect)
             }
@@ -499,6 +501,7 @@ internal class TerminalEmulator(
             '9' -> if (_cursorCol < rightEdgeExclusive(_cursorCol) - 1) {
                 this.cursorCol = _cursorCol + 1
             } else if (_cursorCol == rightMargin - 1 && _cursorRow in topMargin until bottomMargin) {
+                invalidateLastCluster()
                 val height = bottomMargin - topMargin
                 screen.deleteColumns(leftMargin, topMargin, 1, height, rightMargin, rendition.styleWithoutEffect)
             }
@@ -531,6 +534,7 @@ internal class TerminalEmulator(
             'M' -> {
                 aboutToAutoWrap = false
                 if (_cursorRow == topMargin) {
+                    invalidateLastCluster()
                     screen.shiftLines(
                         topMargin,
                         bottomMargin,
@@ -631,6 +635,7 @@ internal class TerminalEmulator(
             }
 
             'T' -> {
+                invalidateLastCluster()
                 val linesToScrollArg = AnsiEscapeParser.getArg(args, 0, 1, true)
                 val linesBetween = bottomMargin - topMargin
                 val linesToScroll = min(linesBetween, linesToScrollArg)
@@ -1132,23 +1137,29 @@ internal class TerminalEmulator(
      * 5. 更新光标位置和预备换行标志
      */
     private fun emitCodePoint(codePoint: Int) {
-        lastPrintedCodePoint = codePoint
         var cp = codePoint
         if (if (isG0ShiftedIn) g0IsLineDrawing else g1IsLineDrawing) {
             cp = mapSpecialCharacters(cp)
         }
+        if (GraphemeBreak.isControlOrFormatBreak(cp)) {
+            invalidateLastCluster()
+            return
+        }
+        lastPrintedCodePoint = codePoint
 
         val autoWrap = isDecsetInternalBitSet(DECSET_BIT_AUTOWRAP)
         val graphemeClustering = isDecsetInternalBitSet(DECSET_BIT_GRAPHEME_CLUSTERING)
         val displayWidth = WcWidth.width(cp)
 
-        if (graphemeClustering && lastClusterRow == _cursorRow && lastClusterCol in 0 until columns) {
-            val prevWidth = screen.getCellWidth(_cursorRow, lastClusterCol)
-            val firstCp = screen.getCellFirstCodePoint(_cursorRow, lastClusterCol)
-            val lastCp = screen.getCellLastCodePoint(_cursorRow, lastClusterCol)
-            val cellCodePoints = screen.getCellCodePointCount(_cursorRow, lastClusterCol)
-            if (shouldMergeIntoLastCluster(cp, displayWidth, firstCp, lastCp, cellCodePoints)) {
-                val expandToWide = shouldExpandCellToWide(cp, prevWidth, firstCp, lastCp, cellCodePoints)
+        if (graphemeClustering &&
+            lastClusterRow == _cursorRow &&
+            lastClusterCol in 0 until columns &&
+            GraphemeBreak.mayMerge(cp, displayWidth)
+        ) {
+            val prevWidth = screen.getCellWidth(lastClusterRow, lastClusterCol)
+            val cellChars = screen.copyCellChars(lastClusterRow, lastClusterCol)
+            if (GraphemeBreak.shouldMerge(cellChars, cp, displayWidth)) {
+                val expandToWide = GraphemeBreak.shouldExpandToWide(cellChars, prevWidth, cp)
                 val existingStyle = screen.getStyleAt(lastClusterRow, lastClusterCol)
                 val existingExt = screen.getExtendedEffectAt(lastClusterRow, lastClusterCol)
                 val rightEdge = rightEdgeExclusive(lastClusterCol)
@@ -1160,11 +1171,10 @@ internal class TerminalEmulator(
                     (rightEdge - leftEdge) >= 2
 
                 if (canWrapAndExpand) {
-                    val existingChars = screen.copyCellChars(lastClusterRow, lastClusterCol)
                     val cpChars = Character.toChars(cp)
-                    val combined = CharArray(existingChars.size + cpChars.size)
-                    existingChars.copyInto(combined, 0)
-                    cpChars.copyInto(combined, existingChars.size)
+                    val combined = CharArray(cellChars.size + cpChars.size)
+                    cellChars.copyInto(combined, 0)
+                    cpChars.copyInto(combined, cellChars.size)
 
                     screen.setChar(lastClusterCol, lastClusterRow, ' '.code, rendition.eraseFillStyle)
                     screen.setLineWrap(lastClusterRow, hasTrailingWrapPadding = lastClusterCol == columns - 1)
@@ -1224,15 +1234,25 @@ internal class TerminalEmulator(
         }
 
         if (displayWidth <= 0) {
-            val offsetDueToCombiningChar =
-                if (_cursorCol > 0 && !aboutToAutoWrap) 1 else 0
-            screen.setChar(
-                _cursorCol - offsetDueToCombiningChar,
-                _cursorRow,
-                cp,
-                rendition.style,
-                rendition.currentExtendedEffect
-            )
+            if (!graphemeClustering &&
+                lastClusterRow == _cursorRow &&
+                lastClusterCol in 0 until columns &&
+                !GraphemeBreak.isEmojiTagChar(cp)
+            ) {
+                val mergedCol = lastClusterCol
+                val mergedRow = lastClusterRow
+                screen.appendCodePointToCell(
+                    mergedCol,
+                    mergedRow,
+                    cp,
+                    expandToWide = false,
+                    style = screen.getStyleAt(mergedRow, mergedCol),
+                    extendedEffect = screen.getExtendedEffectAt(mergedRow, mergedCol)
+                )
+                lastClusterRow = mergedRow
+                lastClusterCol = mergedCol
+                return
+            }
             invalidateLastCluster()
             return
         }
@@ -1278,49 +1298,6 @@ internal class TerminalEmulator(
         aboutToAutoWrap = autoWrap && (previousCol == rightEdgeExclusive(previousCol) - displayWidth)
         lastClusterRow = writtenRow
         lastClusterCol = previousCol
-    }
-
-    private fun shouldMergeIntoLastCluster(
-        cp: Int,
-        displayWidth: Int,
-        firstCp: Int,
-        lastCp: Int,
-        cellCodePoints: Int
-    ): Boolean {
-        if (displayWidth <= 0) return true
-        if (WcWidth.isEmojiModifier(cp) &&
-            (WcWidth.isEmojiOrPictographic(firstCp) || WcWidth.isEmojiOrPictographic(lastCp))
-        ) return true
-        if (WcWidth.isZeroWidthJoiner(lastCp) && WcWidth.isEmojiOrPictographic(cp)) return true
-        if (WcWidth.isRegionalIndicator(cp) &&
-            WcWidth.isRegionalIndicator(firstCp) &&
-            cellCodePoints == 1
-        ) return true
-        return false
-    }
-
-    private fun shouldExpandCellToWide(
-        cp: Int,
-        prevWidth: Int,
-        firstCp: Int,
-        lastCp: Int,
-        cellCodePoints: Int
-    ): Boolean {
-        if (prevWidth != 1) return false
-        if (WcWidth.isVariationSelector16(cp) &&
-            !WcWidth.isVariationSelector15(lastCp) &&
-            WcWidth.isVs16WideningCandidate(firstCp)
-        ) return true
-        if (WcWidth.isCombiningEnclosingKeycap(cp) && WcWidth.isKeycapBase(firstCp)) return true
-        if (WcWidth.isEmojiModifier(cp) &&
-            (WcWidth.isEmojiOrPictographic(firstCp) || WcWidth.isEmojiOrPictographic(lastCp))
-        ) return true
-        if (WcWidth.isZeroWidthJoiner(lastCp) && WcWidth.isEmojiOrPictographic(cp)) return true
-        if (WcWidth.isRegionalIndicator(cp) &&
-            WcWidth.isRegionalIndicator(firstCp) &&
-            cellCodePoints == 1
-        ) return true
-        return false
     }
 
     private fun doLinefeed() {

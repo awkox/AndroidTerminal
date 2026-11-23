@@ -618,7 +618,7 @@ internal object WcWidth {
         require(it.size % 2 == 0) { "VS16_EMOJI_CANDIDATE array length must be even" }
     }
 
-    private fun intable(table: IntArray, c: Int): Boolean {
+    internal fun inRangeTable(table: IntArray, c: Int): Boolean {
         if (c < table[0]) return false
 
         var bot = 0
@@ -657,14 +657,21 @@ internal object WcWidth {
     private fun classicWidth(ucs: Int): Int = when {
         ucs == 0 ||
         ucs == 0x034F ||
+        ucs == 0x061C ||
+        ucs == 0x180E ||
         ucs in 0x200B..0x200F ||
-        ucs in 0x2028..0x2029 ||
-        ucs in 0x202A..0x202E ||
-        ucs in 0x2060..0x2063 ||
+        ucs in 0x2028..0x202E ||
+        ucs in 0x2060..0x206F ||
+        ucs == 0xFEFF ||
+        ucs in 0xFFF9..0xFFFB ||
+        ucs in 0x13430..0x1343F ||
+        ucs in 0x1BCA0..0x1BCA3 ||
+        ucs in 0x1D173..0x1D17A ||
+        ucs in 0xE0000..0xE0FFF ||
         ucs < 32 ||
         ucs in 0x007F..<0x00A0 ||
-        intable(ZERO_WIDTH, ucs) -> 0
-        intable(WIDE_EASTASIAN, ucs) -> 2
+        inRangeTable(ZERO_WIDTH, ucs) -> 0
+        inRangeTable(WIDE_EASTASIAN, ucs) -> 2
         else -> 1
     }
 
@@ -710,12 +717,7 @@ internal object WcWidth {
 
     fun isRegionalIndicator(cp: Int): Boolean = cp in 0x1F1E6..0x1F1FF
 
-    fun isVs16WideningCandidate(cp: Int): Boolean = intable(VS16_EMOJI_CANDIDATE, cp)
+    fun isVs16WideningCandidate(cp: Int): Boolean = inRangeTable(VS16_EMOJI_CANDIDATE, cp)
 
-    fun isEmojiOrPictographic(cp: Int): Boolean =
-        cp == 0x00A9 ||
-            cp == 0x00AE ||
-            intable(VS16_EMOJI_CANDIDATE, cp) ||
-            (cp in 0x2300..0x2BFF && intable(WIDE_EASTASIAN, cp)) ||
-            (cp in 0x1F000..0x1FAFF && (intable(WIDE_EASTASIAN, cp) || isEmojiModifier(cp)))
+    fun isEmojiOrPictographic(cp: Int): Boolean = GraphemeBreak.isExtendedPictographic(cp)
 }

@@ -178,4 +178,88 @@ class TerminalEmulatorClusterTest {
         assertEquals("b", String(row0.copyCellChars(7)))
         assertEquals(TextStyle.NORMAL, row0.getStyle(0))
     }
+
+    @Test
+    fun zeroWidthControlAndFormatChars_breakClusterAndDoNotMerge() {
+        f.feed("a\u200B\u0301b\u2060\u0301c\uFEFF\u0301d")
+        val row0 = emulator.screen.getRowForRead(0)
+        assertEquals("a", String(row0.copyCellChars(0)))
+        assertEquals("b", String(row0.copyCellChars(1)))
+        assertEquals("c", String(row0.copyCellChars(2)))
+        assertEquals("d", String(row0.copyCellChars(3)))
+        assertEquals(4, emulator.cursorCol)
+
+        f.feed("\r\n\u0301xy\u001b[2;10H\u0301")
+        val row1 = emulator.screen.getRowForRead(1)
+        assertEquals("x", String(row1.copyCellChars(0)))
+        assertEquals("y", String(row1.copyCellChars(1)))
+        assertEquals(" ", String(row1.copyCellChars(8)))
+        assertEquals(" ", String(row1.copyCellChars(9)))
+
+        f.feed("\u001b[3;1He\u001b[3;2H\u0301\u001b[3;2H\u007Fz")
+        val row2 = emulator.screen.getRowForRead(2)
+        assertEquals("e", String(row2.copyCellChars(0)))
+        assertEquals("z", String(row2.copyCellChars(1)))
+    }
+
+    @Test
+    fun zeroWidthControlBreak_alsoBlocksMergeInLegacyMode2027Off() {
+        f.feed("\u001b[?2027la\u200B\u0301b\u0301")
+
+        val row0 = emulator.screen.getRowForRead(0)
+        assertEquals("a", String(row0.copyCellChars(0)))
+        assertEquals("b\u0301", String(row0.copyCellChars(1)))
+        assertEquals(2, emulator.cursorCol)
+    }
+
+    @Test
+    fun invalidZwjSkinToneAndTag_doNotFalselyMerge() {
+        f.feed("a\u200D😀\r\n😀🏽x\r\na\uDB40\uDC67b")
+
+        val row0 = emulator.screen.getRowForRead(0)
+        assertEquals("a\u200D", String(row0.copyCellChars(0)))
+        assertEquals(2, row0.getCellWidth(1))
+        assertEquals("😀", String(row0.copyCellChars(1)))
+
+        val row1 = emulator.screen.getRowForRead(1)
+        assertEquals("😀", String(row1.copyCellChars(0)))
+        assertEquals("🏽", String(row1.copyCellChars(2)))
+        assertEquals("x", String(row1.copyCellChars(4)))
+
+        val row2 = emulator.screen.getRowForRead(2)
+        assertEquals("a", String(row2.copyCellChars(0)))
+        assertEquals("b", String(row2.copyCellChars(1)))
+    }
+
+    @Test
+    fun hangulJamoAndIndicConjunct_mergeWithinSingleCluster() {
+        f.feed("\u1100\u1161\u11A8x")
+        val row0 = emulator.screen.getRowForRead(0)
+        assertEquals(2, row0.getCellWidth(0))
+        assertEquals("\u1100\u1161\u11A8", String(row0.copyCellChars(0)))
+        assertEquals("x", String(row0.copyCellChars(2)))
+        assertEquals(3, emulator.cursorCol)
+
+        f.feed("\r\n\u0915\u094D\u0937\u092E")
+        val row1 = emulator.screen.getRowForRead(1)
+        assertEquals(1, row1.getCellWidth(0))
+        assertEquals("\u0915\u094D\u0937", String(row1.copyCellChars(0)))
+        assertEquals("\u092E", String(row1.copyCellChars(1)))
+        assertEquals(2, emulator.cursorCol)
+    }
+
+    @Test
+    fun dirtyKeycapAndVs16WithCombiningMark_doNotFalselyWiden() {
+        f.feed("1\u0301\u20E3x\r\n\u2764\u0301\uFE0Fy")
+
+        val row0 = emulator.screen.getRowForRead(0)
+        assertEquals(1, row0.getCellWidth(0))
+        assertEquals("1\u0301\u20E3", String(row0.copyCellChars(0)))
+        assertEquals("x", String(row0.copyCellChars(1)))
+
+        val row1 = emulator.screen.getRowForRead(1)
+        assertEquals(1, row1.getCellWidth(0))
+        assertEquals("\u2764\u0301\uFE0F", String(row1.copyCellChars(0)))
+        assertEquals("y", String(row1.copyCellChars(1)))
+    }
 }

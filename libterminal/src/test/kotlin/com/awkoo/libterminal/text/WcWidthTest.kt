@@ -84,6 +84,22 @@ class WcWidthTest {
     }
 
     @Test
+    fun formatAndControlChars_areZeroWidth() {
+        assertEquals(0, WcWidth.width(0x061C)) // Arabic Letter Mark
+        assertEquals(0, WcWidth.width(0x180E)) // Mongolian Vowel Separator
+        assertEquals(0, WcWidth.width(0x200B)) // ZWSP
+        assertEquals(0, WcWidth.width(0x200E)) // LRM
+        assertEquals(0, WcWidth.width(0x2060)) // Word Joiner
+        assertEquals(0, WcWidth.width(0x2066)) // LRI
+        assertEquals(0, WcWidth.width(0x2069)) // PDI
+        assertEquals(0, WcWidth.width(0xFEFF)) // BOM
+        assertEquals(0, WcWidth.width(0xFFF9)) // Interlinear Annotation Anchor
+        assertEquals(0, WcWidth.width(0x1BCA0)) // Shorthand Format
+        assertEquals(0, WcWidth.width(0x1D173)) // Musical Symbol Begin Beam
+        assertEquals(0, WcWidth.width(0xE0001)) // Language Tag
+    }
+
+    @Test
     fun emojiClusterHelpers_classifyCandidatesAccurately() {
         assertEquals(true, WcWidth.isVs16WideningCandidate(0x2764)) // Heavy Black Heart
         assertEquals(true, WcWidth.isVs16WideningCandidate(0x26A0)) // Warning Sign
@@ -99,7 +115,9 @@ class WcWidthTest {
 
         assertEquals(true, WcWidth.isEmojiOrPictographic(0x1F600))
         assertEquals(true, WcWidth.isEmojiOrPictographic(0x2764))
-        assertEquals(true, WcWidth.isEmojiOrPictographic(0x1F3FD))
+        assertEquals(false, WcWidth.isEmojiOrPictographic(0x1F3FD))
+        assertEquals(true, WcWidth.isEmojiModifier(0x1F3FD))
+        assertEquals(false, WcWidth.isEmojiOrPictographic(0x2329))
         assertEquals(false, WcWidth.isEmojiOrPictographic('A'.code))
     }
 }
