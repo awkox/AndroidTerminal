@@ -1,14 +1,11 @@
 package com.awkoo.libterminal.text
 
 /**
- * Unicode 15 字符宽度计算（wcwidth(3) 实现）。
+ * 终端单元格宽度计算（wcwidth(3) 实现）。
  *
- * 基于 https://github.com/jquast/wcwidth 移植，不可打印字符返回 0。
- *
- * 注意：必须与以下仓库保持同步：
- * https://github.com/termux/wcwidth
- * https://github.com/termux/libandroid-support
- * https://github.com/termux/termux-packages/tree/master/packages/libandroid-support
+ * 列宽基准基于 Unicode 15（https://github.com/jquast/wcwidth 移植），
+ * 并包含 Unicode 16.0 零宽组合符与 VS16 宽字符扩宽表，不可打印字符返回 0。
+ * 字素簇合并边界由 [GraphemeBreak]（Unicode 16.0 UAX #29）独立负责，不以本宽度表反向推导。
  */
 internal object WcWidth {
     // From https://github.com/jquast/wcwidth/blob/master/wcwidth/table_zero.py

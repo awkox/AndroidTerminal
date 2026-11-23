@@ -320,4 +320,83 @@ class TerminalEmulatorClusterTest {
         assertEquals("b", String(row1.copyCellChars(1)))
         assertEquals(2, emulator.cursorCol)
     }
+
+    @Test
+    fun indicConjunctWithZwnj_breaksBeforeNextConsonant() {
+        f.feed("\u0915\u094D\u200C\u0937y")
+
+        val row0 = emulator.screen.getRowForRead(0)
+        assertEquals("\u0915\u094D\u200C", String(row0.copyCellChars(0)))
+        assertEquals("\u0937", String(row0.copyCellChars(1)))
+        assertEquals("y", String(row0.copyCellChars(2)))
+        assertEquals(3, emulator.cursorCol)
+    }
+
+    @Test
+    fun prependChain_handlesMultiplePrependsLastColumnWrapAndInsertMode() {
+        f.feed("\u0600\u0600\u4E2Dx")
+        val row0 = emulator.screen.getRowForRead(0)
+        assertEquals(2, row0.getCellWidth(0))
+        assertEquals("\u0600\u0600\u4E2D", String(row0.copyCellChars(0)))
+        assertEquals("x", String(row0.copyCellChars(2)))
+
+        f.feed("\u001b[2;1H123456789\u0600\u4E2D")
+        assertTrue(emulator.screen.getLineWrap(1))
+        val row1 = emulator.screen.getRowForRead(1)
+        assertEquals(" ", String(row1.copyCellChars(9)))
+        val row2 = emulator.screen.getRowForRead(2)
+        assertEquals(2, row2.getCellWidth(0))
+        assertEquals("\u0600\u4E2D", String(row2.copyCellChars(0)))
+        assertEquals(2, emulator.cursorCol)
+
+        f.feed("\u001b[?7l\u001b[4;1H123456789\u0600\u4E2D")
+        assertFalse(emulator.screen.getLineWrap(3))
+        val row3 = emulator.screen.getRowForRead(3)
+        assertEquals(1, row3.getCellWidth(9))
+        assertEquals("\u0600\u4E2D", String(row3.copyCellChars(9)))
+
+        f.feed("\u001b[?7h\u001b[4;1Habc\u001b[4;1H\u001b[4h\u2764\uFE0F")
+        assertEquals(2, row3.getCellWidth(0))
+        assertEquals("\u2764\uFE0F", String(row3.copyCellChars(0)))
+        assertEquals("a", String(row3.copyCellChars(2)))
+        assertEquals("b", String(row3.copyCellChars(3)))
+    }
+
+    @Test
+    fun cellCodePointCap_handlesSpacingMarkPrependMarginsInsertModeScrollAndReflow() {
+        f.feed("a" + "\u0301".repeat(31) + "\u093E" + "\u0600" + "\u4E2D")
+        val row0 = emulator.screen.getRowForRead(0)
+        assertEquals(32, row0.getCellCodePointCount(0))
+        assertEquals(1, row0.getCellWidth(0))
+        assertEquals("\u093E", String(row0.copyCellChars(1)))
+        assertEquals(2, row0.getCellWidth(2))
+        assertEquals("\u0600\u4E2D", String(row0.copyCellChars(2)))
+        assertEquals(4, emulator.cursorCol)
+
+        val marginFixture = EmulatorFixture(columns = 10, rows = 4)
+        marginFixture.feed("\u001b[?69h\u001b[2;6s\u001b[1;6H")
+        marginFixture.feed("z" + "\u0301".repeat(35) + "k")
+        val mRow0 = marginFixture.emulator.screen.getRowForRead(0)
+        val mRow1 = marginFixture.emulator.screen.getRowForRead(1)
+        assertEquals(32, mRow0.getCellCodePointCount(5))
+        assertEquals("k", String(mRow1.copyCellChars(1)))
+        assertEquals(2, marginFixture.emulator.cursorCol)
+
+        val insertFixture = EmulatorFixture(columns = 10, rows = 3)
+        insertFixture.feed("TAIL\u001b[1;1H\u001b[4h")
+        insertFixture.feed("p" + "\u0301".repeat(31) + "中")
+        val iRow0 = insertFixture.emulator.screen.getRowForRead(0)
+        assertEquals(32, iRow0.getCellCodePointCount(0))
+        assertEquals(2, iRow0.getCellWidth(1))
+        assertEquals("中", String(iRow0.copyCellChars(1)))
+        assertEquals("T", String(iRow0.copyCellChars(3)))
+
+        val scrollReflowFixture = EmulatorFixture(columns = 8, rows = 3)
+        scrollReflowFixture.feed("a" + "\u0301".repeat(31) + "b\r\nc\r\nd\r\ne")
+        assertTrue(scrollReflowFixture.emulator.screen.activeTranscriptRows > 0)
+        scrollReflowFixture.emulator.resize(4, 3, 10, 20)
+        val topTranscriptRow = scrollReflowFixture.emulator.screen.getRowForRead(-scrollReflowFixture.emulator.screen.activeTranscriptRows)
+        assertEquals(32, topTranscriptRow.getCellCodePointCount(0))
+        assertEquals("b", String(topTranscriptRow.copyCellChars(1)))
+    }
 }

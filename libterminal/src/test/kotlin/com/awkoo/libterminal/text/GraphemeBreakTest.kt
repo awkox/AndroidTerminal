@@ -127,7 +127,25 @@ class GraphemeBreakTest {
 
         assertFalse(GraphemeBreak.shouldMerge("\u0915".toCharArray(), 0x0937))
         assertFalse(GraphemeBreak.shouldMerge("\u0915\u094D\u093E".toCharArray(), 0x0937))
+        assertFalse(GraphemeBreak.shouldMerge("\u0915\u094D\u200C".toCharArray(), 0x0937))
         assertFalse(GraphemeBreak.shouldMerge("\u0915\u094D".toCharArray(), 'a'.code))
+        assertFalse(GraphemeBreak.isInCBExtend(0x200C))
+        assertTrue(GraphemeBreak.isInCBExtend(0x200D))
+    }
+
+    @Test
+    fun unicode160Tables_coverKiratRaiVAndExactEmojiBoundaries() {
+        assertEquals(GcbClass.V, GraphemeBreak.gcbClass(0x16D63))
+        assertEquals(GcbClass.V, GraphemeBreak.gcbClass(0x16D6A))
+        assertTrue(GraphemeBreak.shouldMerge("\u1100".toCharArray(), 0x16D63))
+
+        assertTrue(GraphemeBreak.isEmojiModifierBase(0x1F46A))
+        assertTrue(GraphemeBreak.isEmojiModifierBase(0x1F46F))
+        assertTrue(GraphemeBreak.isEmojiModifierBase(0x1F93C))
+        assertFalse(GraphemeBreak.isExtendedPictographic(0x1F900))
+        assertTrue(GraphemeBreak.isExtendedPictographic(0x1F90C))
+        assertEquals(GcbClass.CONTROL, GraphemeBreak.gcbClass(0xFFF0))
+        assertEquals(GcbClass.EXTEND, GraphemeBreak.gcbClass(0x0CC0))
     }
 
     @Test
