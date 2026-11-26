@@ -1,5 +1,5 @@
 [versions]
-androidGradlePlugin = "9.5.2"
+androidGradlePlugin = "9.5.3"
 leakcanary = "2.14"
 ksp = "2.3.14"
 hilt = "2.60.1"
